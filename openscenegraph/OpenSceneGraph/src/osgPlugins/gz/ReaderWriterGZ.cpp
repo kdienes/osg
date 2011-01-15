@@ -112,7 +112,7 @@ class ReaderWriterGZ : public osgDB::ReaderWriter
 
 ReaderWriterGZ::ReaderWriterGZ()
 {
-    // osg::notify(osg::NOTICE)<<"ReaderWriterGZ::ReaderWriterGZ()"<<std::endl;
+    // OSG_NOTICE<<"ReaderWriterGZ::ReaderWriterGZ()"<<std::endl;
 
     supportsExtension("osgz","Compressed .osg file extension.");
     supportsExtension("ivez","Compressed .ive file extension.");
@@ -121,7 +121,7 @@ ReaderWriterGZ::ReaderWriterGZ()
 
 ReaderWriterGZ::~ReaderWriterGZ()
 {
-    // osg::notify(osg::NOTICE)<<"ReaderWriterGZ::~ReaderWriterGZ()"<<std::endl;
+    // OSG_NOTICE<<"ReaderWriterGZ::~ReaderWriterGZ()"<<std::endl;
 }
 
 osgDB::ReaderWriter::ReadResult ReaderWriterGZ::readFile(ObjectType objectType, osgDB::ReaderWriter* rw, std::istream& fin, const osgDB::ReaderWriter::Options *options) const
@@ -143,24 +143,26 @@ osgDB::ReaderWriter::ReadResult ReaderWriterGZ::readFile(ObjectType objectType, 
     std::string ext = osgDB::getLowerCaseFileExtension(fullFileName);
     if (!acceptsExtension(ext)) return ReadResult::FILE_NOT_HANDLED;
 
+    if (osgDB::containsServerAddress(fullFileName)) return ReadResult::FILE_NOT_HANDLED;
+
     osgDB::ReaderWriter* rw = 0;
 
     if (osgDB::equalCaseInsensitive(ext,"osgz"))
     {  
         rw = osgDB::Registry::instance()->getReaderWriterForExtension("osg");
-        osg::notify(osg::NOTICE)<<"osgz ReaderWriter "<<rw<<std::endl;
+        OSG_INFO<<"osgz ReaderWriter "<<rw<<std::endl;
     }
     else if (osgDB::equalCaseInsensitive(ext,"ivez"))
     {
         rw = osgDB::Registry::instance()->getReaderWriterForExtension("ive");
-        osg::notify(osg::NOTICE)<<"ivez ReaderWriter "<<rw<<std::endl;
+        OSG_INFO<<"ivez ReaderWriter "<<rw<<std::endl;
     }
     else
     {
         std::string baseFileName = osgDB::getNameLessExtension(fullFileName);        
         std::string baseExt = osgDB::getLowerCaseFileExtension(baseFileName);
         rw = osgDB::Registry::instance()->getReaderWriterForExtension(baseExt);
-        osg::notify(osg::NOTICE)<<baseExt<<" ReaderWriter "<<rw<<std::endl;
+        OSG_INFO<<baseExt<<" ReaderWriter "<<rw<<std::endl;
     }
 
 
@@ -171,7 +173,7 @@ osgDB::ReaderWriter::ReadResult ReaderWriterGZ::readFile(ObjectType objectType, 
     osg::ref_ptr<Options> local_opt = options ? static_cast<Options*>(options->clone(osg::CopyOp::SHALLOW_COPY)) : new Options;
     local_opt->getDatabasePathList().push_front(osgDB::getFilePath(fileName));
 
-    std::ifstream fin(fileName.c_str());
+    osgDB::ifstream fin(fileName.c_str(), std::ios::binary|std::ios::in);
     if (!fin) return ReadResult::ERROR_IN_READING_FILE;
     
 
@@ -207,25 +209,25 @@ osgDB::ReaderWriter::WriteResult ReaderWriterGZ::writeFile(ObjectType objectType
     if (osgDB::equalCaseInsensitive(ext,"osgz"))
     {  
         rw = osgDB::Registry::instance()->getReaderWriterForExtension("osg");
-        osg::notify(osg::NOTICE)<<"osgz ReaderWriter "<<rw<<std::endl;
+        OSG_NOTICE<<"osgz ReaderWriter "<<rw<<std::endl;
     }
     else if (osgDB::equalCaseInsensitive(ext,"ivez"))
     {
         rw = osgDB::Registry::instance()->getReaderWriterForExtension("ive");
-        osg::notify(osg::NOTICE)<<"ivez ReaderWriter "<<rw<<std::endl;
+        OSG_NOTICE<<"ivez ReaderWriter "<<rw<<std::endl;
     }
     else
     {
         std::string baseFileName = osgDB::getNameLessExtension(fullFileName);        
         std::string baseExt = osgDB::getLowerCaseFileExtension(baseFileName);
         rw = osgDB::Registry::instance()->getReaderWriterForExtension(baseExt);
-        osg::notify(osg::NOTICE)<<baseExt<<" ReaderWriter "<<rw<<std::endl;
+        OSG_NOTICE<<baseExt<<" ReaderWriter "<<rw<<std::endl;
     }
     
     std::stringstream strstream;
     osgDB::ReaderWriter::WriteResult writeResult = writeFile(objectType, object, rw, strstream, options);
     
-    std::ofstream fout(fullFileName.c_str());
+    osgDB::ofstream fout(fullFileName.c_str(), std::ios::binary|std::ios::out);
     
     write(fout,strstream.str());
     
@@ -249,7 +251,7 @@ bool ReaderWriterGZ::read(std::istream& fin, std::string& destination) const
     strm.avail_in = 0;
     strm.next_in = Z_NULL;
     ret = inflateInit2(&strm,
-                       15 + 32 // autodected zlib or gzip header
+                       15 + 32 // autodetected zlib or gzip header
                        );
     if (ret != Z_OK)
         return false;
@@ -257,9 +259,10 @@ bool ReaderWriterGZ::read(std::istream& fin, std::string& destination) const
     /* decompress until deflate stream ends or end of file */
     do {
 
-        strm.avail_in = fin.readsome((char*)in, CHUNK);
-
-        if (fin.fail())
+        fin.read((char*)in, CHUNK);
+        strm.avail_in = fin.gcount();
+        
+        if (fin.bad())
         {
             (void)inflateEnd(&strm);
             return false;
@@ -333,7 +336,7 @@ bool ReaderWriterGZ::write(std::ostream& fout, const std::string& source) const
 
         if (ret == Z_STREAM_ERROR)
         {
-            osg::notify(osg::NOTICE)<<"Z_STREAM_ERROR"<<std::endl;
+            OSG_NOTICE<<"Z_STREAM_ERROR"<<std::endl;
             return false;
         }
 

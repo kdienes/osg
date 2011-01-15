@@ -87,6 +87,8 @@ namespace ive {
 #define IVEMULTISAMPLE                  0x00001132
 #define IVEFOG                          0x00001133
 #define IVELINESTIPPLE                  0x00001134
+#define IVEPOLYGONSTIPPLE               0x00001135
+#define IVETEXTURE2DARRAY               0x00001136
 
 // Drawables
 #define IVEDRAWABLE                     0x00001000
@@ -137,7 +139,30 @@ namespace ive {
 #define IVEVALIDRANGE                   0x0020000B
 #define IVENODATAVALUE                  0x0020000C
 #define IVESWITCHLAYER                  0x0020000D
-//#define IVETERRAIN                      0x0020000A
+#define IVETERRAIN                      0x0020000E
+
+// osgVolume classes
+#define IVEVOLUMETILE                           0x00300001
+#define IVEVOLUMELOCATOR                        0x00300002
+#define IVEVOLUMELAYER                          0x00300003
+#define IVEVOLUMEIMAGELAYER                     0x00300004
+#define IVEVOLUMECOMPOSITELAYER                 0x00300005
+#define IVEVOLUMETECHNIQUE                      0x00300008
+#define IVEVOLUMERAYTRACEDTECHNIQUE             0x00300009
+#define IVEVOLUMEFIXEDPIPELINETECHNIQUE         0x00300009
+#define IVEVOLUME                               0x0030000A
+#define IVEVOLUMEPROPERTY                       0x00300010
+#define IVEVOLUMECOMPOSITEPROPERTY              0x00300011
+#define IVEVOLUMESCALARPROPERTY                 0x00300012
+#define IVEVOLUMEALPHAFUNCPROPERTY              0x00300013
+#define IVEVOLUMEISOSURFACEPROPERTY             0x00300014
+#define IVEVOLUMESWITCHPROPERTY                 0x00300015
+#define IVEVOLUMETRANSFERFUNCTIONPROPERTY       0x00300016
+#define IVEVOLUMEMAXIMUMINTENSITYPROPERTY       0x00300017
+#define IVEVOLUMELIGHTINGPROPERTY               0x00300018
+#define IVEVOLUMESAMPLEDENSITYPROPERTY          0x00300019
+#define IVEVOLUMETRANSPARENCYPROPERTY           0x0030001A
+#define IVEVOLUMEPROPERTYADJUSTMENTCALLBACK     0x0030001B
 
 // osgFX classes
 #define IVEMULTITEXTURECONTROL          0x01000001

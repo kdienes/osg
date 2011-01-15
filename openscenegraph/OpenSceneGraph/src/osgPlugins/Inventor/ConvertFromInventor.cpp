@@ -84,8 +84,6 @@
 ConvertFromInventor::ConvertFromInventor()
 {
     numPrimitives = 0;
-    transformInfoName = "";
-    appearanceName = "";
 }
 ///////////////////////////////////////////
 ConvertFromInventor::~ConvertFromInventor()
@@ -104,7 +102,7 @@ ConvertFromInventor::restructure(void* data, SoCallbackAction* action,
                                  const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "restructure() "
+    OSG_DEBUG << NOTIFY_HEADER << "restructure() "
               << node->getTypeId().getName().getString();
 #endif
 
@@ -136,9 +134,9 @@ ConvertFromInventor::restructure(void* data, SoCallbackAction* action,
                     // Create the graph of nodes that may be influenced
                     // by the node
                     const SoFullPath *path = (const SoFullPath*)action->getCurPath();
-                    assert(path->getLength() == 0 ||
-                           path->getNode(path->getLength()-1) == group &&
-                           "Group being restructured is not at the end of the path.");
+                    //assert(path->getLength() == 0 ||
+                    //       path->getNode(path->getLength()-1) == group &&
+                    //       "Group being restructured is not at the end of the path.");
                     int stackLevel = stack.size()-2;
                     for (int j=path->getLength()-2; j>=0; j--, stackLevel--) {
 
@@ -179,11 +177,15 @@ ConvertFromInventor::restructure(void* data, SoCallbackAction* action,
 
 #ifdef DEBUG_IV_PLUGIN
     if (numModifiedChildren == 0)
-        osg::notify(osg::DEBUG_INFO) << ": no changes necessary" << std::endl;
+    {
+        OSG_DEBUG << ": no changes necessary" << std::endl;
+    }
     else
-        osg::notify(osg::DEBUG_INFO) << ": " << numModifiedChildren <<
+    {
+        OSG_DEBUG << ": " << numModifiedChildren <<
                   " nodes of " << childrenTotal << " restruc., " <<
                   numRemovedNodes << " removed" << std::endl;
+    }
 #endif
 
     return SoCallbackAction::CONTINUE;
@@ -212,7 +214,7 @@ ConvertFromInventor::restructurePostNode(void* data, SoCallbackAction* action,
     if (nodesToRemove.size() > 0) {
 
 #ifdef DEBUG_IV_PLUGIN
-        osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "postNode()   "
+        OSG_DEBUG << NOTIFY_HEADER << "postNode()   "
                   << node->getTypeId().getName().getString()
                   << " (level " << stack.size() << ") removed "
                   << nodesToRemove.size() << " node(s)" << std::endl;
@@ -220,8 +222,8 @@ ConvertFromInventor::restructurePostNode(void* data, SoCallbackAction* action,
 
         assert(node->getChildren());
         for (int i=nodesToRemove.size()-1; i>=0; i--) {
-            assert(i==0 || nodesToRemove[i-1] < nodesToRemove[i] &&
-                   "Children to remove are not in order.");
+            //assert(i==0 || nodesToRemove[i-1] < nodesToRemove[i] &&
+            //       "Children to remove are not in order.");
             node->getChildren()->remove(nodesToRemove[i]);
         }
     }
@@ -235,7 +237,7 @@ void
 ConvertFromInventor::preprocess(SoNode* root)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "Preprocessing..." << std::endl;
+    OSG_DEBUG << NOTIFY_HEADER << "Preprocessing..." << std::endl;
 #endif
 
     SoCallbackAction action;
@@ -264,7 +266,7 @@ osg::Node*
 ConvertFromInventor::convert(SoNode* ivRootNode)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "Converting..." << std::endl;
+    OSG_DEBUG << NOTIFY_HEADER << "Converting..." << std::endl;
 #endif
 
     // Transformation matrix for converting Inventor coordinate system to OSG
@@ -276,6 +278,9 @@ ConvertFromInventor::convert(SoNode* ivRootNode)
 
     // Root of the scene
     osg::ref_ptr<osg::Group> osgRootNode = new osg::MatrixTransform(ivToOSGMat);
+
+    // Propagate node name
+    osgRootNode->setName(ivRootNode->getName().getString());
 
     // Initialize Inventor state stack
     // (ivStateStack is used to track the state that is not accessible by
@@ -376,9 +381,9 @@ notifyAboutMatrixContent(const osg::NotifySeverity level, const SbMatrix &m)
     SbVec3f axis;
     float angle;
     r.getValue(axis, angle);
-    osg::notify(level) << NOTIFY_HEADER << "  Translation: " <<
+    OSG_NOTIFY(level) << NOTIFY_HEADER << "  Translation: " <<
               t[0] << "," << t[1] << "," << t[2] << std::endl;
-    osg::notify(level) << NOTIFY_HEADER << "  Rotation: (" <<
+    OSG_NOTIFY(level) << NOTIFY_HEADER << "  Rotation: (" <<
               axis[0] << "," << axis[1] << "," << axis[2] << ")," << angle << std::endl;
 }
 ///////////////////////////////////////////////////////////////////
@@ -415,7 +420,7 @@ ConvertFromInventor::appendNode(osg::Node *n, const SoCallbackAction *action)
     }
 
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "appendNode: "
+    OSG_DEBUG << NOTIFY_HEADER << "appendNode: "
               << n->className();
 #endif
 
@@ -427,7 +432,7 @@ ConvertFromInventor::appendNode(osg::Node *n, const SoCallbackAction *action)
 
 #ifdef DEBUG_IV_PLUGIN
         if (osg::isNotifyEnabled(osg::DEBUG_INFO))
-            osg::notify(osg::DEBUG_INFO) <<
+            OSG_DEBUG <<
                       " uses parent transformation" << std::endl;
 #endif
 
@@ -448,7 +453,7 @@ ConvertFromInventor::appendNode(osg::Node *n, const SoCallbackAction *action)
 
 #ifdef DEBUG_IV_PLUGIN
             if (osg::isNotifyEnabled(osg::DEBUG_INFO))
-                osg::notify(osg::DEBUG_INFO) <<
+                OSG_DEBUG <<
                           " reuses previous transformation" << std::endl;
 #endif
 
@@ -467,7 +472,7 @@ ConvertFromInventor::appendNode(osg::Node *n, const SoCallbackAction *action)
 
 #ifdef DEBUG_IV_PLUGIN
             if (osg::isNotifyEnabled(osg::DEBUG_INFO)) {
-                osg::notify(osg::DEBUG_INFO) <<
+                OSG_DEBUG <<
                           " uses local transformation:" << std::endl;
                 notifyAboutMatrixContent(osg::DEBUG_INFO,
                           SbMatrix((SbMat&)(*osg::Matrixf(m).ptr())));
@@ -484,6 +489,9 @@ ConvertFromInventor::ivPushState(const SoCallbackAction *action,
 {
     assert(ivStateStack.size() >= 1 && "There must be at least one "
            "value in the ivStateStack to use ivPushState function.");
+
+    // Propagate node name
+    root->setName(initiator->getName().getString());
 
     // APPEND_AT_PUSH
     if (flags & IvStateItem::APPEND_AT_PUSH)
@@ -506,9 +514,9 @@ ConvertFromInventor::ivPopState(const SoCallbackAction *action,
         // Get multipop value
         IvStateItem ivState = ivStateStack.top();
         multipop = ivState.flags & IvStateItem::MULTI_POP;
-        assert(multipop ||
-               ivState.pushInitiator == initiator &&
-               "ivStateStack push was initiated by different node.");
+        //assert(multipop ||
+        //       ivState.pushInitiator == initiator &&
+        //       "ivStateStack push was initiated by different node.");
 
         // Get osgStateRoot (note: we HAVE TO reference it)
         osg::ref_ptr<osg::Group> r = ivState.osgStateRoot;
@@ -538,7 +546,7 @@ ConvertFromInventor::preNode(void* data, SoCallbackAction* action,
                              const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preNode()    "
+    OSG_DEBUG << NOTIFY_HEADER << "preNode()    "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -549,7 +557,7 @@ ConvertFromInventor::preNode(void* data, SoCallbackAction* action,
         thisPtr->ivPushState(action, node);
 #ifdef DEBUG_IV_PLUGIN
         if (osg::isNotifyEnabled(osg::DEBUG_INFO)) {
-            osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "push state, saved values: " << std::endl;
+            OSG_DEBUG << NOTIFY_HEADER << "push state, saved values: " << std::endl;
             notifyAboutMatrixContent(osg::DEBUG_INFO, action->getModelMatrix());
         }
 #endif
@@ -563,7 +571,7 @@ ConvertFromInventor::postNode(void* data, SoCallbackAction* action,
                               const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "postNode()   "
+    OSG_DEBUG << NOTIFY_HEADER << "postNode()   "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -576,7 +584,7 @@ ConvertFromInventor::postNode(void* data, SoCallbackAction* action,
 
 #ifdef DEBUG_IV_PLUGIN
         if (osg::isNotifyEnabled(osg::DEBUG_INFO)) {
-            osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER <<
+            OSG_DEBUG << NOTIFY_HEADER <<
                       "pop state, restored transformation: " << std::endl;
             notifyAboutMatrixContent(osg::DEBUG_INFO, action->getModelMatrix());
         }
@@ -591,7 +599,7 @@ ConvertFromInventor::preTransformSeparator(void* data, SoCallbackAction* action,
                              const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preTransformSeparator()    "
+    OSG_DEBUG << NOTIFY_HEADER << "preTransformSeparator()    "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -608,7 +616,7 @@ ConvertFromInventor::postTransformSeparator(void* data, SoCallbackAction* action
                               const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "postTransformSeparator()   "
+    OSG_DEBUG << NOTIFY_HEADER << "postTransformSeparator()   "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -625,7 +633,7 @@ ConvertFromInventor::preLOD(void* data, SoCallbackAction* action,
                             const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preLOD()   "
+    OSG_DEBUG << NOTIFY_HEADER << "preLOD()   "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -683,7 +691,7 @@ ConvertFromInventor::postLOD(void* data, SoCallbackAction* action,
                              const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "postLOD()  "
+    OSG_DEBUG << NOTIFY_HEADER << "postLOD()  "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -709,7 +717,7 @@ ConvertFromInventor::postLOD(void* data, SoCallbackAction* action,
         int num = lod->getNumChildren();
         if (ivLOD->range.getNum()+1 != num &&
             !(num == 0 && ivLOD->range.getNum() == 0)) {
-            osg::notify(osg::WARN) << NOTIFY_HEADER <<
+            OSG_WARN << NOTIFY_HEADER <<
                       "Warning: SoLOD does not contain "
                       "correct data in range field." << std::endl;
             if (ivLOD->range.getNum()+1 < num) {
@@ -732,7 +740,7 @@ ConvertFromInventor::postLOD(void* data, SoCallbackAction* action,
         }
 
 #ifdef DEBUG_IV_PLUGIN
-        osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER <<
+        OSG_DEBUG << NOTIFY_HEADER <<
                   "Appending osg::LOD with " << num << " children." << std::endl;
 #endif
 
@@ -751,7 +759,7 @@ ConvertFromInventor::preShape(void* data, SoCallbackAction* action,
                               const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preShape()   "
+    OSG_DEBUG << NOTIFY_HEADER << "preShape()   "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -850,7 +858,7 @@ ConvertFromInventor::postShape(void* data, SoCallbackAction* action,
                                const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "postShape()  "
+    OSG_DEBUG << NOTIFY_HEADER << "postShape()  "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -906,14 +914,21 @@ ConvertFromInventor::postShape(void* data, SoCallbackAction* action,
 
 
     if (thisPtr->textureCoords.empty())
-        osg::notify(osg::DEBUG_INFO)<<"tex coords not found"<<std::endl;
-    else {
+    {
+        OSG_DEBUG<<"tex coords not found"<<std::endl;
+    }
+    else
+    {
 
         // report texture coordinate conditions
         if (action->getNumTextureCoordinates()>0)
-            osg::notify(osg::DEBUG_INFO)<<"tex coords found"<<std::endl;
+        {
+            OSG_DEBUG<<"tex coords found"<<std::endl;
+        }
         else
-           osg::notify(osg::DEBUG_INFO)<<"tex coords generated"<<std::endl;
+        {
+           OSG_DEBUG<<"tex coords generated"<<std::endl;
+        }
 
         // Get the texture transformation matrix
         osg::Matrix textureMat;
@@ -958,11 +973,10 @@ ConvertFromInventor::postShape(void* data, SoCallbackAction* action,
     osg::ref_ptr<osg::Geode> geode = new osg::Geode;
     geode->addDrawable(geometry.get());
 
-    // copy name
-    std::string name = stateSet->getName();
-    if (name != "") {
-        geode->setName(name);
-    }
+    // Set object names
+    const char* name = node->getName().getString();
+    geometry->setName(name);
+    geode->setName(strlen(name)>0 ? name : stateSet->getName());
 
     // Transformation and scene graph building
     thisPtr->appendNode(geode.get(), action);
@@ -975,14 +989,14 @@ ConvertFromInventor::postTexture(void* data, SoCallbackAction *,
                                  const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "postTexture()  "
+    OSG_DEBUG << NOTIFY_HEADER << "postTexture()  "
               << node->getTypeId().getName().getString();
     if (node->isOfType(SoTexture2::getClassTypeId())) {
         SoTexture2 *t = (SoTexture2*)node;
         if (t->filename.getValue().getLength())
-            osg::notify(osg::DEBUG_INFO) << "  "  << t->filename.getValue().getString();
+            OSG_DEBUG << "  "  << t->filename.getValue().getString();
     }
-    osg::notify(osg::DEBUG_INFO) << std::endl;
+    OSG_DEBUG << std::endl;
 #endif
 
     ConvertFromInventor* thisPtr = (ConvertFromInventor *) (data);
@@ -1056,7 +1070,7 @@ ConvertFromInventor::preLight(void* data, SoCallbackAction* action,
                               const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preLight()   "
+    OSG_DEBUG << NOTIFY_HEADER << "preLight()   "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -1070,10 +1084,6 @@ ConvertFromInventor::preLight(void* data, SoCallbackAction* action,
     // Create new OSG light
     IvStateItem &ivState = thisPtr->ivStateStack.top();
     osg::ref_ptr<osg::Light> osgLight = new osg::Light;
-
-    // Light name
-    const char* name = ivLight->getName().getString();
-    osgLight->setName(name);
 
     // Get color and intensity
     SbVec3f lightColor = ivLight->color.getValue();
@@ -1159,9 +1169,15 @@ ConvertFromInventor::preLight(void* data, SoCallbackAction* action,
     osgLight->setLightNum(ivState.currentLights.size());
     ivState.currentLights.push_back(osgLight);
 
+    // Create LightSource
     osg::ref_ptr<osg::LightSource> ls = new osg::LightSource();
     ls->setLight(osgLight.get());
-    ls->setName(ivLight->getName().getString());
+
+    // Set object names
+    const char* name = ivLight->getName().getString();
+    osgLight->setName(name);
+    //ls->setName(name); -> this will be handled bellow in ivPushState
+
 #if 1 // Let's place the light to its place in scene graph instead of
       // old approach of global light group.
     thisPtr->ivPushState(action, node,
@@ -1181,7 +1197,7 @@ ConvertFromInventor::preEnvironment(void* data, SoCallbackAction* action,
                                     const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preLight()   "
+    OSG_DEBUG << NOTIFY_HEADER << "preLight()   "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -1212,10 +1228,13 @@ convertShader(osg::Shader::Type osgShaderType,
     if (ivShader->sourceType.getValue() == SoShaderObject::GLSL_PROGRAM)
         osgShader->setShaderSource(ivShader->sourceProgram.getValue().getString());
     else {
-        osg::notify(osg::WARN) << NOTIFY_HEADER << "Can not convert "
+        OSG_WARN << NOTIFY_HEADER << "Can not convert "
                   << "shader. Unsupported shader language." << std::endl;
         return false;
     }
+
+    // Set shader name
+    osgShader->setName(ivShader->getName().getString());
 
     return osgProgram->addShader(osgShader.get());
 }
@@ -1226,7 +1245,7 @@ ConvertFromInventor::preShaderProgram(void* data, SoCallbackAction* action,
                               const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preShaderProgram()  "
+    OSG_DEBUG << NOTIFY_HEADER << "preShaderProgram()  "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -1259,24 +1278,27 @@ ConvertFromInventor::preShaderProgram(void* data, SoCallbackAction* action,
             ivFragmentShader = (const SoFragmentShader*)shader;
     }
 
-    // Create OSG shader
+    // Create OSG shader program
     osg::Program *osgProgram = new osg::Program();
     if (!convertShader(osg::Shader::VERTEX, ivVertexShader, osgProgram))
-        osg::notify(osg::WARN) << NOTIFY_HEADER
+        OSG_WARN << NOTIFY_HEADER
                   << "Failed to add vertex shader." << std::endl;
     if (!convertShader(osg::Shader::GEOMETRY, ivGeometryShader, osgProgram))
-        osg::notify(osg::WARN) << NOTIFY_HEADER
+        OSG_WARN << NOTIFY_HEADER
                   << "Failed to add geometry shader." << std::endl;
     if (!convertShader(osg::Shader::FRAGMENT, ivFragmentShader, osgProgram))
-        osg::notify(osg::WARN) << NOTIFY_HEADER
+        OSG_WARN << NOTIFY_HEADER
                   << "Failed to add fragment shader." << std::endl;
+
+    // Set program name
+    osgProgram->setName(ivProgram->getName().getString());
 
     // Put shader to the state stack
     ivState.currentGLProgram = osgProgram;
 
 #else
 
-    osg::notify(osg::WARN) << NOTIFY_HEADER << "Warning: The model "
+    OSG_WARN << NOTIFY_HEADER << "Warning: The model "
               "contains shaders while your Inventor does not support "
               "them." << std::endl;
 #endif
@@ -1344,7 +1366,7 @@ ConvertFromInventor::getStateSet(SoCallbackAction* action)
                 texEnv->setMode(osg::TexEnv::REPLACE);
                 break;
             default:
-                osg::notify(osg::WARN) << "Unsupported TexEnv mode." << std::endl;
+                OSG_WARN << "Unsupported TexEnv mode." << std::endl;
                 break;
 
         }
@@ -1474,7 +1496,6 @@ ConvertFromInventor::getStateSet(SoCallbackAction* action)
         material->setColorMode(osg::Material::DIFFUSE);
 
         stateSet->setAttributeAndModes(material.get(), osg::StateAttribute::ON);
-        stateSet->setName(appearanceName.getString());
         stateSet->setMode(GL_LIGHTING, osg::StateAttribute::ON);
 
         // Set global ambient light
@@ -1525,7 +1546,7 @@ ConvertFromInventor::convertIVTexToOSGTex(const SoNode* soNode,
                                           SoCallbackAction* action)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER
+    OSG_DEBUG << NOTIFY_HEADER
               << "convertIVTexToOSGTex ("
               << soNode->getTypeId().getName().getString()
               << ")" << std::endl;
@@ -1537,7 +1558,7 @@ ConvertFromInventor::convertIVTexToOSGTex(const SoNode* soNode,
     // Get the texture size and components
     const unsigned char* soImageData = action->getTextureImage(soSize, soNC);
     if (!soImageData) {
-        osg::notify(osg::WARN) << NOTIFY_HEADER
+        OSG_WARN << NOTIFY_HEADER
                   << "Warning: Error while loading texture data." << std::endl;
         return NULL;
     }
@@ -1547,9 +1568,6 @@ ConvertFromInventor::convertIVTexToOSGTex(const SoNode* soNode,
 
     // Copy the texture image data from the inventor texture
     memcpy(osgImageData, soImageData, soSize[0] * soSize[1] * soNC);
-
-    // Copy the name
-    std::string name = soNode->getName().getString();
 
     // File name
     std::string fileName;
@@ -1562,34 +1580,34 @@ ConvertFromInventor::convertIVTexToOSGTex(const SoNode* soNode,
                    ((SoVRMLImageTexture*)soNode)->url.getValues(0)[0].getString() : "";
 #endif
     else
-      osg::notify(osg::WARN) << NOTIFY_HEADER
+      OSG_WARN << NOTIFY_HEADER
                 << " Warning: Unsupported texture type: "
                 << soNode->getTypeId().getName().getString() << std::endl;
 
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER
+    OSG_DEBUG << NOTIFY_HEADER
               << "  Converting file name: " << fileName << " -> ";
 #endif
     if (fileName[0]=='\"') fileName.erase(fileName.begin());
     if (fileName.size() > 0 && fileName[fileName.size()-1]=='\"')
         fileName.erase(fileName.begin()+fileName.size()-1);
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << fileName << std::endl;
+    OSG_DEBUG << fileName << std::endl;
 #endif
 
     // Create the osg::Image
     osg::ref_ptr<osg::Image> osgImage = new osg::Image;
     osgImage->setFileName(fileName);
     GLenum formats[] = {GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RGB, GL_RGBA};
-    osgImage->setImage(soSize[0], soSize[1], 0, soNC, formats[soNC-1],
+    osgImage->setImage(soSize[0], soSize[1], 1, soNC, formats[soNC-1],
                        GL_UNSIGNED_BYTE, osgImageData, osg::Image::USE_NEW_DELETE);
 
     // Create the osg::Texture2D
     osg::Texture2D *osgTex = new osg::Texture2D;
     osgTex->setImage(osgImage.get());
-    if (name != "") {
-        osgTex->setName(name);
-    }
+
+    // Set name
+    osgTex->setName(soNode->getName().getString());
 
     static std::map<SoTexture2::Wrap, osg::Texture2D::WrapMode> texWrapMap;
     static bool firstTime = true;
@@ -1630,12 +1648,15 @@ ConvertFromInventor::preInfo(void* data, SoCallbackAction* action,
                              const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preInfo()    "
+    OSG_DEBUG << NOTIFY_HEADER << "preInfo()    "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
+
+#if 0 // FIXME: Not handled properly yet. There is no Info node in OSG.
+      // Append probably empty Node and set its name to info->string.getValue();
     ConvertFromInventor* thisPtr = (ConvertFromInventor *) (data);
     SoInfo* info = (SoInfo*)node;
-    thisPtr->transformInfoName = info->string.getValue();
+#endif
 
     return SoCallbackAction::CONTINUE;
 }
@@ -1645,7 +1666,7 @@ ConvertFromInventor::preRotor(void *data, SoCallbackAction *action,
                               const SoNode *node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preRotor()  "
+    OSG_DEBUG << NOTIFY_HEADER << "preRotor()  "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -1693,7 +1714,7 @@ ConvertFromInventor::prePendulum(void* data, SoCallbackAction *action,
                                  const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "prePendulum()  "
+    OSG_DEBUG << NOTIFY_HEADER << "prePendulum()  "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 
@@ -1752,7 +1773,7 @@ ConvertFromInventor::preShuttle(void* data, SoCallbackAction *action,
                                 const SoNode* node)
 {
 #ifdef DEBUG_IV_PLUGIN
-    osg::notify(osg::DEBUG_INFO) << NOTIFY_HEADER << "preShuttle()  "
+    OSG_DEBUG << NOTIFY_HEADER << "preShuttle()  "
               << node->getTypeId().getName().getString() << std::endl;
 #endif
 

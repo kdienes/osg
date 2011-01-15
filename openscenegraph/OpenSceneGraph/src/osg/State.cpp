@@ -11,10 +11,14 @@
  * OpenSceneGraph Public License for more details.
 */
 #include <osg/State>
+#include <osg/Texture>
 #include <osg/Notify>
 #include <osg/GLU>
 #include <osg/GLExtensions>
+#include <osg/Drawable>
 #include <osg/ApplicationUsage>
+
+#include <sstream>
 
 #ifndef GL_MAX_TEXTURE_COORDS
 #define GL_MAX_TEXTURE_COORDS 0x8871
@@ -38,10 +42,72 @@ State::State():
 {
     _graphicsContext = 0;
     _contextID = 0;
+
+    _shaderCompositionEnabled = false;
+    _shaderCompositionDirty = true;
+    _shaderComposer = new ShaderComposer;
+    _currentShaderCompositionProgram = 0L;
+
     _identity = new osg::RefMatrix(); // default RefMatrix constructs to identity.
     _initialViewMatrix = _identity;
     _projection = _identity;
     _modelView = _identity;
+    _modelViewCache = new osg::RefMatrix;
+
+    #if !defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
+        _useModelViewAndProjectionUniforms = true;
+        _useVertexAttributeAliasing = true;
+    #else    
+        _useModelViewAndProjectionUniforms = false;
+        _useVertexAttributeAliasing = false;
+    #endif
+    
+    _modelViewMatrixUniform = new Uniform(Uniform::FLOAT_MAT4,"osg_ModelViewMatrix");
+    _projectionMatrixUniform = new Uniform(Uniform::FLOAT_MAT4,"osg_ProjectionMatrix");
+    _modelViewProjectionMatrixUniform = new Uniform(Uniform::FLOAT_MAT4,"osg_ModelViewProjectionMatrix");
+    _normalMatrixUniform = new Uniform(Uniform::FLOAT_MAT3,"osg_NormalMatrix");
+
+    bool compactAliasing = true;
+    if (compactAliasing)
+    {
+        setUpVertexAttribAlias(_vertexAlias,0, "gl_Vertex","osg_Vertex","attribute vec4 ");
+        setUpVertexAttribAlias(_normalAlias, 1, "gl_Normal","osg_Normal","attribute vec3 ");
+        setUpVertexAttribAlias(_colorAlias, 2, "gl_Color","osg_Color","attribute vec4 ");
+
+        _texCoordAliasList.resize(5);
+        for(unsigned int i=0; i<_texCoordAliasList.size(); i++)
+        {
+            std::stringstream gl_MultiTexCoord;
+            std::stringstream osg_MultiTexCoord;
+            gl_MultiTexCoord<<"gl_MultiTexCoord"<<i;
+            osg_MultiTexCoord<<"osg_MultiTexCoord"<<i;
+
+            setUpVertexAttribAlias(_texCoordAliasList[i], 3+i, gl_MultiTexCoord.str(), osg_MultiTexCoord.str(), "attribute vec4 ");
+        }
+
+        setUpVertexAttribAlias(_secondaryColorAlias, 6, "gl_SecondaryColor","osg_SecondaryColor","attribute vec4 ");
+        setUpVertexAttribAlias(_fogCoordAlias, 7, "gl_FogCoord","osg_FogCoord","attribute float ");
+
+    }
+    else
+    {
+        setUpVertexAttribAlias(_vertexAlias,0, "gl_Vertex","osg_Vertex","attribute vec4 ");
+        setUpVertexAttribAlias(_normalAlias, 2, "gl_Normal","osg_Normal","attribute vec3 ");
+        setUpVertexAttribAlias(_colorAlias, 3, "gl_Color","osg_Color","attribute vec4 ");
+        setUpVertexAttribAlias(_secondaryColorAlias, 4, "gl_SecondaryColor","osg_SecondaryColor","attribute vec4 ");
+        setUpVertexAttribAlias(_fogCoordAlias, 5, "gl_FogCoord","osg_FogCoord","attribute float ");
+
+        _texCoordAliasList.resize(8);
+        for(unsigned int i=0; i<_texCoordAliasList.size(); i++)
+        {
+            std::stringstream gl_MultiTexCoord;
+            std::stringstream osg_MultiTexCoord;
+            gl_MultiTexCoord<<"gl_MultiTexCoord"<<i;
+            osg_MultiTexCoord<<"osg_MultiTexCoord"<<i;
+
+            setUpVertexAttribAlias(_texCoordAliasList[i], 8+i, gl_MultiTexCoord.str(), osg_MultiTexCoord.str(), "attribute vec4 ");
+        }
+    }
 
     _abortRenderingPtr = false;    
 
@@ -86,10 +152,26 @@ State::State():
 
     _glMaxTextureCoords = 1;
     _glMaxTextureUnits = 1;
+
+    _maxTexturePoolSize = 0;
+    _maxBufferObjectPoolSize = 0;
+
+    _glBeginEndAdapter.setState(this);
+    _arrayDispatchers.setState(this);
+
+    _startTick = 0;
+    _gpuTick = 0;
+    _gpuTimestamp = 0;
+    _timestampBits = 0;
 }
 
 State::~State()
 {
+    //_texCoordArrayList.clear();
+
+    //_vertexAttribArrayList.clear();
+
+    // OSG_NOTICE<<"State::~State()"<<this<<std::endl;
     for(AppliedProgramObjectSet::iterator itr = _appliedProgramObjectSet.begin();
         itr != _appliedProgramObjectSet.end();
         ++itr)
@@ -104,7 +186,7 @@ void State::objectDeleted(void* object)
     AppliedProgramObjectSet::iterator itr = _appliedProgramObjectSet.find(ppcp);
     if (itr != _appliedProgramObjectSet.end()) 
     {
-        // osg::notify(osg::NOTICE)<<"Removing _appliedProgramObjectSet entry "<<ppcp<<std::endl;
+        // OSG_NOTICE<<"Removing _appliedProgramObjectSet entry "<<ppcp<<std::endl;
         _appliedProgramObjectSet.erase(itr);
     }
 }
@@ -138,6 +220,7 @@ void State::reset()
         AttributeStack& as = aitr->second;
         as.attributeVec.clear();
         as.last_applied_attribute = NULL;
+        as.last_applied_shadercomponent = NULL;
         as.changed = true;
     }
     
@@ -163,6 +246,7 @@ void State::reset()
             AttributeStack& as = aitr->second;
             as.attributeVec.clear();
             as.last_applied_attribute = NULL;
+            as.last_applied_shadercomponent = NULL;
             as.changed = true;
         }
     }
@@ -185,7 +269,10 @@ void State::reset()
     _currentActiveTextureUnit = 0;
     _currentClientActiveTextureUnit = 0;
 #endif
-    
+
+    _shaderCompositionDirty = true;
+    _currentShaderCompositionUniformList.clear();
+
     _lastAppliedProgramObject = 0;
 
     for(AppliedProgramObjectSet::iterator apitr=_appliedProgramObjectSet.begin();
@@ -220,6 +307,20 @@ void State::setInitialViewMatrix(const osg::RefMatrix* matrix)
     _initialInverseViewMatrix.invert(*_initialViewMatrix);
 }
 
+void State::setMaxTexturePoolSize(unsigned int size)
+{
+    _maxTexturePoolSize = size;
+    osg::Texture::getTextureObjectManager(getContextID())->setMaxTexturePoolSize(size);
+    OSG_INFO<<"osg::State::_maxTexturePoolSize="<<_maxTexturePoolSize<<std::endl;
+}
+
+void State::setMaxBufferObjectPoolSize(unsigned int size)
+{
+    _maxBufferObjectPoolSize = size;
+    osg::GLBufferObjectManager::getGLBufferObjectManager(getContextID())->setMaxGLBufferObjectPoolSize(_maxBufferObjectPoolSize);
+    OSG_INFO<<"osg::State::_maxBufferObjectPoolSize="<<_maxBufferObjectPoolSize<<std::endl;
+}
+
 void State::pushStateSet(const StateSet* dstate)
 {
 
@@ -249,12 +350,12 @@ void State::pushStateSet(const StateSet* dstate)
         pushUniformList(_uniformMap,dstate->getUniformList());
     }
 
-    // osg::notify(osg::NOTICE)<<"State::pushStateSet()"<<_stateStateStack.size()<<std::endl;
+    // OSG_NOTICE<<"State::pushStateSet()"<<_stateStateStack.size()<<std::endl;
 }
 
 void State::popAllStateSets()
 {
-    // osg::notify(osg::NOTICE)<<"State::popAllStateSets()"<<_stateStateStack.size()<<std::endl;
+    // OSG_NOTICE<<"State::popAllStateSets()"<<_stateStateStack.size()<<std::endl;
 
     while (!_stateStateStack.empty()) popStateSet();
     
@@ -266,7 +367,7 @@ void State::popAllStateSets()
 
 void State::popStateSet()
 {
-    // osg::notify(osg::NOTICE)<<"State::popStateSet()"<<_stateStateStack.size()<<std::endl;
+    // OSG_NOTICE<<"State::popStateSet()"<<_stateStateStack.size()<<std::endl;
 
     if (_stateStateStack.empty()) return;
     
@@ -331,7 +432,7 @@ void State::removeStateSet(unsigned int pos)
 {
     if (pos >= _stateStateStack.size())
     {
-        osg::notify(osg::NOTICE)<<"Warning: State::removeStateSet("<<pos<<") out of range"<<std::endl;
+        OSG_NOTICE<<"Warning: State::removeStateSet("<<pos<<") out of range"<<std::endl;
         return;
     }
     
@@ -385,14 +486,6 @@ void State::captureCurrentState(StateSet& stateset) const
 
 }
 
-// revert to using maximum for consistency, maximum should be defined by STLport on VS.
-// // visual studio 6.0 doesn't appear to define maximum?!? So do our own here.. 
-// template<class T>
-// T mymax(const T& a,const T& b)
-// {
-//     return (((a) > (b)) ? (a) : (b));
-// }
-
 void State::apply(const StateSet* dstate)
 {
     if (_checkGLErrors==ONCE_PER_ATTRIBUTE) checkGLErrors("start of State::apply(StateSet*)");
@@ -402,9 +495,10 @@ void State::apply(const StateSet* dstate)
     //apply();
     //popStateSet();
     //return;
-    
+
     if (dstate)
     {
+        _currentShaderCompositionUniformList.clear();
 
         applyModeList(_modeMap,dstate->getModeList());
         applyAttributeList(_attributeMap,dstate->getAttributeList());
@@ -418,44 +512,38 @@ void State::apply(const StateSet* dstate)
         unitMax = maximum(static_cast<unsigned int>(unitMax),static_cast<unsigned int>(_textureAttributeMapList.size()));
         for(unit=0;unit<unitMax;++unit)
         {
-            if (setActiveTextureUnit(unit))
-            {
-                if (unit<ds_textureModeList.size()) applyModeList(getOrCreateTextureModeMap(unit),ds_textureModeList[unit]);
-                else if (unit<_textureModeMapList.size()) applyModeMap(_textureModeMapList[unit]);
-                
-                if (unit<ds_textureAttributeList.size()) applyAttributeList(getOrCreateTextureAttributeMap(unit),ds_textureAttributeList[unit]);
-                else if (unit<_textureAttributeMapList.size()) applyAttributeMap(_textureAttributeMapList[unit]);
-            }
+            if (unit<ds_textureModeList.size()) applyModeListOnTexUnit(unit,getOrCreateTextureModeMap(unit),ds_textureModeList[unit]);
+            else if (unit<_textureModeMapList.size()) applyModeMapOnTexUnit(unit,_textureModeMapList[unit]);
+
+            if (unit<ds_textureAttributeList.size()) applyAttributeListOnTexUnit(unit,getOrCreateTextureAttributeMap(unit),ds_textureAttributeList[unit]);
+            else if (unit<_textureAttributeMapList.size()) applyAttributeMapOnTexUnit(unit,_textureAttributeMapList[unit]);
         }
-        
-#if 1        
-        applyUniformList(_uniformMap,dstate->getUniformList());
-#else                
-        if (_lastAppliedProgramObject)
+
+        if (_shaderCompositionEnabled)
         {
-            for(StateSetStack::iterator sitr=_stateStateStack.begin();
-                sitr!=_stateStateStack.end();
-                ++sitr)
+            applyShaderComposition();
+
+            if (dstate->getUniformList().empty())
             {
-                const StateSet* stateset = *sitr;
-                const StateSet::UniformList& uniformList = stateset->getUniformList();
-                for(StateSet::UniformList::const_iterator itr=uniformList.begin();
-                    itr!=uniformList.end();
-                    ++itr)
+                if (_currentShaderCompositionUniformList.empty()) applyUniformMap(_uniformMap);
+                else applyUniformList(_uniformMap, _currentShaderCompositionUniformList);
+            }
+            else
+            {
+                if (_currentShaderCompositionUniformList.empty()) applyUniformList(_uniformMap, dstate->getUniformList());
+                else
                 {
-                    _lastAppliedProgramObject->apply(*(itr->second.first));
+                    // need top merge uniforms lists, but cheat for now by just applying both.
+                    _currentShaderCompositionUniformList.insert(dstate->getUniformList().begin(), dstate->getUniformList().end());
+                    applyUniformList(_uniformMap, _currentShaderCompositionUniformList);
                 }
             }
 
-            const StateSet::UniformList& uniformList = dstate->getUniformList();
-            for(StateSet::UniformList::const_iterator itr=uniformList.begin();
-                itr!=uniformList.end();
-                ++itr)
-            {
-                _lastAppliedProgramObject->apply(*(itr->second.first));
-            }
         }
-#endif
+        else
+        {
+            applyUniformList(_uniformMap,dstate->getUniformList());
+        }
 
     }
     else
@@ -472,6 +560,8 @@ void State::apply()
 
     if (_checkGLErrors==ONCE_PER_ATTRIBUTE) checkGLErrors("start of State::apply()");
 
+    if (_shaderCompositionEnabled) _currentShaderCompositionUniformList.clear();
+
     // go through all active OpenGL modes, enabling/disable where
     // appropriate.
     applyModeMap(_modeMap);
@@ -483,37 +573,60 @@ void State::apply()
     unsigned int unitMax = maximum(_textureModeMapList.size(),_textureAttributeMapList.size());
     for(unit=0;unit<unitMax;++unit)
     {
-        if (setActiveTextureUnit(unit))
-        {
-            if (unit<_textureModeMapList.size()) applyModeMap(_textureModeMapList[unit]);
-            if (unit<_textureAttributeMapList.size()) applyAttributeMap(_textureAttributeMapList[unit]);
-        }
+        if (unit<_textureModeMapList.size()) applyModeMapOnTexUnit(unit,_textureModeMapList[unit]);
+        if (unit<_textureAttributeMapList.size()) applyAttributeMapOnTexUnit(unit,_textureAttributeMapList[unit]);
     }
 
-#if 1        
-    applyUniformMap(_uniformMap);
-#else        
-    if (_lastAppliedProgramObject && !_stateStateStack.empty())
+    if (_shaderCompositionEnabled)
     {
-        for(StateSetStack::iterator sitr=_stateStateStack.begin();
-            sitr!=_stateStateStack.end();
-            ++sitr)
-        {
-            const StateSet* stateset = *sitr;
-            const StateSet::UniformList& uniformList = stateset->getUniformList();
-            for(StateSet::UniformList::const_iterator itr=uniformList.begin();
-                itr!=uniformList.end();
-                ++itr)
-            {
-                _lastAppliedProgramObject->apply(*(itr->second.first));
-            }
-        }
+        applyShaderComposition();
+        applyUniformList(_uniformMap, _currentShaderCompositionUniformList);
     }
-#endif
-
+    else
+    {
+        applyUniformMap(_uniformMap);
+    }
 
     if (_checkGLErrors==ONCE_PER_ATTRIBUTE) checkGLErrors("end of State::apply()");
 }
+
+void State::applyShaderComposition()
+{
+    if (_shaderCompositionEnabled)
+    {
+        if (_shaderCompositionDirty)
+        {
+            print(notify(osg::INFO));
+
+            // build lits of current ShaderComponents
+            ShaderComponents shaderComponents;
+
+            // OSG_NOTICE<<"State::applyShaderComposition() : _attributeMap.size()=="<<_attributeMap.size()<<std::endl;
+
+            for(AttributeMap::iterator itr = _attributeMap.begin();
+                itr != _attributeMap.end();
+                ++itr)
+            {
+                // OSG_NOTICE<<"  itr->first="<<itr->first.first<<", "<<itr->first.second<<std::endl;
+
+                AttributeStack& as = itr->second;
+                if (as.last_applied_shadercomponent)
+                {
+                    shaderComponents.push_back(const_cast<ShaderComponent*>(as.last_applied_shadercomponent));
+                }
+            }
+
+            _currentShaderCompositionProgram = _shaderComposer->getOrCreateProgram(shaderComponents);
+        }
+
+        if (_currentShaderCompositionProgram)
+        {
+            Program::PerContextProgram* pcp = _currentShaderCompositionProgram->getPCP(_contextID);
+            if (_lastAppliedProgramObject != pcp) applyAttribute(_currentShaderCompositionProgram);
+        }
+    }
+}
+
 
 void State::haveAppliedMode(StateAttribute::GLMode mode,StateAttribute::GLModeValue value)
 {
@@ -733,7 +846,6 @@ void State::disableAllVertexArrays()
     disableVertexAttribPointersAboveAndIncluding(0);
     disableColorPointer();
     disableFogCoordPointer();
-    disableIndexPointer();
     disableNormalPointer();
     disableSecondaryColorPointer();
 }
@@ -745,7 +857,6 @@ void State::dirtyAllVertexArrays()
     dirtyVertexAttribPointersAboveAndIncluding(0);
     dirtyColorPointer();
     dirtyFogCoordPointer();
-    dirtyIndexPointer();
     dirtyNormalPointer();
     dirtySecondaryColorPointer();
 }
@@ -754,7 +865,11 @@ void State::setInterleavedArrays( GLenum format, GLsizei stride, const GLvoid* p
 {
     disableAllVertexArrays();
 
+#if defined(OSG_GL_VERTEX_ARRAY_FUNCS_AVAILABLE) && !defined(OSG_GLES1_AVAILABLE)
     glInterleavedArrays( format, stride, pointer);
+#else
+    OSG_NOTICE<<"Warning: State::setInterleavedArrays(..) not implemented."<<std::endl;
+#endif
 
     // the crude way, assume that all arrays have been effected so dirty them and
     // disable them...
@@ -771,22 +886,26 @@ void State::initializeExtensionProcs()
     setGLExtensionFuncPtr(_glSecondaryColorPointer, "glSecondaryColorPointer","glSecondaryColorPointerEXT");
     setGLExtensionFuncPtr(_glVertexAttribPointer, "glVertexAttribPointer","glVertexAttribPointerARB");
     setGLExtensionFuncPtr(_glEnableVertexAttribArray, "glEnableVertexAttribArray","glEnableVertexAttribArrayARB");
+    setGLExtensionFuncPtr(_glMultiTexCoord4f, "glMultiTexCoord4f","glMultiTexCoord4fARB");
+    setGLExtensionFuncPtr(_glVertexAttrib4f, "glVertexAttrib4f");
+    setGLExtensionFuncPtr(_glVertexAttrib4fv, "glVertexAttrib4fv");
     setGLExtensionFuncPtr(_glDisableVertexAttribArray, "glDisableVertexAttribArray","glDisableVertexAttribArrayARB");
     setGLExtensionFuncPtr(_glBindBuffer, "glBindBuffer","glBindBufferARB");
 
     setGLExtensionFuncPtr(_glDrawArraysInstanced, "glDrawArraysInstanced","glDrawArraysInstancedARB","glDrawArraysInstancedEXT");
     setGLExtensionFuncPtr(_glDrawElementsInstanced, "glDrawElementsInstanced","glDrawElementsInstancedARB","glDrawElementsInstancedEXT");
 
-    if ( osg::getGLVersionNumber() >= 2.0 || osg::isGLExtensionSupported(_contextID,"GL_ARB_vertex_shader") )
+    if ( osg::getGLVersionNumber() >= 2.0 || osg::isGLExtensionSupported(_contextID,"GL_ARB_vertex_shader") || OSG_GLES2_FEATURES)
     {
         glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,&_glMaxTextureUnits);
         glGetIntegerv(GL_MAX_TEXTURE_COORDS,&_glMaxTextureCoords);
     }
     else if ( osg::getGLVersionNumber() >= 1.3 ||
                                  osg::isGLExtensionSupported(_contextID,"GL_ARB_multitexture") ||
-                                 osg::isGLExtensionSupported(_contextID,"GL_EXT_multitexture") )
+                                 osg::isGLExtensionSupported(_contextID,"GL_EXT_multitexture") ||
+                                 OSG_GLES1_FEATURES)
     {
-        GLint maxTextureUnits;
+        GLint maxTextureUnits = 0;
         glGetIntegerv(GL_MAX_TEXTURE_UNITS,&maxTextureUnits);
         _glMaxTextureUnits = maxTextureUnits;
         _glMaxTextureCoords = maxTextureUnits;
@@ -796,6 +915,28 @@ void State::initializeExtensionProcs()
         _glMaxTextureUnits = 1;
         _glMaxTextureCoords = 1;
     }
+
+    osg::Drawable::Extensions* extensions = osg::Drawable::getExtensions(getContextID(), true);
+    if (extensions && extensions->isARBTimerQuerySupported())
+    {
+        const GLubyte* renderer = glGetString(GL_RENDERER);
+        std::string rendererString = renderer ? (const char*)renderer : "";
+        if (rendererString.find("Radeon")!=std::string::npos || rendererString.find("RADEON")!=std::string::npos)
+        {
+            // AMD/ATI drivers are producing an invalid enumerate error on the
+            // glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS_ARB, &bits);
+            // call so work around it by assuming 64 bits for counter.
+            setTimestampBits(64);
+            //setTimestampBits(0);
+        }
+        else
+        {
+            GLint bits = 0;
+            extensions->glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS_ARB, &bits);
+            setTimestampBits(bits);
+        }
+    }
+
 
     _extensionProcsInitialized = true;
 }
@@ -817,63 +958,66 @@ bool State::setClientActiveTextureUnit( unsigned int unit )
     return true;
 }
 
-
-/** set the current texture unit, return true if selected, false if selection failed such as when multitexturing is not supported.
-  * note, only updates values that change.*/
-bool State::setActiveTextureUnit( unsigned int unit )
-{
-    if (unit!=_currentActiveTextureUnit)
-    {
-        if (_glActiveTexture && unit < (unsigned int)(maximum(_glMaxTextureCoords,_glMaxTextureUnits)) )
-        {
-            _glActiveTexture(GL_TEXTURE0+unit);
-            _currentActiveTextureUnit = unit;
-        }
-        else
-        {
-            return unit==0;
-        }
-    }
-    return true;
-}
-
 void State::setFogCoordPointer(GLenum type, GLsizei stride, const GLvoid *ptr)
 {
-    if (_glFogCoordPointer)
+#ifdef OSG_GL_VERTEX_ARRAY_FUNCS_AVAILABLE
+    if (_useVertexAttributeAliasing)
     {
-
-        if (!_fogArray._enabled || _fogArray._dirty)
-        {
-            _fogArray._enabled = true;
-            glEnableClientState(GL_FOG_COORDINATE_ARRAY);
-        }
-        //if (_fogArray._pointer!=ptr || _fogArray._dirty)
-        {
-            _fogArray._pointer=ptr;
-            _glFogCoordPointer( type, stride, ptr );
-        }
-        _fogArray._dirty = false;
+        setVertexAttribPointer(_fogCoordAlias._location, 1, type, GL_FALSE, stride, ptr);
     }
-    
+    else
+    {
+        if (_glFogCoordPointer)
+        {
+
+            if (!_fogArray._enabled || _fogArray._dirty)
+            {
+                _fogArray._enabled = true;
+                glEnableClientState(GL_FOG_COORDINATE_ARRAY);
+            }
+            //if (_fogArray._pointer!=ptr || _fogArray._dirty)
+            {
+                _fogArray._pointer=ptr;
+                _glFogCoordPointer( type, stride, ptr );
+            }
+            _fogArray._lazy_disable = false;
+            _fogArray._dirty = false;
+        }
+    }
+#else
+        setVertexAttribPointer(_fogCoordAlias._location, 1, type, GL_FALSE, stride, ptr);
+#endif
 }
 
 void State::setSecondaryColorPointer( GLint size, GLenum type,
                                       GLsizei stride, const GLvoid *ptr )
 {
-    if (_glSecondaryColorPointer)
+#ifdef OSG_GL_VERTEX_ARRAY_FUNCS_AVAILABLE
+    if (_useVertexAttributeAliasing)
     {
-        if (!_secondaryColorArray._enabled || _secondaryColorArray._dirty)
-        {
-            _secondaryColorArray._enabled = true;
-            glEnableClientState(GL_SECONDARY_COLOR_ARRAY);
-        }
-        //if (_secondaryColorArray._pointer!=ptr || _secondaryColorArray._dirty)
-        {
-            _secondaryColorArray._pointer=ptr;
-            _glSecondaryColorPointer( size, type, stride, ptr );
-        }
-        _secondaryColorArray._dirty = false;
+        setVertexAttribPointer(_secondaryColorAlias._location, size, type, GL_FALSE, stride, ptr);
     }
+    else
+    {
+        if (_glSecondaryColorPointer)
+        {
+            if (!_secondaryColorArray._enabled || _secondaryColorArray._dirty)
+            {
+                _secondaryColorArray._enabled = true;
+                glEnableClientState(GL_SECONDARY_COLOR_ARRAY);
+            }
+            //if (_secondaryColorArray._pointer!=ptr || _secondaryColorArray._dirty)
+            {
+                _secondaryColorArray._pointer=ptr;
+                _glSecondaryColorPointer( size, type, stride, ptr );
+            }
+            _secondaryColorArray._lazy_disable = false;
+            _secondaryColorArray._dirty = false;
+        }
+    }
+#else
+        setVertexAttribPointer(_secondaryColorAlias._location, size, type, GL_FALSE, stride, ptr);
+#endif
 }
 
 /** wrapper around glEnableVertexAttribArrayARB(index);glVertexAttribPointerARB(..);
@@ -884,20 +1028,25 @@ void State::setVertexAttribPointer( unsigned int index,
 {
     if (_glVertexAttribPointer)
     {
+        // OSG_NOTICE<<"State::setVertexAttribPointer("<<index<<",...)"<<std::endl;
+
         if ( index >= _vertexAttribArrayList.size()) _vertexAttribArrayList.resize(index+1);
         EnabledArrayPair& eap = _vertexAttribArrayList[index];
 
         if (!eap._enabled || eap._dirty)
         {
             eap._enabled = true;
+            // OSG_NOTICE<<"    _glEnableVertexAttribArray( "<<index<<" )"<<std::endl;
             _glEnableVertexAttribArray( index );
         }
         //if (eap._pointer != ptr || eap._normalized!=normalized || eap._dirty)
         {
+            // OSG_NOTICE<<"    _glVertexAttribPointer( "<<index<<" )"<<std::endl;
             _glVertexAttribPointer( index, size, type, normalized, stride, ptr );
             eap._pointer = ptr;
             eap._normalized = normalized;
         }
+        eap._lazy_disable = false;
         eap._dirty = false;
     }
 }      
@@ -915,6 +1064,7 @@ void State::disableVertexAttribPointer( unsigned int index )
         {
             eap._enabled = false;
             eap._dirty = false;
+            // OSG_NOTICE<<"    _glDisableVertexAttribArray( "<<index<<" )"<<std::endl;
             _glDisableVertexAttribArray( index );
         }
     }
@@ -931,12 +1081,62 @@ void State::disableVertexAttribPointersAboveAndIncluding( unsigned int index )
             {
                 eap._enabled = false;
                 eap._dirty = false;
+                // OSG_NOTICE<<"    State::disableVertexAttribPointersAboveAndIncluding(): _glDisableVertexAttribArray( "<<index<<" )"<<std::endl;
                 _glDisableVertexAttribArray( index );
             }
             ++index;
         }
     }
 }
+
+void State::lazyDisablingOfVertexAttributes()
+{
+    // OSG_NOTICE<<"lazyDisablingOfVertexAttributes()"<<std::endl;
+    if (!_useVertexAttributeAliasing)
+    {
+        _vertexArray._lazy_disable = true;
+        _normalArray._lazy_disable = true;
+        _colorArray._lazy_disable = true;
+        _secondaryColorArray._lazy_disable = true;
+        _fogArray._lazy_disable = true;
+        for(EnabledTexCoordArrayList::iterator itr = _texCoordArrayList.begin();
+            itr != _texCoordArrayList.end();
+            ++itr)
+        {
+            itr->_lazy_disable = true;
+        }
+    }
+
+    for(EnabledVertexAttribArrayList::iterator itr = _vertexAttribArrayList.begin();
+        itr != _vertexAttribArrayList.end();
+        ++itr)
+    {
+        itr->_lazy_disable = true;
+    }
+}
+
+void State::applyDisablingOfVertexAttributes()
+{
+    //OSG_NOTICE<<"start of applyDisablingOfVertexAttributes()"<<std::endl;
+    if (!_useVertexAttributeAliasing)
+    {
+        if (_vertexArray._lazy_disable) disableVertexPointer();
+        if (_normalArray._lazy_disable) disableNormalPointer();
+        if (_colorArray._lazy_disable) disableColorPointer();
+        if (_secondaryColorArray._lazy_disable) disableSecondaryColorPointer();
+        if (_fogArray._lazy_disable) disableFogCoordPointer();
+        for(unsigned int i=0; i<_texCoordArrayList.size(); ++i)
+        {
+            if (_texCoordArrayList[i]._lazy_disable) disableTexCoordPointer(i);
+        }
+    }
+    for(unsigned int i=0; i<_vertexAttribArrayList.size(); ++i)
+    {
+        if (_vertexAttribArrayList[i]._lazy_disable) disableVertexAttribPointer(i);
+    }
+    // OSG_NOTICE<<"end of applyDisablingOfVertexAttributes()"<<std::endl;
+}
+
 
 bool State::computeSecondaryColorSupported() const
 {
@@ -955,7 +1155,7 @@ bool State::computeFogCoordSupported() const
 bool State::computeVertexBufferObjectSupported() const
 {
     _isVertexBufferObjectSupportResolved = true;
-    _isVertexBufferObjectSupported = osg::isGLExtensionSupported(_contextID,"GL_ARB_vertex_buffer_object");
+    _isVertexBufferObjectSupported = OSG_GLES2_FEATURES || OSG_GL3_FEATURES || osg::isGLExtensionSupported(_contextID,"GL_ARB_vertex_buffer_object");
     return _isVertexBufferObjectSupported;
 }
 
@@ -965,11 +1165,23 @@ bool State::checkGLErrors(const char* str) const
     if (errorNo!=GL_NO_ERROR)
     {
         const char* error = (char*)gluErrorString(errorNo);
-        if (error) osg::notify(WARN)<<"Warning: detected OpenGL error '" << error<<"'";
-        else       osg::notify(WARN)<<"Warning: detected OpenGL error number 0x" << std::hex << errorNo << std::dec;
+        if (error)
+        {
+            OSG_NOTIFY(WARN)<<"Warning: detected OpenGL error '" << error<<"'";
+        }
+        else
+        {
+            OSG_NOTIFY(WARN)<<"Warning: detected OpenGL error number 0x" << std::hex << errorNo << std::dec;
+        }
 
-        if (str) osg::notify(WARN)<<" at "<<str<< std::endl;
-        else     osg::notify(WARN)<<" in osg::State."<< std::endl;
+        if (str)
+        {
+            OSG_NOTIFY(WARN)<<" at "<<str<< std::endl;
+        }
+        else
+        {
+            OSG_NOTIFY(WARN)<<" in osg::State."<< std::endl;
+        }
 
         return true;
     }
@@ -982,9 +1194,14 @@ bool State::checkGLErrors(StateAttribute::GLMode mode) const
     if (errorNo!=GL_NO_ERROR)
     {
         const char* error = (char*)gluErrorString(errorNo);
-        if (error) osg::notify(WARN)<<"Warning: detected OpenGL error '"<< error <<"' after applying GLMode 0x"<<hex<<mode<<dec<< std::endl;
-        else       osg::notify(WARN)<<"Warning: detected OpenGL error number 0x"<< std::hex << errorNo <<" after applying GLMode 0x"<<hex<<mode<<dec<< std::endl;
-
+        if (error)
+        {
+            OSG_NOTIFY(WARN)<<"Warning: detected OpenGL error '"<< error <<"' after applying GLMode 0x"<<hex<<mode<<dec<< std::endl;
+        }
+        else
+        {
+            OSG_NOTIFY(WARN)<<"Warning: detected OpenGL error number 0x"<< std::hex << errorNo <<" after applying GLMode 0x"<<hex<<mode<<dec<< std::endl;
+        }
         return true;
     }
     return false;
@@ -996,8 +1213,14 @@ bool State::checkGLErrors(const StateAttribute* attribute) const
     if (errorNo!=GL_NO_ERROR)
     {
         const char* error = (char*)gluErrorString(errorNo);
-        if (error) osg::notify(WARN)<<"Warning: detected OpenGL error '"<< error <<"' after applying attribute "<<attribute->className()<<" "<<attribute<< std::endl;
-        else       osg::notify(WARN)<<"Warning: detected OpenGL error number 0x"<< std::hex << errorNo <<" after applying attribute "<<attribute->className()<<" "<<attribute<< std::dec << std::endl;
+        if (error)
+        {
+            OSG_NOTIFY(WARN)<<"Warning: detected OpenGL error '"<< error <<"' after applying attribute "<<attribute->className()<<" "<<attribute<< std::endl;
+        }
+        else
+        {
+            OSG_NOTIFY(WARN)<<"Warning: detected OpenGL error number 0x"<< std::hex << errorNo <<" after applying attribute "<<attribute->className()<<" "<<attribute<< std::dec << std::endl;
+        }
 
         return true;
     }
@@ -1005,3 +1228,384 @@ bool State::checkGLErrors(const StateAttribute* attribute) const
 }
 
 
+void State::applyModelViewAndProjectionUniformsIfRequired()
+{
+    if (!_lastAppliedProgramObject) return;
+
+    if (_modelViewMatrixUniform.valid()) _lastAppliedProgramObject->apply(*_modelViewMatrixUniform);
+    if (_projectionMatrixUniform) _lastAppliedProgramObject->apply(*_projectionMatrixUniform);
+    if (_modelViewProjectionMatrixUniform) _lastAppliedProgramObject->apply(*_modelViewProjectionMatrixUniform);
+    if (_normalMatrixUniform) _lastAppliedProgramObject->apply(*_normalMatrixUniform);
+}
+
+namespace State_Utils
+{
+    bool replace(std::string& str, const std::string& original_phrase, const std::string& new_phrase)
+    {
+        bool replacedStr = false;
+        std::string::size_type pos = 0;
+        while((pos=str.find(original_phrase, pos))!=std::string::npos)
+        {
+            std::string::size_type endOfPhrasePos = pos+original_phrase.size();
+            if (endOfPhrasePos<str.size())
+            {
+                char c = str[endOfPhrasePos];
+                if ((c>='0' && c<='9') ||
+                    (c>='a' && c<='z') ||
+                    (c>='A' && c<='Z'))
+                {
+                    pos = endOfPhrasePos;
+                    continue;
+                }
+            }
+
+            replacedStr = true;
+            str.replace(pos, original_phrase.size(), new_phrase);
+        }
+        return replacedStr;
+    }
+
+    void replaceAndInsertDeclaration(std::string& source, const std::string& originalStr, const std::string& newStr, const std::string& declarationPrefix)
+    {
+        if (replace(source, originalStr, newStr))
+        {
+            source.insert(0, declarationPrefix + newStr + std::string(";\n"));
+        }
+    }
+}
+
+bool State::convertVertexShaderSourceToOsgBuiltIns(std::string& source) const
+{
+    OSG_NOTICE<<"State::convertShaderSourceToOsgBuiltIns()"<<std::endl;
+
+    OSG_NOTICE<<"++Before Converted source "<<std::endl<<source<<std::endl<<"++++++++"<<std::endl;
+
+    // replace ftransform as it only works with built-ins
+    State_Utils::replace(source, "ftransform()", "gl_ModelViewProjectionMatrix * gl_Vertex");
+
+    State_Utils::replaceAndInsertDeclaration(source, "gl_Normal", "osg_Normal", "attribute vec3 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_Vertex", "osg_Vertex", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_Color", "osg_Color", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_SecondaryColor", "osg_SecondaryColor", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_FogCoord", "osg_FogCoord", "attribute float ");
+
+    State_Utils::replaceAndInsertDeclaration(source, "gl_MultiTexCoord0", "osg_MultiTexCoord0", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_MultiTexCoord1", "osg_MultiTexCoord1", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_MultiTexCoord2", "osg_MultiTexCoord2", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_MultiTexCoord3", "osg_MultiTexCoord3", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_MultiTexCoord4", "osg_MultiTexCoord4", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_MultiTexCoord5", "osg_MultiTexCoord5", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_MultiTexCoord6", "osg_MultiTexCoord6", "attribute vec4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_MultiTexCoord7", "osg_MultiTexCoord7", "attribute vec4 ");
+
+    // replace built in uniform
+    State_Utils::replaceAndInsertDeclaration(source, "gl_ModelViewMatrix", "osg_ModelViewMatrix", "uniform mat4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_ModelViewProjectionMatrix", "osg_ModelViewProjectionMatrix", "uniform mat4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_ProjectionMatrix", "osg_ProjectionMatrix", "uniform mat4 ");
+    State_Utils::replaceAndInsertDeclaration(source, "gl_NormalMatrix", "osg_NormalMatrix", "uniform mat3 ");
+
+    OSG_NOTICE<<"-------- Converted source "<<std::endl<<source<<std::endl<<"----------------"<<std::endl;
+
+    return true;
+}
+
+void State::setUpVertexAttribAlias(VertexAttribAlias& alias, GLuint location, const std::string glName, const std::string osgName, const std::string& declaration)
+{
+    alias = VertexAttribAlias(location, glName, osgName, declaration);
+    _attributeBindingList[osgName] = location;
+}
+
+void State::applyProjectionMatrix(const osg::RefMatrix* matrix)
+{
+    if (_projection!=matrix)
+    {
+        if (matrix)
+        {
+            _projection=matrix;
+        }
+        else
+        {
+            _projection=_identity;
+        }
+
+        if (_useModelViewAndProjectionUniforms)
+        {
+            if (_projectionMatrixUniform.valid()) _projectionMatrixUniform->set(*_projection);
+            updateModelViewAndProjectionMatrixUniforms();
+        }
+#ifdef OSG_GL_MATRICES_AVAILABLE
+        glMatrixMode( GL_PROJECTION );
+            glLoadMatrix(_projection->ptr());
+        glMatrixMode( GL_MODELVIEW );
+#endif
+    }
+}
+
+void State::loadModelViewMatrix()
+{
+    if (_useModelViewAndProjectionUniforms)
+    {
+        if (_modelViewMatrixUniform.valid()) _modelViewMatrixUniform->set(*_modelView);
+        updateModelViewAndProjectionMatrixUniforms();
+    }
+
+#ifdef OSG_GL_MATRICES_AVAILABLE
+    glLoadMatrix(_modelView->ptr());
+#endif
+}
+
+void State::applyModelViewMatrix(const osg::RefMatrix* matrix)
+{
+    if (_modelView!=matrix)
+    {
+        if (matrix)
+        {
+            _modelView=matrix;
+        }
+        else
+        {
+            _modelView=_identity;
+        }
+
+        loadModelViewMatrix();
+    }
+}
+
+void State::applyModelViewMatrix(const osg::Matrix& matrix)
+{
+    _modelViewCache->set(matrix);
+    _modelView = _modelViewCache;
+
+    loadModelViewMatrix();
+}
+
+#include <osg/io_utils>
+
+void State::updateModelViewAndProjectionMatrixUniforms()
+{
+    if (_modelViewProjectionMatrixUniform.valid()) _modelViewProjectionMatrixUniform->set((*_modelView) * (*_projection));
+    if (_normalMatrixUniform.valid())
+    {
+        Matrix mv(*_modelView);
+        mv.setTrans(0.0, 0.0, 0.0);
+
+        Matrix matrix;
+        matrix.invert(mv);
+
+        Matrix3 normalMatrix(matrix(0,0), matrix(1,0), matrix(2,0),
+                             matrix(0,1), matrix(1,1), matrix(2,1),
+                             matrix(0,2), matrix(1,2), matrix(2,2));
+
+        _normalMatrixUniform->set(normalMatrix);
+    }
+}
+
+void State::drawQuads(GLint first, GLsizei count, GLsizei primCount)
+{
+    // OSG_NOTICE<<"State::drawQuads("<<first<<", "<<count<<")"<<std::endl;
+    
+    unsigned int array = first % 4;
+    unsigned int offsetFirst = ((first-array) / 4) * 6;
+    unsigned int numQuads = (count/4);
+    unsigned int numIndices = numQuads * 6;
+    unsigned int endOfIndices = offsetFirst+numIndices;
+    Indices& indices = _quadIndices[array];
+    if (endOfIndices>65536)
+    {
+        OSG_NOTICE<<"Warning: State::drawQuads("<<first<<", "<<count<<") too large handle in remapping to ushort glDrawElements."<<std::endl;
+        endOfIndices = 65536;
+    }
+    
+    if (endOfIndices >= indices.size())
+    {
+        // we need to expand the _indexArray to be big enough to cope with all the quads required.
+        unsigned int numExistingQuads = indices.size()/6;
+        unsigned int numRequiredQuads = endOfIndices/6;
+        indices.reserve(endOfIndices);
+        for(unsigned int i=numExistingQuads; i<numRequiredQuads; ++i)
+        {
+            unsigned int base = i*4 + array;
+            indices.push_back(base);
+            indices.push_back(base+1);
+            indices.push_back(base+3);
+            
+            indices.push_back(base+1);
+            indices.push_back(base+2);
+            indices.push_back(base+3);
+            
+            // OSG_NOTICE<<"   adding quad indices ("<<base<<")"<<std::endl;
+        }
+    }
+
+    // if (array!=0) return;
+
+    // OSG_NOTICE<<"  glDrawElements(GL_TRIANGLES, "<<numIndices<<", GL_UNSIGNED_SHORT, "<<&(indices[base])<<")"<<std::endl;
+    glDrawElementsInstanced(GL_TRIANGLES, numIndices, GL_UNSIGNED_SHORT, &(indices[offsetFirst]), primCount);
+}
+
+void State::ModeStack::print(std::ostream& fout) const
+{
+    fout<<"    valid = "<<valid<<std::endl;
+    fout<<"    changed = "<<changed<<std::endl;
+    fout<<"    last_applied_value = "<<last_applied_value<<std::endl;
+    fout<<"    global_default_value = "<<global_default_value<<std::endl;
+    fout<<"    valueVec { "<<std::endl;
+    for(ModeStack::ValueVec::const_iterator itr = valueVec.begin();
+        itr != valueVec.end();
+        ++itr)
+    {
+        if (itr!=valueVec.begin()) fout<<", ";
+        fout<<*itr;
+    }
+    fout<<" }"<<std::endl;
+}
+
+void State::AttributeStack::print(std::ostream& fout) const
+{
+    fout<<"    changed = "<<changed<<std::endl;
+    fout<<"    last_applied_attribute = "<<last_applied_attribute;
+    if (last_applied_attribute) fout<<", "<<last_applied_attribute->className()<<", "<<last_applied_attribute->getName()<<std::endl;
+    fout<<"    last_applied_shadercomponent = "<<last_applied_shadercomponent<<std::endl;
+    if (last_applied_shadercomponent)  fout<<", "<<last_applied_shadercomponent->className()<<", "<<last_applied_shadercomponent->getName()<<std::endl;
+    fout<<"    global_default_attribute = "<<global_default_attribute.get()<<std::endl;
+    fout<<"    attributeVec { ";
+    for(AttributeVec::const_iterator itr = attributeVec.begin();
+        itr != attributeVec.end();
+        ++itr)
+    {
+        if (itr!=attributeVec.begin()) fout<<", ";
+        fout<<"("<<itr->first<<", "<<itr->second<<")";
+    }
+    fout<<" }"<<std::endl;
+}
+
+
+void State::UniformStack::print(std::ostream& fout) const
+{
+    fout<<"    UniformVec { ";
+    for(UniformVec::const_iterator itr = uniformVec.begin();
+        itr != uniformVec.end();
+        ++itr)
+    {
+        if (itr!=uniformVec.begin()) fout<<", ";
+        fout<<"("<<itr->first<<", "<<itr->second<<")";
+    }
+    fout<<" }"<<std::endl;
+}
+
+
+
+
+
+void State::print(std::ostream& fout) const
+{
+#if 0
+        GraphicsContext*            _graphicsContext;
+        unsigned int                _contextID;
+
+        bool                            _shaderCompositionEnabled;
+        bool                            _shaderCompositionDirty;
+        osg::ref_ptr<ShaderComposer>    _shaderComposer;
+#endif
+
+#if 0
+        osg::Program*                   _currentShaderCompositionProgram;
+        StateSet::UniformList           _currentShaderCompositionUniformList;
+#endif
+
+#if 0
+        ref_ptr<FrameStamp>         _frameStamp;
+
+        ref_ptr<const RefMatrix>    _identity;
+        ref_ptr<const RefMatrix>    _initialViewMatrix;
+        ref_ptr<const RefMatrix>    _projection;
+        ref_ptr<const RefMatrix>    _modelView;
+        ref_ptr<RefMatrix>          _modelViewCache;
+
+        bool                        _useModelViewAndProjectionUniforms;
+        ref_ptr<Uniform>            _modelViewMatrixUniform;
+        ref_ptr<Uniform>            _projectionMatrixUniform;
+        ref_ptr<Uniform>            _modelViewProjectionMatrixUniform;
+        ref_ptr<Uniform>            _normalMatrixUniform;
+
+        Matrix                      _initialInverseViewMatrix;
+
+        ref_ptr<DisplaySettings>    _displaySettings;
+
+        bool*                       _abortRenderingPtr;
+        CheckForGLErrors            _checkGLErrors;
+
+
+        bool                        _useVertexAttributeAliasing;
+        VertexAttribAlias           _vertexAlias;
+        VertexAttribAlias           _normalAlias;
+        VertexAttribAlias           _colorAlias;
+        VertexAttribAlias           _secondaryColorAlias;
+        VertexAttribAlias           _fogCoordAlias;
+        VertexAttribAliasList       _texCoordAliasList;
+
+        Program::AttribBindingList  _attributeBindingList;
+#endif
+        fout<<"ModeMap _modeMap {"<<std::endl;
+        for(ModeMap::const_iterator itr = _modeMap.begin();
+            itr != _modeMap.end();
+            ++itr)
+        {
+            fout<<"  GLMode="<<itr->first<<", ModeStack {"<<std::endl;
+            itr->second.print(fout);
+            fout<<"  }"<<std::endl;
+        }
+        fout<<"}"<<std::endl;
+
+        fout<<"AttributeMap _attributeMap {"<<std::endl;
+        for(AttributeMap::const_iterator itr = _attributeMap.begin();
+            itr != _attributeMap.end();
+            ++itr)
+        {
+            fout<<"  TypeMemberPaid=("<<itr->first.first<<", "<<itr->first.second<<") AttributeStack {"<<std::endl;
+            itr->second.print(fout);
+            fout<<"  }"<<std::endl;
+        }
+        fout<<"}"<<std::endl;
+
+        fout<<"UniformMap _uniformMap {"<<std::endl;
+        for(UniformMap::const_iterator itr = _uniformMap.begin();
+            itr != _uniformMap.end();
+            ++itr)
+        {
+            fout<<"  name="<<itr->first<<", UniformStack {"<<std::endl;
+            itr->second.print(fout);
+            fout<<"  }"<<std::endl;
+        }
+        fout<<"}"<<std::endl;
+
+#if 0
+        TextureModeMapList                                              _textureModeMapList;
+        TextureAttributeMapList                                         _textureAttributeMapList;
+
+        AppliedProgramObjectSet                                         _appliedProgramObjectSet;
+        const Program::PerContextProgram*                               _lastAppliedProgramObject;
+#endif
+
+
+        fout<<"StateSetStack _stateSetStack {"<<std::endl;
+        for(StateSetStack::const_iterator itr = _stateStateStack.begin();
+            itr != _stateStateStack.end();
+            ++itr)
+        {
+            fout<<(*itr)->getName()<<"  "<<*itr<<std::endl;
+        }
+        fout<<"}"<<std::endl;
+}
+
+void State::frameCompleted()
+{
+    osg::Drawable::Extensions* extensions = osg::Drawable::getExtensions(getContextID(), true);
+    if (extensions && getTimestampBits())
+    {
+        GLint64EXT timestamp;
+        extensions->glGetInteger64v(GL_TIMESTAMP, &timestamp);
+        setGpuTimestamp(osg::Timer::instance()->tick(), timestamp);
+        //OSG_NOTICE<<"State::frameCompleted() setting time stamp. timestamp="<<timestamp<<std::endl;
+    }
+}

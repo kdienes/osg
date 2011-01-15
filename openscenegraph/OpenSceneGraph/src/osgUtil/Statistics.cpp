@@ -25,6 +25,7 @@
 #include <map>
 #include <set>
 #include <ostream>
+#include <iomanip>
 
 using namespace osgUtil;
 
@@ -36,12 +37,15 @@ Statistics::Statistics()
 void Statistics::reset()
 {
     numDrawables=0;
+    numFastDrawables=0;
     nummat=0;
     depth=0;
     stattype=STAT_NONE;
     nlights=0;
     nbins=0;
     nimpostor=0;
+    numStateGraphs=0;
+    numOrderedLeaves=0;
 
     _vertexCount=0;
     _primitiveCount.clear();            
@@ -105,11 +109,14 @@ void Statistics::end()
 void Statistics::add(const Statistics& stats)
 {
     numDrawables += stats.numDrawables;
+    numFastDrawables += stats.numFastDrawables;
     nummat += stats.nummat;
     depth += stats.depth;
     nlights += stats.nlights;
     nbins += stats.nbins;
     nimpostor += stats.nimpostor;
+    numStateGraphs += stats.numStateGraphs;
+    numOrderedLeaves += stats.numOrderedLeaves;
 
     _vertexCount += stats._vertexCount;
     // _primitiveCount += stats._primitiveCount;   
@@ -143,6 +150,7 @@ StatsVisitor::StatsVisitor():
     _numInstancedGeode(0),
     _numInstancedDrawable(0),
     _numInstancedGeometry(0),
+    _numInstancedFastGeometry(0),
     _numInstancedStateSet(0)
 {}
 
@@ -155,6 +163,7 @@ void StatsVisitor::reset()
     _numInstancedGeode = 0;
     _numInstancedDrawable = 0;
     _numInstancedGeometry = 0;
+    _numInstancedFastGeometry = 0;
     _numInstancedStateSet = 0;
 
     _groupSet.clear();
@@ -164,6 +173,7 @@ void StatsVisitor::reset()
     _geodeSet.clear();
     _drawableSet.clear();
     _geometrySet.clear();
+    _fastGeometrySet.clear();
     _statesetSet.clear();
 
     _uniqueStats.reset();
@@ -264,12 +274,18 @@ void StatsVisitor::apply(osg::Drawable& drawable)
     drawable.accept(_instancedStats);
 
     _drawableSet.insert(&drawable);
-
-    osg::Geometry* geometry = dynamic_cast<osg::Geometry*>(&drawable);
+    
+    osg::Geometry* geometry = drawable.asGeometry();
     if (geometry)
     {
         ++_numInstancedGeometry;
         _geometrySet.insert(geometry);
+
+        if (geometry->areFastPathsUsed())
+        {
+            ++_numInstancedFastGeometry;
+            _fastGeometrySet.insert(geometry);
+        }
     }
 }
 
@@ -305,16 +321,19 @@ void StatsVisitor::print(std::ostream& out)
         instanced_primitives += pcmitr->second;
     }
 
-    out<<"Object Type\t#Unique\t#Instanced"<<std::endl;
-    out<<"StateSet      \t"<<_statesetSet.size()<<"\t"<<_numInstancedStateSet<<std::endl;
-    out<<"Group      \t"<<_groupSet.size()<<"\t"<<_numInstancedGroup<<std::endl;
-    out<<"Transform  \t"<<_transformSet.size()<<"\t"<<_numInstancedTransform<<std::endl;
-    out<<"LOD        \t"<<_lodSet.size()<<"\t"<<_numInstancedLOD<<std::endl;
-    out<<"Switch     \t"<<_switchSet.size()<<"\t"<<_numInstancedSwitch<<std::endl;
-    out<<"Geode      \t"<<_geodeSet.size()<<"\t"<<_numInstancedGeode<<std::endl;
-    out<<"Drawable   \t"<<_drawableSet.size()<<"\t"<<_numInstancedDrawable<<std::endl;
-    out<<"Geometry   \t"<<_geometrySet.size()<<"\t"<<_numInstancedGeometry<<std::endl;
-    out<<"Vertices   \t"<<_uniqueStats._vertexCount<<"\t"<<_instancedStats._vertexCount<<std::endl;
-    out<<"Primitives \t"<<unique_primitives<<"\t"<<instanced_primitives<<std::endl;
+
+    out << std::setw(12) << "Object Type" << std::setw(10) << "Unique"                  << std::setw(10) << "Instanced" << std::endl;
+    out << std::setw(12) << "-----------" << std::setw(10) << "------"                  << std::setw(10) << "---------" << std::endl;
+    out << std::setw(12) << "StateSet   " << std::setw(10) << _statesetSet.size()       << std::setw(10) << _numInstancedStateSet << std::endl;
+    out << std::setw(12) << "Group      " << std::setw(10) << _groupSet.size()          << std::setw(10) << _numInstancedGroup << std::endl;
+    out << std::setw(12) << "Transform  " << std::setw(10) << _transformSet.size()      << std::setw(10) << _numInstancedTransform << std::endl;
+    out << std::setw(12) << "LOD        " << std::setw(10) << _lodSet.size()            << std::setw(10) << _numInstancedLOD << std::endl;
+    out << std::setw(12) << "Switch     " << std::setw(10) << _switchSet.size()         << std::setw(10) << _numInstancedSwitch << std::endl;
+    out << std::setw(12) << "Geode      " << std::setw(10) << _geodeSet.size()          << std::setw(10) << _numInstancedGeode << std::endl;
+    out << std::setw(12) << "Drawable   " << std::setw(10) << _drawableSet.size()       << std::setw(10) << _numInstancedDrawable << std::endl;
+    out << std::setw(12) << "Geometry   " << std::setw(10) << _geometrySet.size()       << std::setw(10) << _numInstancedGeometry << std::endl;
+    out << std::setw(12) << "Fast geom. " << std::setw(10) << _fastGeometrySet.size()   << std::setw(10) << _numInstancedFastGeometry << std::endl;
+    out << std::setw(12) << "Vertices   " << std::setw(10) << _uniqueStats._vertexCount << std::setw(10) << _instancedStats._vertexCount << std::endl;
+    out << std::setw(12) << "Primitives " << std::setw(10) << unique_primitives         << std::setw(10) << instanced_primitives << std::endl;
 }
     

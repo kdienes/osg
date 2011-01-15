@@ -16,6 +16,10 @@
 
 #include <osg/StateAttribute>
 
+#ifndef GL_ALPHA_TEST
+    #define GL_ALPHA_TEST 0x0BC0
+#endif
+
 namespace osg {
 
 /** Encapsulates OpenGL glAlphaFunc.
@@ -54,7 +58,7 @@ class OSG_EXPORT AlphaFunc : public StateAttribute
         virtual int compare(const StateAttribute& sa) const
         {
             // Check for equal types, then create the rhs variable
-            // used by the COMPARE_StateAttribute_Paramter macros below.
+            // used by the COMPARE_StateAttribute_Parameter macros below.
             COMPARE_StateAttribute_Types(AlphaFunc,sa)
 
             // Compare each parameter in turn against the rhs.

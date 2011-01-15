@@ -39,7 +39,7 @@ void Multisample::apply(State& state) const
                                         
     if (!extensions->isMultisampleSupported())
     {
-        notify(WARN)<<"Warning: Multisample::apply(..) failed, Multisample is not support by OpenGL driver."<<std::endl;
+        OSG_WARN<<"Warning: Multisample::apply(..) failed, Multisample is not support by OpenGL driver."<<std::endl;
         return;
     }
 
@@ -88,7 +88,7 @@ void Multisample::Extensions::lowestCommonDenominator(const Extensions& rhs)
 
 void Multisample::Extensions::setupGLExtensions(unsigned int contextID)
 {
-    _isMultisampleSupported = isGLExtensionSupported(contextID,"GL_ARB_multisample");
+    _isMultisampleSupported = OSG_GLES2_FEATURES || OSG_GL3_FEATURES || isGLExtensionSupported(contextID,"GL_ARB_multisample");
     _isMultisampleFilterHintSupported = isGLExtensionSupported(contextID,"GL_NV_multisample_filter_hint");
 
     setGLExtensionFuncPtr(_glSampleCoverage, "glSampleCoverageARB");
@@ -102,7 +102,7 @@ void Multisample::Extensions::glSampleCoverage(GLclampf value, GLboolean invert)
     }
     else
     {
-        notify(WARN)<<"Error: glSampleCoverage not supported by OpenGL driver"<<std::endl;
+        OSG_WARN<<"Error: glSampleCoverage not supported by OpenGL driver"<<std::endl;
     }
 }
 

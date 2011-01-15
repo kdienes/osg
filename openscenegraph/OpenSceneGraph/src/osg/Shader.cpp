@@ -2,9 +2,10 @@
  * Copyright (C) 2003-2005 3Dlabs Inc. Ltd.
  * Copyright (C) 2004-2005 Nathan Cournia
  * Copyright (C) 2008 Zebra Imaging
+ * Copyright (C) 2010 VIRES Simulationstechnologie GmbH
  *
  * This application is open source and may be redistributed and/or modified   
- * freely and without restriction, both in commericial and non commericial
+ * freely and without restriction, both in commercial and non commercial
  * applications, as long as this copyright notice is maintained.
  * 
  * This application is distributed in the hope that it will be useful,
@@ -15,10 +16,13 @@
 
 /* file:   src/osg/Shader.cpp
  * author: Mike Weiblen 2008-01-02
+ *         Holger Helmich 2010-10-21
 */
 
 #include <fstream>
 #include <list>
+#include <sstream>
+#include <iomanip>
 
 #include <osg/Notify>
 #include <osg/State>
@@ -33,6 +37,118 @@
 #include <OpenThreads/Mutex>
 
 using namespace osg;
+
+
+///////////////////////////////////////////////////////////////////////////////////
+//
+//  ShaderComponent
+//
+ShaderComponent::ShaderComponent()
+{
+}
+
+ShaderComponent::ShaderComponent(const ShaderComponent& sc,const CopyOp& copyop):
+    osg::Object(sc, copyop),
+    _shaders(sc._shaders)
+{
+}
+
+unsigned int ShaderComponent::addShader(osg::Shader* shader)
+{
+    for(unsigned int i=0; i<_shaders.size();++i)
+    {
+        if (_shaders[i]==shader) return i;
+    }
+    _shaders.push_back(shader);
+    return _shaders.size()-1;
+}
+
+void ShaderComponent::removeShader(unsigned int i)
+{
+    _shaders.erase(_shaders.begin()+i);
+}
+
+void ShaderComponent::compileGLObjects(State& state) const
+{
+    for(Shaders::const_iterator itr = _shaders.begin();
+        itr != _shaders.end();
+        ++itr)
+    {
+        (*itr)->compileShader(state);
+    }
+}
+
+void ShaderComponent::resizeGLObjectBuffers(unsigned int maxSize)
+{
+    for(Shaders::const_iterator itr = _shaders.begin();
+        itr != _shaders.end();
+        ++itr)
+    {
+        (*itr)->resizeGLObjectBuffers(maxSize);
+    }
+}
+
+void ShaderComponent::releaseGLObjects(State* state) const
+{
+    for(Shaders::const_iterator itr = _shaders.begin();
+        itr != _shaders.end();
+        ++itr)
+    {
+        (*itr)->releaseGLObjects(state);
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////////
+//
+//  ShaderBinary
+//
+ShaderBinary::ShaderBinary()
+{
+}
+
+ShaderBinary::ShaderBinary(const ShaderBinary& rhs, const osg::CopyOp&):
+    _data(rhs._data)
+{
+}
+
+void ShaderBinary::allocate(unsigned int size)
+{
+    _data.clear();
+    _data.resize(size);
+}
+
+void ShaderBinary::assign(unsigned int size, const unsigned char* data)
+{
+    allocate(size);
+    if (data)
+    {
+        for(unsigned int i=0; i<size; ++i)
+        {
+            _data[i] = data[i];
+        }
+    }
+}
+
+ShaderBinary* ShaderBinary::readShaderBinaryFile(const std::string& fileName)
+{
+    std::ifstream fin;
+    fin.open(fileName.c_str(), std::ios::binary);
+    if (!fin) return 0;
+
+    fin.seekg(0, std::ios::end);
+    int length = fin.tellg();
+    if (length==0) return 0;
+
+    osg::ref_ptr<ShaderBinary> shaderBinary = new osg::ShaderBinary;
+    shaderBinary->allocate(length);
+    fin.seekg(0, std::ios::beg);
+    fin.read(reinterpret_cast<char*>(shaderBinary->getData()), length);
+    fin.close();
+
+    return shaderBinary.release();
+}
 
 ///////////////////////////////////////////////////////////////////////////
 // static cache of glShaders flagged for deletion, which will actually
@@ -107,11 +223,20 @@ Shader::Shader(Type type, const std::string& source) :
     setShaderSource( source);
 }
 
+Shader::Shader(Type type, ShaderBinary* shaderBinary) :
+    _type(type),
+    _shaderBinary(shaderBinary)
+{
+}
+
+
 Shader::Shader(const Shader& rhs, const osg::CopyOp& copyop):
     osg::Object( rhs, copyop ),
     _type(rhs._type),
+    _shaderFileName(rhs._shaderFileName),
     _shaderSource(rhs._shaderSource),
-    _shaderFileName(rhs._shaderFileName)
+    _shaderBinary(rhs._shaderBinary),
+    _codeInjectionMap(rhs._codeInjectionMap)
 {
 }
 
@@ -119,11 +244,13 @@ Shader::~Shader()
 {
 }
 
-bool Shader::setType( Type t )
+bool Shader::setType(Type t)
 {
-    if( _type != UNDEFINED )
+    if (_type==t) return true;
+
+    if (_type != UNDEFINED)
     {
-        osg::notify(osg::WARN) << "cannot change type of Shader" << std::endl;
+        OSG_WARN << "cannot change type of Shader" << std::endl;
         return false;
     }
 
@@ -170,11 +297,11 @@ bool Shader::loadShaderSourceFromFile( const std::string& fileName )
     sourceFile.open(fileName.c_str(), std::ios::binary);
     if(!sourceFile)
     {
-        osg::notify(osg::WARN)<<"Error: can't open file \""<<fileName<<"\""<<std::endl;
+        OSG_WARN<<"Error: can't open file \""<<fileName<<"\""<<std::endl;
         return false;
     }
 
-    osg::notify(osg::INFO)<<"Loading shader source file \""<<fileName<<"\""<<std::endl;
+    OSG_INFO<<"Loading shader source file \""<<fileName<<"\""<<std::endl;
     _shaderFileName = fileName;
 
     sourceFile.seekg(0, std::ios::end);
@@ -196,8 +323,10 @@ const char* Shader::getTypename() const
     switch( getType() )
     {
         case VERTEX:    return "VERTEX";
-        case FRAGMENT:  return "FRAGMENT";
+        case TESSCONTROL: return "TESSCONTROL";
+        case TESSEVALUATION: return "TESSEVALUATION";
         case GEOMETRY:  return "GEOMETRY";
+        case FRAGMENT:  return "FRAGMENT";
         default:        return "UNDEFINED";
     }
 }
@@ -206,8 +335,10 @@ const char* Shader::getTypename() const
 Shader::Type Shader::getTypeId( const std::string& tname )
 {
     if( tname == "VERTEX" )     return VERTEX;
-    if( tname == "FRAGMENT" )   return FRAGMENT;
+    if( tname == "TESSCONTROL" ) return TESSCONTROL;
+    if( tname == "TESSEVALUATION") return TESSEVALUATION;
     if( tname == "GEOMETRY" )   return GEOMETRY;
+    if( tname == "FRAGMENT" )   return FRAGMENT;
     return UNDEFINED;
 }
 
@@ -226,10 +357,10 @@ void Shader::releaseGLObjects(osg::State* state) const
     }
 }
 
-void Shader::compileShader( unsigned int contextID ) const
+void Shader::compileShader( osg::State& state ) const
 {
-    PerContextShader* pcs = getPCS( contextID );
-    if( pcs ) pcs->compileShader();
+    PerContextShader* pcs = getPCS( state.getContextID() );
+    if( pcs ) pcs->compileShader( state );
 }
 
 
@@ -237,7 +368,7 @@ Shader::PerContextShader* Shader::getPCS(unsigned int contextID) const
 {
     if( getType() == UNDEFINED )
     {
-        osg::notify(osg::WARN) << "Shader type is UNDEFINED" << std::endl;
+        OSG_WARN << "Shader type is UNDEFINED" << std::endl;
         return 0;
     }
 
@@ -339,18 +470,109 @@ void Shader::PerContextShader::requestCompile()
     _isCompiled = false;
 }
 
+namespace 
+{
+    std::string insertLineNumbers(const std::string& source)
+    {
+        if (source.empty()) return source;
 
-void Shader::PerContextShader::compileShader()
+        unsigned int lineNum = 1;       // Line numbers start at 1
+        std::ostringstream ostr;
+
+        std::string::size_type previous_pos = 0;
+        do
+        {
+            std::string::size_type pos = source.find_first_of("\n", previous_pos);
+            if (pos != std::string::npos)
+            {
+                ostr << std::setw(5)<<std::right<<lineNum<<": "<<source.substr(previous_pos, pos-previous_pos)<<std::endl;
+                previous_pos = pos+1<source.size() ? pos+1 : std::string::npos;
+            }
+            else
+            {
+                ostr << std::setw(5)<<std::right<<lineNum<<": "<<source.substr(previous_pos, std::string::npos)<<std::endl;
+                previous_pos = std::string::npos;
+            }
+            ++lineNum;
+
+        } while (previous_pos != std::string::npos);
+
+        return ostr.str();
+    }
+}
+
+void Shader::PerContextShader::compileShader(osg::State& state)
 {
     if( ! _needsCompile ) return;
     _needsCompile = false;
 
-    osg::notify(osg::INFO)
-        << "\nCompiling " << _shader->getTypename()
-        << " source:\n" << _shader->getShaderSource() << std::endl;
+#if defined(OSG_GLES2_AVAILABLE)
+    if (_shader->getShaderBinary())
+    {
+        GLint numFormats = 0;
+        glGetIntegerv(GL_NUM_SHADER_BINARY_FORMATS, &numFormats);
+
+        if (numFormats>0)
+        {
+            GLint* formats = new GLint[numFormats];
+            glGetIntegerv(GL_SHADER_BINARY_FORMATS, formats);
+
+            for(GLint i=0; i<numFormats; ++i)
+            {
+                OSG_NOTICE<<"  format="<<formats[i]<<std::endl;
+                GLenum shaderBinaryFormat = formats[i];
+                glShaderBinary(1, &_glShaderHandle, shaderBinaryFormat, _shader->getShaderBinary()->getData(), _shader->getShaderBinary()->getSize());
+                if (glGetError() == GL_NO_ERROR)
+                {
+                    _isCompiled = true;
+                    return;
+                }
+            }
+            delete [] formats;
+            
+            if (_shader->getShaderSource().empty())
+            {
+                OSG_WARN<<"Warning: No suitable shader of supported format by GLES driver found in shader binary, unable to compile shader."<<std::endl;
+                _isCompiled = false;
+                return;
+            }
+            else
+            {
+                OSG_NOTICE<<"osg::Shader::compileShader(): No suitable shader of supported format by GLES driver found in shader binary, falling back to shader source."<<std::endl;
+            }
+        }
+        else
+        {
+            if (_shader->getShaderSource().empty())
+            {
+                OSG_WARN<<"Warning: No shader binary formats supported by GLES driver, unable to compile shader."<<std::endl;
+                _isCompiled = false;
+                return;
+            }
+            else
+            {
+                OSG_NOTICE<<"osg::Shader::compileShader(): No shader binary formats supported by GLES driver, falling back to shader source."<<std::endl;
+            }
+        }
+    }
+#endif
+
+    std::string source = _shader->getShaderSource();
+    if (_shader->getType()==osg::Shader::VERTEX && (state.getUseVertexAttributeAliasing() || state.getUseModelViewAndProjectionUniforms()))
+    {
+        state.convertVertexShaderSourceToOsgBuiltIns(source);
+    }
+
+    std::string sourceWithLineNumbers = insertLineNumbers(source);
+
+    if (osg::getNotifyLevel()>=osg::INFO)
+    {
+        OSG_INFO << "\nCompiling " << _shader->getTypename()
+                 << " source:\n" << sourceWithLineNumbers << std::endl;
+    }
 
     GLint compiled = GL_FALSE;
-    const char* sourceText = _shader->getShaderSource().c_str();
+    const GLchar* sourceText = reinterpret_cast<const GLchar*>(source.c_str());
     _extensions->glShaderSource( _glShaderHandle, 1, &sourceText, NULL );
     _extensions->glCompileShader( _glShaderHandle );
     _extensions->glGetShaderiv( _glShaderHandle, GL_COMPILE_STATUS, &compiled );
@@ -358,13 +580,13 @@ void Shader::PerContextShader::compileShader()
     _isCompiled = (compiled == GL_TRUE);
     if( ! _isCompiled )
     {
-        osg::notify(osg::WARN) << _shader->getTypename() << " glCompileShader \""
+        OSG_WARN << _shader->getTypename() << " glCompileShader \""
             << _shader->getName() << "\" FAILED" << std::endl;
 
         std::string infoLog;
         if( getInfoLog(infoLog) )
         {
-            osg::notify(osg::WARN) << _shader->getTypename() << " Shader \""
+            OSG_WARN << _shader->getTypename() << " Shader \""
                 << _shader->getName() << "\" infolog:\n" << infoLog << std::endl;
         }
     }
@@ -373,7 +595,7 @@ void Shader::PerContextShader::compileShader()
         std::string infoLog;
         if( getInfoLog(infoLog) )
         {
-            osg::notify(osg::INFO) << _shader->getTypename() << " Shader \""
+            OSG_INFO << _shader->getTypename() << " Shader \""
                 << _shader->getName() << "\" infolog:\n" << infoLog << std::endl;
         }
     }

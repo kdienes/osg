@@ -21,8 +21,8 @@
 
 namespace osgViewer {
 
-/** CompsiteViewer holds a or more views to a one more scenes.*/
-class OSGVIEWER_EXPORT CompositeViewer : public ViewerBase, public virtual osg::Object
+/** CompositeViewer holds one or more views to one or more scenes.*/
+class OSGVIEWER_EXPORT CompositeViewer : public ViewerBase
 {
     public:
 
@@ -31,12 +31,12 @@ class OSGVIEWER_EXPORT CompositeViewer : public ViewerBase, public virtual osg::
         CompositeViewer(const CompositeViewer&,const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY);
 
         CompositeViewer(osg::ArgumentParser& arguments);
-        
+
         META_Object(osgViewer,CompositeViewer);
 
         virtual ~CompositeViewer();
 
-        /** read the viewer configuration from a configuration file.*/
+        /** Read the viewer configuration from a configuration file.*/
         bool readConfiguration(const std::string& filename);
 
 
@@ -52,17 +52,17 @@ class OSGVIEWER_EXPORT CompositeViewer : public ViewerBase, public virtual osg::
 
         void addView(osgViewer::View* view);
         void removeView(osgViewer::View* view);
-        
+
         osgViewer::View* getView(unsigned i) { return _views[i].get(); }
         const osgViewer::View* getView(unsigned i) const { return _views[i].get(); }
-        
+
         unsigned int getNumViews() const { return _views.size(); }
 
-        
-        /** Get whether at least of one of this viewers windows are realized.*/
+
+        /** Get whether at least of one of this viewer's windows are realized.*/
         virtual bool isRealized() const;
 
-        /** set up windows and associated threads.*/
+        /** Set up windows and associated threads.*/
         virtual void realize();
 
         virtual void setStartTick(osg::Timer_t tick);
@@ -73,9 +73,9 @@ class OSGVIEWER_EXPORT CompositeViewer : public ViewerBase, public virtual osg::
         const osg::FrameStamp* getFrameStamp() const { return _frameStamp.get(); }
 
         virtual double elapsedTime();
-        
+
         virtual osg::FrameStamp* getViewerFrameStamp() { return getFrameStamp(); }
-        
+
 
         /** Execute a main frame loop.
           * Equivalent to while (!viewer.done()) viewer.frame();
@@ -84,22 +84,25 @@ class OSGVIEWER_EXPORT CompositeViewer : public ViewerBase, public virtual osg::
           */
         virtual int run();
 
+        /** Check to see if the new frame is required, called by run() when FrameScheme is set to ON_DEMAND.*/
+        virtual bool checkNeedToDoFrame();
+
         virtual void advance(double simulationTime=USE_REFERENCE_TIME);
 
         virtual void eventTraversal();
 
         virtual void updateTraversal();
-        
-        
+
+
         void setCameraWithFocus(osg::Camera* camera);
         osg::Camera* getCameraWithFocus() { return _cameraWithFocus.get(); }
         const osg::Camera* getCameraWithFocus() const { return _cameraWithFocus.get(); }
-        
+
         osgViewer::View* getViewWithFocus() { return _viewWithFocus.get(); }
         const osgViewer::View* getViewWithFocus() const { return _viewWithFocus.get(); }
-        
+
         virtual void getCameras(Cameras& cameras, bool onlyActive=true);
-        
+
         virtual void getContexts(Contexts& contexts, bool onlyValid=true);
 
         virtual void getAllThreads(Threads& threads, bool onlyActive=true);
@@ -119,12 +122,12 @@ class OSGVIEWER_EXPORT CompositeViewer : public ViewerBase, public virtual osg::
         void constructorInit();
 
         virtual void viewerInit();
-        
+
         typedef std::vector< osg::ref_ptr<osgViewer::View> > RefViews;
         RefViews _views;
-       
+
         bool _firstFrame;
-        
+
         osg::ref_ptr<osg::Stats>            _stats;
 
         osg::Timer_t                        _startTick;
@@ -132,7 +135,7 @@ class OSGVIEWER_EXPORT CompositeViewer : public ViewerBase, public virtual osg::
 
         osg::observer_ptr<osg::Camera>      _cameraWithFocus;
         osg::observer_ptr<osgViewer::View>  _viewWithFocus;
-        
+
 };
 
 

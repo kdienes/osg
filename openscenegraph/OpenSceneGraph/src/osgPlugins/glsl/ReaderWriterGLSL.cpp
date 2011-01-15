@@ -17,6 +17,7 @@ class ReaderWriterGLSL : public osgDB::ReaderWriter
             supportsExtension("gl","OpenGL Shader Language format");
             supportsExtension("frag","OpenGL Shader Language format");
             supportsExtension("vert","OpenGL Shader Language format");
+            supportsExtension("geom","OpenGL Shader Language format");
             supportsExtension("glsl","OpenGL Shader Language format");
         }
     
@@ -62,7 +63,18 @@ class ReaderWriterGLSL : public osgDB::ReaderWriter
             osgDB::ifstream istream(fileName.c_str(), std::ios::in | std::ios::binary);
             if(!istream) return ReadResult::FILE_NOT_HANDLED;
             ReadResult rr = readShader(istream, options);
-            if(rr.validShader()) rr.getShader()->setFileName(file);
+            if(rr.validShader())
+            {
+                osg::Shader* shader = rr.getShader();
+                shader->setFileName(file);
+                if (shader->getType() == osg::Shader::UNDEFINED)
+                {
+                    // set type based on filename extension, where possible
+                    if (ext == "frag") shader->setType(osg::Shader::FRAGMENT);
+                    if (ext == "vert") shader->setType(osg::Shader::VERTEX);
+                    if (ext == "geom") shader->setType(osg::Shader::GEOMETRY);
+                }
+            }
             return rr;
         }
 

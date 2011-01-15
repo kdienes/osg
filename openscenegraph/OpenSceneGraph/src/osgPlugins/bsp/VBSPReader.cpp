@@ -13,6 +13,8 @@
 #include <osg/Texture1D>
 #include <osg/Texture2D>
 #include <osg/Texture3D>
+#include <osg/TexEnv>
+#include <osg/TexEnvCombine>
 #include <osgDB/Registry>
 #include <osgDB/FileUtils>
 #include <osgDB/ReadFile>
@@ -616,8 +618,8 @@ ref_ptr<Texture> VBSPReader::readTextureFile(std::string textureName)
         else
         {
             // We were unable to find the texture file
-            notify(WARN) << "Couldn't find texture " << textureName;
-            notify(WARN) << std::endl;
+            OSG_WARN << "Couldn't find texture " << textureName;
+            OSG_WARN << std::endl;
 
             // No texture
             texture = NULL;
@@ -626,108 +628,14 @@ ref_ptr<Texture> VBSPReader::readTextureFile(std::string textureName)
     else
     {
         // We were unable to find the texture file
-        notify(WARN) << "Couldn't find texture " << textureName;
-        notify(WARN) << std::endl;
+        OSG_WARN << "Couldn't find texture " << textureName;
+        OSG_WARN << std::endl;
 
         // No texture
         texture = NULL;
     }
 
     return texture;
-}
-
-
-ref_ptr<StateSet> VBSPReader::createBlendShader(Texture * tex1, Texture * tex2)
-{
-    const char *  blendVtxShaderCode = 
-    {
-        "attribute float vBlendParam;\n"
-        "\n"
-        "varying float fBlendParam;\n"
-        "\n"
-        "void main(void)\n"
-        "{\n"
-        "   vec3 normal, lightDir;\n"
-        "   vec4 ambient, diffuse;\n"
-        "   float nDotL;\n"
-        "\n"
-        "   // Simple directional lighting (for now).  We're assuming a\n"
-        "   // single light source\n"
-        "   // TODO:  This is only used for terrain geometry, so it should be\n"
-        "   //        lightmapped\n"
-        "   normal = normalize(gl_NormalMatrix * gl_Normal);\n"
-        "   lightDir = normalize(vec3(gl_LightSource[0].position));\n"
-        "   nDotL = max(dot(normal, lightDir), 0.0);\n"
-        "   ambient = gl_FrontMaterial.ambient * gl_LightSource[0].ambient;\n"
-        "   diffuse = gl_FrontMaterial.diffuse * gl_LightSource[0].diffuse;\n"
-        "\n"
-        "   // Calculate the vertex color\n"
-        "   gl_FrontColor =  0.1 + ambient + nDotL * diffuse;\n"
-        "\n"
-        "   // Pass the texture blend parameter through to the fragment\n"
-        "   // shader\n"
-        "   fBlendParam = vBlendParam;\n"
-        "\n"
-        "   // The basic transforms\n"
-        "   gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;\n"
-        "   gl_TexCoord[0] = vec4(gl_MultiTexCoord0.st, 0.0, 0.0);\n"
-        "}\n"
-    };
-
-    const char *  blendFrgShaderCode = 
-    {
-        "uniform sampler2D tex1;\n"
-        "uniform sampler2D tex2;\n"
-        "\n"
-        "varying float fBlendParam;\n"
-        "\n"
-        "void main(void)\n"
-        "{\n"
-        "   vec4 tex1Color;\n"
-        "   vec4 tex2Color;\n"
-        "\n"
-        "   tex1Color = texture2D(tex1, gl_TexCoord[0].st) *\n"
-        "      (1.0 - fBlendParam);\n"
-        "   tex2Color = texture2D(tex2, gl_TexCoord[0].st) * fBlendParam;\n"
-        "\n"
-        "   gl_FragColor = gl_Color * (tex1Color + tex2Color);\n"
-        "}\n"
-    };
-
-    // Create the stateset
-    StateSet * stateSet = new StateSet();
- 
-    // Add the two textures
-    stateSet->setTextureAttributeAndModes(0, tex1, StateAttribute::ON);
-    stateSet->setTextureAttributeAndModes(1, tex2, StateAttribute::ON);
-
-    // Create the vertex and fragment shaders
-    Shader * blendVtxShader = new Shader(Shader::VERTEX);
-    blendVtxShader->setShaderSource(blendVtxShaderCode);
-    Shader * blendFrgShader = new Shader(Shader::FRAGMENT);
-    blendFrgShader->setShaderSource(blendFrgShaderCode);
-
-    // Create the two texture uniforms
-    Uniform * tex1Sampler = new Uniform(Uniform::SAMPLER_2D, "tex1");
-    tex1Sampler->set(0);
-    Uniform * tex2Sampler = new Uniform(Uniform::SAMPLER_2D, "tex2");
-    tex2Sampler->set(1);
-
-    // Create the program
-    Program * blendProgram = new Program();
-    blendProgram->addShader(blendVtxShader);
-    blendProgram->addShader(blendFrgShader);
-
-    // The texture blending parameter will be on vertex attribute 1
-    blendProgram->addBindAttribLocation("vBlendParam", (GLuint) 1);
-
-    // Add everything to the StateSet
-    stateSet->addUniform(tex1Sampler);
-    stateSet->addUniform(tex2Sampler);
-    stateSet->setAttributeAndModes(blendProgram, StateAttribute::ON);
-
-    // Return the StateSet
-    return stateSet;
 }
 
 
@@ -746,6 +654,8 @@ ref_ptr<StateSet> VBSPReader::readMaterialFile(std::string materialName)
     std::string             tex2Name;
     ref_ptr<Texture>        texture;
     ref_ptr<Texture>        texture2;
+    ref_ptr<TexEnvCombine>  combiner0;
+    ref_ptr<TexEnvCombine>  combiner1;
     ref_ptr<Material>       material;
     ref_ptr<BlendFunc>      blend;
     bool                    translucent;
@@ -782,7 +692,7 @@ ref_ptr<StateSet> VBSPReader::readMaterialFile(std::string materialName)
     else
     {
         // Didn't find the material file, so return NULL
-        notify(WARN) << "Can't find material " << materialName << std::endl;
+        OSG_WARN << "Can't find material " << materialName << std::endl;
         return NULL;
     }
 
@@ -809,8 +719,8 @@ ref_ptr<StateSet> VBSPReader::readMaterialFile(std::string materialName)
     if (!found)
     {
         mtlFile->close();
-        notify(WARN) << "Material " << materialName << " isn't valid.";
-        notify(WARN) << std::endl;
+        OSG_WARN << "Material " << materialName << " isn't valid.";
+        OSG_WARN << std::endl;
         return NULL;
     }
 
@@ -887,23 +797,80 @@ ref_ptr<StateSet> VBSPReader::readMaterialFile(std::string materialName)
     // Check the shader's name
     if (equalCaseInsensitive(shaderName, "WorldVertexTransition"))
     {
-        // This shader blends between two textures based on a per-vertex
-        // attribute.  This is used for displaced terrain surfaces in HL2 maps.
-        stateSet = createBlendShader(texture.get(), texture2.get());
+        // Make sure we have both textures
+        if (texture.valid() && texture2.valid())
+        {
+            // Create a StateSet for the following state
+            stateSet = new osg::StateSet();
 
-        // Add a material to the state set
-        material = new Material();
-        material->setAmbient(Material::FRONT_AND_BACK,
-                             Vec4(1.0, 1.0, 1.0, 1.0) );
-        material->setDiffuse(Material::FRONT_AND_BACK,
-                             Vec4(1.0, 1.0, 1.0, 1.0) );
-        material->setSpecular(Material::FRONT_AND_BACK,
+            // Attach the two textures
+            stateSet->setTextureAttributeAndModes(0, texture.get(),
+                                                  osg::StateAttribute::ON);
+            stateSet->setTextureAttributeAndModes(1, texture2.get(),
+                                                  osg::StateAttribute::ON);
+
+            // On the first texture unit, set up a combiner operation to
+            // interpolate between the textures on units 0 and 1, using
+            // the fragment's primary alpha color as the interpolation
+            // parameter (NOTE: we need ARB_texture_env_crossbar for this)
+            combiner0 = new osg::TexEnvCombine();
+            combiner0->setConstantColor(osg::Vec4f(1.0, 1.0, 1.0, 1.0));
+
+            combiner0->setCombine_RGB(osg::TexEnvCombine::INTERPOLATE);
+            combiner0->setSource0_RGB(osg::TexEnvCombine::TEXTURE0);
+            combiner0->setOperand0_RGB(osg::TexEnvCombine::SRC_COLOR);
+            combiner0->setSource1_RGB(osg::TexEnvCombine::TEXTURE1);
+            combiner0->setOperand1_RGB(osg::TexEnvCombine::SRC_COLOR);
+            combiner0->setSource2_RGB(osg::TexEnvCombine::PRIMARY_COLOR);
+            combiner0->setOperand2_RGB(osg::TexEnvCombine::SRC_ALPHA);
+
+            combiner0->setCombine_Alpha(osg::TexEnvCombine::REPLACE);
+            combiner0->setSource0_Alpha(osg::TexEnvCombine::CONSTANT);
+            combiner0->setOperand0_Alpha(osg::TexEnvCombine::SRC_ALPHA);
+
+            combiner0->setScale_RGB(1.0);
+            combiner0->setScale_Alpha(1.0);
+
+            stateSet->setTextureAttributeAndModes(0, combiner0.get(),
+                                                  osg::StateAttribute::ON);
+
+            // On the second texture unit, do a typical modulate operation
+            // between the interpolated texture color from the previous
+            // unit and the fragment's primary (lit) RGB color.  Force the
+            // alpha to be 1.0, since this HL2 shader is never transparent
+            combiner1 = new osg::TexEnvCombine();
+            combiner1->setConstantColor(osg::Vec4f(1.0, 1.0, 1.0, 1.0));
+
+            combiner1->setCombine_RGB(osg::TexEnvCombine::MODULATE);
+            combiner1->setSource0_RGB(osg::TexEnvCombine::PREVIOUS);
+            combiner1->setOperand0_RGB(osg::TexEnvCombine::SRC_COLOR);
+            combiner1->setSource1_RGB(osg::TexEnvCombine::PRIMARY_COLOR);
+            combiner1->setOperand1_RGB(osg::TexEnvCombine::SRC_COLOR);
+
+            combiner1->setCombine_Alpha(osg::TexEnvCombine::REPLACE);
+            combiner1->setSource0_Alpha(osg::TexEnvCombine::CONSTANT);
+            combiner1->setOperand0_Alpha(osg::TexEnvCombine::SRC_ALPHA);
+
+            combiner1->setScale_RGB(1.0);
+            combiner1->setScale_Alpha(1.0);
+
+            stateSet->setTextureAttributeAndModes(1, combiner1.get(),
+                                                  osg::StateAttribute::ON);
+
+            // Add a material to the state set
+            material = new Material();
+            material->setAmbient(Material::FRONT_AND_BACK,
+                                 Vec4(1.0, 1.0, 1.0, 1.0) );
+            material->setDiffuse(Material::FRONT_AND_BACK,
+                                 Vec4(1.0, 1.0, 1.0, 1.0) );
+            material->setSpecular(Material::FRONT_AND_BACK,
+                                  Vec4(0.0, 0.0, 0.0, 1.0) );
+            material->setShininess(Material::FRONT_AND_BACK, 1.0);
+            material->setEmission(Material::FRONT_AND_BACK,
                               Vec4(0.0, 0.0, 0.0, 1.0) );
-        material->setShininess(Material::FRONT_AND_BACK, 1.0);
-        material->setEmission(Material::FRONT_AND_BACK,
-                              Vec4(0.0, 0.0, 0.0, 1.0) );
-        material->setAlpha(Material::FRONT_AND_BACK, alpha);
-        stateSet->setAttributeAndModes(material.get(), StateAttribute::ON);
+            material->setColorMode(osg::Material::AMBIENT_AND_DIFFUSE);
+            stateSet->setAttributeAndModes(material.get(), StateAttribute::ON);
+        }
     }
     else if (equalCaseInsensitive(shaderName, "UnlitGeneric"))
     {
@@ -917,6 +884,9 @@ ref_ptr<StateSet> VBSPReader::readMaterialFile(std::string materialName)
         if (texture != NULL)
         {
             stateSet->setTextureAttributeAndModes(0, texture.get(),
+                                                  StateAttribute::ON);
+            stateSet->setTextureAttributeAndModes(0,
+                                                  new TexEnv(TexEnv::MODULATE),
                                                   StateAttribute::ON);
 
             // See if the material is translucent
@@ -934,8 +904,8 @@ ref_ptr<StateSet> VBSPReader::readMaterialFile(std::string materialName)
         }
         else
         {
-            notify(WARN) << "No base texture for material " << materialName;
-            notify(WARN) << std::endl;
+            OSG_WARN << "No base texture for material " << materialName;
+            OSG_WARN << std::endl;
             stateSet->setTextureMode(0, GL_TEXTURE_2D, StateAttribute::OFF);
         }
     }
@@ -966,6 +936,9 @@ ref_ptr<StateSet> VBSPReader::readMaterialFile(std::string materialName)
         {
             stateSet->setTextureAttributeAndModes(0, texture.get(),
                                                   StateAttribute::ON);
+            stateSet->setTextureAttributeAndModes(0,
+                                                  new TexEnv(TexEnv::MODULATE),
+                                                  StateAttribute::ON);
 
             // See if the material is translucent
             if (translucent)
@@ -982,8 +955,8 @@ ref_ptr<StateSet> VBSPReader::readMaterialFile(std::string materialName)
         }
         else
         {
-            notify(WARN) << "No base texture for material " << materialName;
-            notify(WARN) << std::endl;
+            OSG_WARN << "No base texture for material " << materialName;
+            OSG_WARN << std::endl;
             stateSet->setTextureMode(0, GL_TEXTURE_2D, StateAttribute::OFF);
         }
     }
@@ -1136,8 +1109,8 @@ void VBSPReader::createScene()
         }
         else
         {
-            notify(WARN) << "Couldn't find static prop \"" << propModel;
-            notify(WARN) << "\"." << std::endl;
+            OSG_WARN << "Couldn't find static prop \"" << propModel;
+            OSG_WARN << "\"." << std::endl;
 
             // Couldn't find the prop, so get rid of the transform node
             propXform = NULL;

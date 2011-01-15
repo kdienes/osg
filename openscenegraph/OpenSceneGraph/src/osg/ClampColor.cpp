@@ -48,7 +48,7 @@ void ClampColor::apply(State& state) const
                                         
     if (!extensions->isClampColorSupported())
     {
-        notify(WARN)<<"Warning: ClampColor::apply(..) failed, ClampColor is not support by OpenGL driver."<<std::endl;
+        OSG_WARN<<"Warning: ClampColor::apply(..) failed, ClampColor is not support by OpenGL driver."<<std::endl;
         return;
     }
 
@@ -93,7 +93,8 @@ void ClampColor::Extensions::lowestCommonDenominator(const Extensions& rhs)
 
 void ClampColor::Extensions::setupGLExtensions(unsigned int contextID)
 {
-    _isClampColorSupported = isGLExtensionSupported(contextID,"GL_ARB_color_buffer_float") ||
+    _isClampColorSupported = OSG_GL3_FEATURES ||
+                             isGLExtensionSupported(contextID,"GL_ARB_color_buffer_float") ||
                              strncmp((const char*)glGetString(GL_VERSION),"2.0",3)>=0;
 
     setGLExtensionFuncPtr(_glClampColor, "glClampColor", "glClampColorARB");
@@ -107,7 +108,7 @@ void ClampColor::Extensions::glClampColor(GLenum target, GLenum mode) const
     }
     else
     {
-        notify(WARN)<<"Error: glClampColor not supported by OpenGL driver"<<std::endl;
+        OSG_WARN<<"Error: glClampColor not supported by OpenGL driver"<<std::endl;
     }
 }
 

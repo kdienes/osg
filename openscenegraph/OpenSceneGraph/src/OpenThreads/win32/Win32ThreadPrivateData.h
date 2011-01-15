@@ -17,12 +17,6 @@
 #ifndef _Win32PRIVATEDATA_H_
 #define _Win32PRIVATEDATA_H_
 
-#ifndef _WINDOWS_
-#define WIN32_LEAN_AND_MEAN
-#define _WIN32_WINNT 0x0400
-#include <windows.h>
-#endif
-
 #include <OpenThreads/Thread>
 #include <OpenThreads/Block>
 #include "HandleHolder.h"
@@ -71,18 +65,21 @@ public:
     struct TlsHolder{ // thread local storage slot
         DWORD getId()
         {
-            static bool initialized = false;
             if (!initialized) {
                 ID = TlsAlloc();
                 initialized = true;
             }
             return ID;
         }
+        TlsHolder() : ID(TLS_OUT_OF_INDEXES), initialized(false) {}
         ~TlsHolder(){
-            TlsFree(ID);
+            if (initialized)
+                TlsFree(ID);
+            ID = TLS_OUT_OF_INDEXES;
         }
     private:
         DWORD ID;
+        bool initialized;
     };
 
     static TlsHolder TLS;

@@ -176,16 +176,23 @@ class ReaderWriterJP2 : public osgDB::ReaderWriter
         {
             supportsExtension("jp2","Jpeg2000 image format");
             supportsExtension("jpc","Jpeg2000 image format");
-        
+
             // little dance here to get around warnings created by jas_image_strtofmt use of char* rather than const char*
             // as a parameted and modern compilers deprecating "jp2" string being treated as char*.
+            jas_init();//jas_image_strtofmt() bound to return -1 if jas_init has not been called.
             char* jp2 = strdup("jp2");
             _fmt_jp2 = jas_image_strtofmt(jp2);
             free(jp2);
+            jas_image_clearfmts();
+        }
+
+        ~ReaderWriterJP2()
+        {
+            jas_cleanup();
         }
 
         virtual const char* className() const { return "RGB Image Reader/Writer"; }
-        
+
         virtual ReadResult readObject(const std::string& file, const osgDB::ReaderWriter::Options* options) const
         {
             return readImage(file,options);
@@ -259,7 +266,7 @@ class ReaderWriterJP2 : public osgDB::ReaderWriter
 //                osg::Image::USE_NEW_DELETE);
                 osg::Image::NO_DELETE);
 
-            notify(INFO) << "image read ok "<<s<<"  "<<t<< std::endl;
+            OSG_INFO << "image read ok "<<s<<"  "<<t<< std::endl;
             return image;
 
         }
@@ -329,7 +336,7 @@ class ReaderWriterJP2 : public osgDB::ReaderWriter
 //                osg::Image::USE_NEW_DELETE);
                 osg::Image::NO_DELETE);
 
-            notify(INFO) << "image read ok "<<s<<"  "<<t<< std::endl;
+            OSG_INFO << "image read ok "<<s<<"  "<<t<< std::endl;
             return image;
         }
 

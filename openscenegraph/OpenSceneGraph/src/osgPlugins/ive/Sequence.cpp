@@ -30,7 +30,7 @@ void Sequence::write(DataOutputStream* out)
     }
     else
     {
-        throw Exception("Sequence::write(): Could not cast this osg::Sequence to an osg::Group.");
+        out_THROW_EXCEPTION("Sequence::write(): Could not cast this osg::Sequence to an osg::Group.");
     }
 
     // Write Sequence's properties.
@@ -76,14 +76,10 @@ void Sequence::write(DataOutputStream* out)
     if (out->getVersion() >= VERSION_0022)
     {
         // Write sync as an integer
-        bool sync ;
-        getSync(sync) ;
-        out->writeInt((int)sync) ;
+        out->writeInt((int)getSync()) ;
 
         // Write clearOnStop as an integer
-        bool clearOnStop ;
-        getClearOnStop(clearOnStop) ;
-        out->writeInt((int)clearOnStop) ;
+        out->writeInt((int)getClearOnStop()) ;
     }
 
 }
@@ -104,7 +100,7 @@ void Sequence::read(DataInputStream* in)
         }
         else
         {
-            throw Exception("Sequence::read(): Could not cast this osg::Sequence to an osg::Group.");
+            in_THROW_EXCEPTION("Sequence::read(): Could not cast this osg::Sequence to an osg::Group.");
         }
 
         // Read Sequence's properties
@@ -153,6 +149,6 @@ void Sequence::read(DataInputStream* in)
     }
     else
     {
-        throw Exception("Sequence::read(): Expected Sequence identification.");
+        in_THROW_EXCEPTION("Sequence::read(): Expected Sequence identification.");
     }
 }

@@ -23,10 +23,10 @@
 using namespace osg;
 using namespace std;
 
-DisplaySettings* DisplaySettings::instance()
+ref_ptr<DisplaySettings>& DisplaySettings::instance()
 {
     static ref_ptr<DisplaySettings> s_displaySettings = new DisplaySettings;
-    return s_displaySettings.get();
+    return s_displaySettings;
 }
 
 DisplaySettings::DisplaySettings(const DisplaySettings& vs):Referenced(true)
@@ -80,6 +80,17 @@ void DisplaySettings::setDisplaySettings(const DisplaySettings& vs)
     _numHttpDatabaseThreadsHint = vs._numHttpDatabaseThreadsHint;
     
     _application = vs._application;
+
+    _maxTexturePoolSize = vs._maxTexturePoolSize;
+    _maxBufferObjectPoolSize = vs._maxBufferObjectPoolSize;
+
+    _implicitBufferAttachmentRenderMask = vs._implicitBufferAttachmentRenderMask;
+    _implicitBufferAttachmentResolveMask = vs._implicitBufferAttachmentResolveMask;
+
+    _glContextVersion = vs._glContextVersion;
+    _glContextFlags = vs._glContextFlags;
+    _glContextProfileMask = vs._glContextProfileMask;
+    _swapMethod = vs._swapMethod;
 }
 
 void DisplaySettings::merge(const DisplaySettings& vs)
@@ -103,6 +114,17 @@ void DisplaySettings::merge(const DisplaySettings& vs)
     if (vs._numHttpDatabaseThreadsHint>_numHttpDatabaseThreadsHint) _numHttpDatabaseThreadsHint = vs._numHttpDatabaseThreadsHint;
 
     if (_application.empty()) _application = vs._application;
+
+    if (vs._maxTexturePoolSize>_maxTexturePoolSize) _maxTexturePoolSize = vs._maxTexturePoolSize;
+    if (vs._maxBufferObjectPoolSize>_maxBufferObjectPoolSize) _maxBufferObjectPoolSize = vs._maxBufferObjectPoolSize;
+
+    // these are bit masks so merging them is like logical or 
+    _implicitBufferAttachmentRenderMask |= vs._implicitBufferAttachmentRenderMask;
+    _implicitBufferAttachmentResolveMask |= vs._implicitBufferAttachmentResolveMask;
+
+    // merge swap method to higher value
+    if( vs._swapMethod > _swapMethod )
+        _swapMethod = vs._swapMethod;
 }
 
 void DisplaySettings::setDefaults()
@@ -147,6 +169,17 @@ void DisplaySettings::setDefaults()
 
     _numDatabaseThreadsHint = 2;
     _numHttpDatabaseThreadsHint = 1;
+
+    _maxTexturePoolSize = 0;
+    _maxBufferObjectPoolSize = 0;
+
+    _implicitBufferAttachmentRenderMask = DEFAULT_IMPLICIT_BUFFER_ATTACHMENT;
+    _implicitBufferAttachmentResolveMask = DEFAULT_IMPLICIT_BUFFER_ATTACHMENT;
+    _glContextVersion = "1.0";
+    _glContextFlags = 0;
+    _glContextProfileMask = 0;
+
+    _swapMethod = SWAP_DEFAULT;
 }
 
 void DisplaySettings::setMaxNumberOfGraphicsContexts(unsigned int num)
@@ -156,7 +189,7 @@ void DisplaySettings::setMaxNumberOfGraphicsContexts(unsigned int num)
 
 unsigned int DisplaySettings::getMaxNumberOfGraphicsContexts() const
 {
-    // osg::notify(osg::NOTICE)<<"getMaxNumberOfGraphicsContexts()="<<_maxNumOfGraphicsContexts<<std::endl;
+    // OSG_NOTICE<<"getMaxNumberOfGraphicsContexts()="<<_maxNumOfGraphicsContexts<<std::endl;
     return _maxNumOfGraphicsContexts;
 }
 
@@ -168,23 +201,84 @@ void DisplaySettings::setMinimumNumAccumBits(unsigned int red, unsigned int gree
     _minimumNumberAccumAlphaBits = alpha;
 }
 
-static ApplicationUsageProxy DisplaySetting_e0(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_DISPLAY_TYPE <type>","MONITOR | POWERWALL | REALITY_CENTER | HEAD_MOUNTED_DISPLAY");
-static ApplicationUsageProxy DisplaySetting_e1(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_STEREO_MODE <mode>","QUAD_BUFFER | ANAGLYPHIC | HORIZONTAL_SPLIT | VERTICAL_SPLIT | LEFT_EYE | RIGHT_EYE | VERTICAL_INTERLACE | HORIZONTAL_INTERLACE");
-static ApplicationUsageProxy DisplaySetting_e2(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_STEREO <mode>","OFF | ON");
-static ApplicationUsageProxy DisplaySetting_e3(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_EYE_SEPARATION <float>","physical distance between eyes");
-static ApplicationUsageProxy DisplaySetting_e4(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_SCREEN_DISTANCE <float>","physical distance between eyes and screen");
-static ApplicationUsageProxy DisplaySetting_e5(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_SCREEN_HEIGHT <float>","physical screen height");
-static ApplicationUsageProxy DisplaySetting_e6(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_SCREEN_WIDTH <float>","physical screen width");
-static ApplicationUsageProxy DisplaySetting_e7(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_SPLIT_STEREO_HORIZONTAL_EYE_MAPPING <mode>","LEFT_EYE_LEFT_VIEWPORT | LEFT_EYE_RIGHT_VIEWPORT");
-static ApplicationUsageProxy DisplaySetting_e8(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_SPLIT_STEREO_HORIZONTAL_SEPARATION <float>","number of pixels between viewports");
-static ApplicationUsageProxy DisplaySetting_e9(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_SPLIT_STEREO_VERTICAL_EYE_MAPPING <mode>","LEFT_EYE_TOP_VIEWPORT | LEFT_EYE_BOTTOM_VIEWPORT");
-static ApplicationUsageProxy DisplaySetting_e10(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_SPLIT_STEREO_AUTO_ADJUST_ASPECT_RATIO <mode>","OFF | ON  Default to ON to compenstate for the compression of the aspect ratio when viewing in split screen stereo.  Note, if you are setting fovx and fovy explicityly OFF should be used.");
-static ApplicationUsageProxy DisplaySetting_e11(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_SPLIT_STEREO_VERTICAL_SEPARATION <float>","number of pixels between viewports");
-static ApplicationUsageProxy DisplaySetting_e12(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_MAX_NUMBER_OF_GRAPHICS_CONTEXTS <int>","maximum number of graphics contexts to be used with applications.");
-static ApplicationUsageProxy DisplaySetting_e13(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_COMPIlE_CONTEXTS <mode>","OFF | ON Enable/disable the use a backgrouind compile contexts and threads.");
-static ApplicationUsageProxy DisplaySetting_e14(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_SERIALIZE_DRAW_DISPATCH <mode>","OFF | ON Enable/disable the use a muetx to serialize the draw dispatch when there are multiple graphics threads.");
-static ApplicationUsageProxy DisplaySetting_e15(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_NUM_DATABASE_THREADS <int>","Set the hint for the total number of threads to set up in the DatabasePager.");
-static ApplicationUsageProxy DisplaySetting_e16(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_NUM_HTTP_DATABASE_THREADS <int>","Set the hint for the total number of threads dedicated to http requests to set up in the DatabasePager.");
+static ApplicationUsageProxy DisplaySetting_e0(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_DISPLAY_TYPE <type>",
+        "MONITOR | POWERWALL | REALITY_CENTER | HEAD_MOUNTED_DISPLAY");
+static ApplicationUsageProxy DisplaySetting_e1(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_STEREO_MODE <mode>",
+        "QUAD_BUFFER | ANAGLYPHIC | HORIZONTAL_SPLIT | VERTICAL_SPLIT | LEFT_EYE | RIGHT_EYE | VERTICAL_INTERLACE | HORIZONTAL_INTERLACE");
+static ApplicationUsageProxy DisplaySetting_e2(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_STEREO <mode>",
+        "OFF | ON");
+static ApplicationUsageProxy DisplaySetting_e3(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_EYE_SEPARATION <float>",
+        "Physical distance between eyes.");
+static ApplicationUsageProxy DisplaySetting_e4(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_SCREEN_DISTANCE <float>",
+        "Physical distance between eyes and screen.");
+static ApplicationUsageProxy DisplaySetting_e5(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_SCREEN_HEIGHT <float>",
+        "Physical screen height.");
+static ApplicationUsageProxy DisplaySetting_e6(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_SCREEN_WIDTH <float>",
+        "Physical screen width.");
+static ApplicationUsageProxy DisplaySetting_e7(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_SPLIT_STEREO_HORIZONTAL_EYE_MAPPING <mode>",
+        "LEFT_EYE_LEFT_VIEWPORT | LEFT_EYE_RIGHT_VIEWPORT");
+static ApplicationUsageProxy DisplaySetting_e8(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_SPLIT_STEREO_HORIZONTAL_SEPARATION <float>",
+        "Number of pixels between viewports.");
+static ApplicationUsageProxy DisplaySetting_e9(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_SPLIT_STEREO_VERTICAL_EYE_MAPPING <mode>",
+        "LEFT_EYE_TOP_VIEWPORT | LEFT_EYE_BOTTOM_VIEWPORT");
+static ApplicationUsageProxy DisplaySetting_e10(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_SPLIT_STEREO_AUTO_ADJUST_ASPECT_RATIO <mode>",
+        "OFF | ON  Default to ON to compenstate for the compression of the aspect ratio when viewing in split screen stereo.  Note, if you are setting fovx and fovy explicityly OFF should be used.");
+static ApplicationUsageProxy DisplaySetting_e11(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_SPLIT_STEREO_VERTICAL_SEPARATION <float>",
+        "Number of pixels between viewports.");
+static ApplicationUsageProxy DisplaySetting_e12(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_MAX_NUMBER_OF_GRAPHICS_CONTEXTS <int>",
+        "Maximum number of graphics contexts to be used with applications.");
+static ApplicationUsageProxy DisplaySetting_e13(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_COMPILE_CONTEXTS <mode>",
+        "OFF | ON Disable/enable the use of background compiled contexts and threads.");
+static ApplicationUsageProxy DisplaySetting_e14(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_SERIALIZE_DRAW_DISPATCH <mode>",
+        "OFF | ON Disable/enable the use of a mutex to serialize the draw dispatch when there are multiple graphics threads.");
+static ApplicationUsageProxy DisplaySetting_e15(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_NUM_DATABASE_THREADS <int>",
+        "Set the hint for the total number of threads to set up in the DatabasePager.");
+static ApplicationUsageProxy DisplaySetting_e16(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_NUM_HTTP_DATABASE_THREADS <int>",
+        "Set the hint for the total number of threads dedicated to http requests to set up in the DatabasePager.");
+static ApplicationUsageProxy DisplaySetting_e17(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_MULTI_SAMPLES <int>",
+        "Set the hint for the number of samples to use when multi-sampling.");
+static ApplicationUsageProxy DisplaySetting_e18(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_TEXTURE_POOL_SIZE <int>",
+        "Set the hint for the size of the texture pool to manage.");
+static ApplicationUsageProxy DisplaySetting_e19(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_BUFFER_OBJECT_POOL_SIZE <int>",
+        "Set the hint for the size of the vertex buffer object pool to manage.");
+static ApplicationUsageProxy DisplaySetting_e20(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_FBO_POOL_SIZE <int>",
+        "Set the hint for the size of the frame buffer object pool to manage.");
+static ApplicationUsageProxy DisplaySetting_e21(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_IMPLICIT_BUFFER_ATTACHMENT_RENDER_MASK",
+        "OFF | DEFAULT | [~]COLOR | [~]DEPTH | [~]STENCIL. Substitute missing buffer attachments for render FBO.");
+static ApplicationUsageProxy DisplaySetting_e22(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_IMPLICIT_BUFFER_ATTACHMENT_RESOLVE_MASK",
+        "OFF | DEFAULT | [~]COLOR | [~]DEPTH | [~]STENCIL. Substitute missing buffer attachments for resolve FBO.");
+static ApplicationUsageProxy DisplaySetting_e23(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_GL_CONTEXT_VERSION <major.minor>",
+        "Set the hint for the GL version to create contexts for.");
+static ApplicationUsageProxy DisplaySetting_e24(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_GL_CONTEXT_FLAGS <uint>",
+        "Set the hint for the GL context flags to use when creating contexts.");
+static ApplicationUsageProxy DisplaySetting_e25(ApplicationUsage::ENVIRONMENTAL_VARIABLE,
+        "OSG_GL_CONTEXT_PROFILE_MASK <uint>",
+        "Set the hint for the GL context profile mask to use when creating contexts.");
 
 void DisplaySettings::readEnvironmentalVariables()
 {
@@ -376,6 +470,94 @@ void DisplaySettings::readEnvironmentalVariables()
     {
         _numHttpDatabaseThreadsHint = atoi(ptr);
     }
+
+    if( (ptr = getenv("OSG_MULTI_SAMPLES")) != 0)
+    {
+        _numMultiSamples = atoi(ptr);
+    }
+
+    if( (ptr = getenv("OSG_TEXTURE_POOL_SIZE")) != 0)
+    {
+        _maxTexturePoolSize = atoi(ptr);
+    }
+
+    if( (ptr = getenv("OSG_BUFFER_OBJECT_POOL_SIZE")) != 0)
+    {
+        _maxBufferObjectPoolSize = atoi(ptr);
+    }
+
+
+    {  // Read implicit buffer attachments combinations for both render and resolve mask
+        const char * variable[] = {
+            "OSG_IMPLICIT_BUFFER_ATTACHMENT_RENDER_MASK",
+            "OSG_IMPLICIT_BUFFER_ATTACHMENT_RESOLVE_MASK",
+        };
+
+        int * mask[] = {
+            &_implicitBufferAttachmentRenderMask,
+            &_implicitBufferAttachmentResolveMask,
+        };
+
+        for( unsigned int n = 0; n < sizeof( variable ) / sizeof( variable[0] ); n++ )
+        {
+            const char* env = getenv( variable[n] );
+            if ( !env ) continue;
+            std::string str(env);
+
+            if(str.find("OFF")!=std::string::npos) *mask[n] = 0;
+
+            if(str.find("~DEFAULT")!=std::string::npos) *mask[n] ^= DEFAULT_IMPLICIT_BUFFER_ATTACHMENT;
+            else if(str.find("DEFAULT")!=std::string::npos) *mask[n] |= DEFAULT_IMPLICIT_BUFFER_ATTACHMENT;
+
+            if(str.find("~COLOR")!=std::string::npos) *mask[n] ^= IMPLICIT_COLOR_BUFFER_ATTACHMENT;
+            else if(str.find("COLOR")!=std::string::npos) *mask[n] |= IMPLICIT_COLOR_BUFFER_ATTACHMENT;
+
+            if(str.find("~DEPTH")!=std::string::npos) *mask[n] ^= IMPLICIT_DEPTH_BUFFER_ATTACHMENT;
+            else if(str.find("DEPTH")!=std::string::npos) *mask[n] |= (int)IMPLICIT_DEPTH_BUFFER_ATTACHMENT;
+
+            if(str.find("~STENCIL")!=std::string::npos) *mask[n] ^= (int)IMPLICIT_STENCIL_BUFFER_ATTACHMENT;
+            else if(str.find("STENCIL")!=std::string::npos) *mask[n] |= (int)IMPLICIT_STENCIL_BUFFER_ATTACHMENT;
+        }
+    }
+
+    if( (ptr = getenv("OSG_GL_VERSION")) != 0 || (ptr = getenv("OSG_GL_CONTEXT_VERSION")) != 0)
+    {
+        _glContextVersion = ptr;
+    }
+
+    if( (ptr = getenv("OSG_GL_CONTEXT_FLAGS")) != 0)
+    {
+        _glContextFlags = atoi(ptr);
+    }
+
+    if( (ptr = getenv("OSG_GL_CONTEXT_PROFILE_MASK")) != 0)
+    {
+        _glContextProfileMask = atoi(ptr);
+    }
+
+    if ((ptr = getenv("OSG_SWAP_METHOD")) != 0)
+    {
+        if (strcmp(ptr,"DEFAULT")==0)
+        {
+            _swapMethod = SWAP_DEFAULT;
+        }
+        else
+        if (strcmp(ptr,"EXCHANGE")==0)
+        {
+            _swapMethod = SWAP_EXCHANGE;
+        }
+        else
+        if (strcmp(ptr,"COPY")==0)
+        {
+            _swapMethod = SWAP_COPY;
+        }
+        else
+        if (strcmp(ptr,"UNDEFINED")==0)
+        {
+            _swapMethod = SWAP_UNDEFINED;
+        }
+
+    }
 }
 
 void DisplaySettings::readCommandLine(ArgumentParser& arguments)
@@ -395,6 +577,11 @@ void DisplaySettings::readCommandLine(ArgumentParser& arguments)
         arguments.getApplicationUsage()->addCommandLineOption("--samples <num>","Request a multisample visual");
         arguments.getApplicationUsage()->addCommandLineOption("--cc","Request use of compile contexts and threads");
         arguments.getApplicationUsage()->addCommandLineOption("--serialize-draw <mode>","OFF | ON - set the serialization of draw dispatch");
+        arguments.getApplicationUsage()->addCommandLineOption("--implicit-buffer-attachment-render-mask","OFF | DEFAULT | [~]COLOR | [~]DEPTH | [~]STENCIL. Substitute missing buffer attachments for render FBO");
+        arguments.getApplicationUsage()->addCommandLineOption("--implicit-buffer-attachment-resolve-mask","OFF | DEFAULT | [~]COLOR | [~]DEPTH | [~]STENCIL. Substitute missing buffer attachments for resolve FBO");
+        arguments.getApplicationUsage()->addCommandLineOption("--gl-version <major.minor>","Set the hint of which GL version to use when creating graphics contexts.");
+        arguments.getApplicationUsage()->addCommandLineOption("--gl-flags <mask>","Set the hint of which GL flags projfile mask to use when creating graphics contexts.");
+        arguments.getApplicationUsage()->addCommandLineOption("--gl-profile-mask <mask>","Set the hint of which GL context profile mask to use when creating graphics contexts.");
     }
 
     std::string str;
@@ -462,4 +649,53 @@ void DisplaySettings::readCommandLine(ArgumentParser& arguments)
 
     while(arguments.read("--num-db-threads",_numDatabaseThreadsHint)) {}
     while(arguments.read("--num-http-threads",_numHttpDatabaseThreadsHint)) {}
+
+    while(arguments.read("--texture-pool-size",_maxTexturePoolSize)) {}
+    while(arguments.read("--buffer-object-pool-size",_maxBufferObjectPoolSize)) {}
+
+    {  // Read implicit buffer attachments combinations for both render and resolve mask
+        const char* option[] = {
+            "--implicit-buffer-attachment-render-mask",
+            "--implicit-buffer-attachment-resolve-mask",
+        };
+
+        int * mask[] = { 
+            &_implicitBufferAttachmentRenderMask,
+            &_implicitBufferAttachmentResolveMask,
+        };
+
+        for( unsigned int n = 0; n < sizeof( option ) / sizeof( option[0]); n++ )
+        {
+            while(arguments.read( option[n],str))
+            {
+                if(str.find("OFF")!=std::string::npos) *mask[n] = 0;
+
+                if(str.find("~DEFAULT")!=std::string::npos) *mask[n] ^= DEFAULT_IMPLICIT_BUFFER_ATTACHMENT;
+                else if(str.find("DEFAULT")!=std::string::npos) *mask[n] |= DEFAULT_IMPLICIT_BUFFER_ATTACHMENT;
+
+                if(str.find("~COLOR")!=std::string::npos) *mask[n] ^= IMPLICIT_COLOR_BUFFER_ATTACHMENT;
+                else if(str.find("COLOR")!=std::string::npos) *mask[n] |= IMPLICIT_COLOR_BUFFER_ATTACHMENT;
+
+                if(str.find("~DEPTH")!=std::string::npos) *mask[n] ^= IMPLICIT_DEPTH_BUFFER_ATTACHMENT;
+                else if(str.find("DEPTH")!=std::string::npos) *mask[n] |= IMPLICIT_DEPTH_BUFFER_ATTACHMENT;
+
+                if(str.find("~STENCIL")!=std::string::npos) *mask[n] ^= IMPLICIT_STENCIL_BUFFER_ATTACHMENT;
+                else if(str.find("STENCIL")!=std::string::npos) *mask[n] |= IMPLICIT_STENCIL_BUFFER_ATTACHMENT;
+            }
+        }
+    }
+
+    while (arguments.read("--gl-version", _glContextVersion)) {}
+    while (arguments.read("--gl-flags", _glContextFlags)) {}
+    while (arguments.read("--gl-profile-mask", _glContextProfileMask)) {}
+
+    while(arguments.read("--swap-method",str))
+    {
+        if (str=="DEFAULT") _swapMethod = SWAP_DEFAULT;
+        else if (str=="EXCHANGE") _swapMethod = SWAP_EXCHANGE;
+        else if (str=="COPY") _swapMethod = SWAP_COPY;
+        else if (str=="UNDEFINED") _swapMethod = SWAP_UNDEFINED;
+    }
+
+
 }

@@ -28,7 +28,6 @@ osgParticle::Particle::Particle()
     _si(new LinearInterpolator), 
     _ai(new LinearInterpolator), 
     _ci(new LinearInterpolator),
-    _alive(true),
     _mustdie(false),
     _lifeTime(2),
     _radius(0.2f),
@@ -41,25 +40,28 @@ osgParticle::Particle::Particle()
     _angle(0, 0, 0),
     _angul_arvel(0, 0, 0),
     _t0(0),
-    _current_size(0),
-    _current_alpha(0),
+    _alive(1.0f),
+    _current_size(0.0f),
+    _current_alpha(0.0f),
     _s_tile(1.0f),
     _t_tile(1.0f),
-    _num_tile(1),
+    _start_tile(0),
+    _end_tile(0),
     _cur_tile(-1),
     _s_coord(0.0f),
     _t_coord(0.0f),
     _previousParticle(INVALID_INDEX),
-    _nextParticle(INVALID_INDEX)
+    _nextParticle(INVALID_INDEX),
+    _depth(0.0)
 {
 }
 
-bool osgParticle::Particle::update(double dt)
+bool osgParticle::Particle::update(double dt, bool onlyTimeStamp)
 {
     // this method should return false when the particle dies;
     // so, if we were instructed to die, do it now and return.
     if (_mustdie) {
-        _alive = false;
+        _alive = -1.0;
         return false;
     }
 
@@ -74,22 +76,8 @@ bool osgParticle::Particle::update(double dt)
 
     // if our age is over the lifetime limit, then die and return.
     if (x > 1) {
-        _alive = false;
+        _alive = -1.0;
         return false;
-    }
-
-    //Compute the current texture tile based on our normalized age
-    int currentTile = static_cast<int>(x * _num_tile);
-    
-    //If the current texture tile is different from previous, then compute new texture coords
-    if(currentTile != _cur_tile)
-    {
-    
-        _cur_tile = currentTile;
-        _s_coord = _s_tile * fmod(_cur_tile , 1.0 / _s_tile);
-        _t_coord = 1.0 - _t_tile * (static_cast<int>(_cur_tile * _t_tile) + 1);
-
-        // osg::notify(osg::NOTICE)<<this<<" setting tex coords "<<_s_coord<<" "<<_t_coord<<std::endl;
     }
     
     // compute the current values for size, alpha and color.
@@ -104,11 +92,29 @@ bool osgParticle::Particle::update(double dt)
        _current_alpha = _ai.get()->interpolate(x, _ar);
        _current_color = _ci.get()->interpolate(x, _cr);
     }
-
+    
     // update position
     _prev_pos = _position;
     _position += _velocity * dt;
+    
+    // return now if we indicate that only time stamp should be updated
+    // the shader will handle remain properties in this case
+    if (onlyTimeStamp) return true;
 
+    //Compute the current texture tile based on our normalized age
+    int currentTile = _start_tile + static_cast<int>(x * getNumTiles());
+    
+    //If the current texture tile is different from previous, then compute new texture coords
+    if(currentTile != _cur_tile)
+    {
+    
+        _cur_tile = currentTile;
+        _s_coord = _s_tile * fmod(_cur_tile , 1.0 / _s_tile);
+        _t_coord = 1.0 - _t_tile * (static_cast<int>(_cur_tile * _t_tile) + 1);
+
+        // OSG_NOTICE<<this<<" setting tex coords "<<_s_coord<<" "<<_t_coord<<std::endl;
+    }
+    
     // update angle
     _prev_angle = _angle;
     _angle += _angul_arvel * dt;
@@ -123,11 +129,11 @@ bool osgParticle::Particle::update(double dt)
     return true;
 }
 
-void osgParticle::Particle::render(const osg::Vec3& xpos, const osg::Vec3& px, const osg::Vec3& py, float scale) const
+void osgParticle::Particle::render(osg::GLBeginEndAdapter* gl, const osg::Vec3& xpos, const osg::Vec3& px, const osg::Vec3& py, float scale) const
 {
-    glColor4f(  _current_color.x(), 
-                _current_color.y(), 
-                _current_color.z(), 
+    gl->Color4f( _current_color.x(),
+                _current_color.y(),
+                _current_color.z(),
                 _current_color.w() * _current_alpha);
 
     osg::Vec3 p1(px * _current_size * scale);
@@ -135,87 +141,118 @@ void osgParticle::Particle::render(const osg::Vec3& xpos, const osg::Vec3& px, c
 
     switch (_shape)
     {
-    case POINT:        
-        glVertex3f(xpos.x(), xpos.y(), xpos.z()); 
+    case POINT:
+        gl->Vertex3f(xpos.x(), xpos.y(), xpos.z());
         break;
 
     case QUAD:
-        glTexCoord2f(_s_coord, _t_coord);
-        glVertex3fv((xpos-(p1+p2)).ptr());
-        glTexCoord2f(_s_coord+_s_tile, _t_coord);
-        glVertex3fv((xpos+(p1-p2)).ptr());
-        glTexCoord2f(_s_coord+_s_tile, _t_coord+_t_tile);
-        glVertex3fv((xpos+(p1+p2)).ptr());
-        glTexCoord2f(_s_coord, _t_coord+_t_tile);
-        glVertex3fv((xpos-(p1-p2)).ptr());
+        gl->TexCoord2f(_s_coord, _t_coord);
+        gl->Vertex3fv((xpos-(p1+p2)).ptr());
+        gl->TexCoord2f(_s_coord+_s_tile, _t_coord);
+        gl->Vertex3fv((xpos+(p1-p2)).ptr());
+        gl->TexCoord2f(_s_coord+_s_tile, _t_coord+_t_tile);
+        gl->Vertex3fv((xpos+(p1+p2)).ptr());
+        gl->TexCoord2f(_s_coord, _t_coord+_t_tile);
+        gl->Vertex3fv((xpos-(p1-p2)).ptr());
         break;
 
     case QUAD_TRIANGLESTRIP:
-        glPushMatrix();
-        glTranslatef(xpos.x(), xpos.y(), xpos.z());
-        // we must glBegin() and glEnd() here, because each particle is a single strip
-        glBegin(GL_TRIANGLE_STRIP);
-        glTexCoord2f(_s_coord+_s_tile, _t_coord+_t_tile);
-        glVertex3fv((p1+p2).ptr());      
-        glTexCoord2f(_s_coord, _t_coord+_t_tile);
-        glVertex3fv((-p1+p2).ptr());        
-        glTexCoord2f(_s_coord+_s_tile, _t_coord);
-        glVertex3fv((p1-p2).ptr());
-        glTexCoord2f(_s_coord, _t_coord);
-        glVertex3fv((-p1-p2).ptr());
-        glPopMatrix();
+        gl->PushMatrix();
+        gl->Translatef(xpos.x(), xpos.y(), xpos.z());
+        // we must gl.Begin() and gl.End() here, because each particle is a single strip
+        gl->Begin(GL_TRIANGLE_STRIP);
+        gl->TexCoord2f(_s_coord+_s_tile, _t_coord+_t_tile);
+        gl->Vertex3fv((p1+p2).ptr());
+        gl->TexCoord2f(_s_coord, _t_coord+_t_tile);
+        gl->Vertex3fv((-p1+p2).ptr());
+        gl->TexCoord2f(_s_coord+_s_tile, _t_coord);
+        gl->Vertex3fv((p1-p2).ptr());
+        gl->TexCoord2f(_s_coord, _t_coord);
+        gl->Vertex3fv((-p1-p2).ptr());
+        gl->End();
+        gl->PopMatrix();
         break;
 
     case HEXAGON:
-        glPushMatrix();
-        glTranslatef(xpos.x(), xpos.y(), xpos.z());
-        // we must glBegin() and glEnd() here, because each particle is a single fan
-        glBegin(GL_TRIANGLE_FAN);
-        glTexCoord2f(_s_coord + _s_tile * 0.5f, _t_coord + _t_tile * 0.5f);
-        glVertex3f(0,0,0);
-        glTexCoord2f(_s_coord + _s_tile * hex_texcoord_x1, _t_coord + _t_tile * hex_texcoord_y1);
-        glVertex3fv((p1*cosPI3+p2*sinPI3).ptr());
-        glTexCoord2f(_s_coord + _s_tile * hex_texcoord_x2, _t_coord + _t_tile * hex_texcoord_y1);
-        glVertex3fv((-p1*cosPI3+p2*sinPI3).ptr());
-        glTexCoord2f(_s_coord, _t_coord + _t_tile * 0.5f);
-        glVertex3fv((-p1).ptr());
-        glTexCoord2f(_s_coord + _s_tile * hex_texcoord_x2, _t_coord + _t_tile * hex_texcoord_y2);
-        glVertex3fv((-p1*cosPI3-p2*sinPI3).ptr());
-        glTexCoord2f(_s_coord + _s_tile * hex_texcoord_x1, _t_coord + _t_tile * hex_texcoord_y2);
-        glVertex3fv((p1*cosPI3-p2*sinPI3).ptr());
-        glTexCoord2f(_s_coord + _s_tile, _t_coord + _t_tile * 0.5f);
-        glVertex3fv((p1).ptr());
-        glTexCoord2f(_s_coord + _s_tile * hex_texcoord_x1, _t_coord + _t_tile * hex_texcoord_y1);
-        glVertex3fv((p1*cosPI3+p2*sinPI3).ptr());
-        glEnd();
+        gl->PushMatrix();
+        gl->Translatef(xpos.x(), xpos.y(), xpos.z());
+        // we must gl.Begin() and gl.End() here, because each particle is a single fan
+        gl->Begin(GL_TRIANGLE_FAN);
+        gl->TexCoord2f(_s_coord + _s_tile * 0.5f, _t_coord + _t_tile * 0.5f);
+        gl->Vertex3f(0,0,0);
+        gl->TexCoord2f(_s_coord + _s_tile * hex_texcoord_x1, _t_coord + _t_tile * hex_texcoord_y1);
+        gl->Vertex3fv((p1*cosPI3+p2*sinPI3).ptr());
+        gl->TexCoord2f(_s_coord + _s_tile * hex_texcoord_x2, _t_coord + _t_tile * hex_texcoord_y1);
+        gl->Vertex3fv((-p1*cosPI3+p2*sinPI3).ptr());
+        gl->TexCoord2f(_s_coord, _t_coord + _t_tile * 0.5f);
+        gl->Vertex3fv((-p1).ptr());
+        gl->TexCoord2f(_s_coord + _s_tile * hex_texcoord_x2, _t_coord + _t_tile * hex_texcoord_y2);
+        gl->Vertex3fv((-p1*cosPI3-p2*sinPI3).ptr());
+        gl->TexCoord2f(_s_coord + _s_tile * hex_texcoord_x1, _t_coord + _t_tile * hex_texcoord_y2);
+        gl->Vertex3fv((p1*cosPI3-p2*sinPI3).ptr());
+        gl->TexCoord2f(_s_coord + _s_tile, _t_coord + _t_tile * 0.5f);
+        gl->Vertex3fv((p1).ptr());
+        gl->TexCoord2f(_s_coord + _s_tile * hex_texcoord_x1, _t_coord + _t_tile * hex_texcoord_y1);
+        gl->Vertex3fv((p1*cosPI3+p2*sinPI3).ptr());
+        gl->End();
+        gl->PopMatrix();
         break;
 
     case LINE:
         {
-            // Get the normalized direction of the particle, to be used in the 
+            // Get the normalized direction of the particle, to be used in the
             // calculation of one of the linesegment endpoints.
             float vl = _velocity.length();
             if (vl != 0) {
                 osg::Vec3 v = _velocity * _current_size * scale / vl;
 
-                glTexCoord1f(0);
-                glVertex3f(xpos.x(), xpos.y(), xpos.z());
-                glTexCoord1f(1);
-                glVertex3f(xpos.x() + v.x(), xpos.y() + v.y(), xpos.z() + v.z());
+                gl->TexCoord1f(0);
+                gl->Vertex3f(xpos.x(), xpos.y(), xpos.z());
+                gl->TexCoord1f(1);
+                gl->Vertex3f(xpos.x() + v.x(), xpos.y() + v.y(), xpos.z() + v.z());
             }
         }
         break;
 
     default:
-        osg::notify(osg::WARN) << "Invalid shape for particles\n";
+        OSG_WARN << "Invalid shape for particles\n";
     }
+}
+
+void osgParticle::Particle::render(osg::RenderInfo& renderInfo, const osg::Vec3& xpos, const osg::Vec3& xrot) const
+{
+#if defined(OSG_GL_MATRICES_AVAILABLE)
+    if (_drawable.valid())
+    {
+        bool requiresRotation = (xrot.x()!=0.0f || xrot.y()!=0.0f || xrot.z()!=0.0f);
+        glColor4f(_current_color.x(),
+                  _current_color.y(),
+                  _current_color.z(),
+                  _current_color.w() * _current_alpha);
+        glPushMatrix();
+        glTranslatef(xpos.x(), xpos.y(), xpos.z());
+        if (requiresRotation)
+        {
+            osg::Quat rotation(xrot.x(), osg::X_AXIS, xrot.y(), osg::Y_AXIS, xrot.z(), osg::Z_AXIS);
+#if defined(OSG_GLES1_AVAILABLE)
+            glMultMatrixf(osg::Matrixf(rotation).ptr());
+#else
+            glMultMatrixd(osg::Matrixd(rotation).ptr());
+#endif
+        }
+        _drawable->draw(renderInfo);
+        glPopMatrix();
+    }
+#else
+    OSG_NOTICE<<"Warning: Particle::render(..) not supported for user-defined shape."<<std::endl;
+#endif
 }
 
 void osgParticle::Particle::setUpTexCoordsAsPartOfConnectedParticleSystem(ParticleSystem* ps)
 {
     if (getPreviousParticle()!=Particle::INVALID_INDEX)
     {
-        update(0.0);
+        update(0.0, false);
 
         Particle* previousParticle = ps->getParticle(getPreviousParticle());
         const osg::Vec3& previousPosition = previousParticle->getPosition();

@@ -29,7 +29,7 @@ void Uniform::write(DataOutputStream* out){
         ((ive::Object*)(obj))->write(out);
     }
     else
-        throw Exception("Uniform::write(): Could not cast this osg::Uniform to an osg::Object.");
+        out_THROW_EXCEPTION("Uniform::write(): Could not cast this osg::Uniform to an osg::Object.");
 
     out->writeInt(getType());
     
@@ -134,7 +134,7 @@ void Uniform::write(DataOutputStream* out){
             }
             default:
             {
-                osg::notify(osg::WARN)<<"Warning : uniform "<<getType()<<"type not supported for writing."<<std::endl;
+                OSG_WARN<<"Warning : uniform "<<getType()<<"type not supported for writing."<<std::endl;
                 break;
             }
         }
@@ -156,12 +156,12 @@ void Uniform::read(DataInputStream* in)
             ((ive::Object*)(obj))->read(in);
         }
         else
-            throw Exception("Uniform::read(): Could not cast this osg::Uniform to an osg::Object.");
+            in_THROW_EXCEPTION("Uniform::read(): Could not cast this osg::Uniform to an osg::Object.");
 
     }
     else
     {
-        throw Exception("Uniform::read(): Expected Uniform identification.");
+        in_THROW_EXCEPTION("Uniform::read(): Expected Uniform identification.");
     }
     
     setType(static_cast<Type>(in->readInt()));
@@ -253,7 +253,7 @@ void Uniform::read(DataInputStream* in)
             }
             default:
             {
-                osg::notify(osg::WARN)<<"Warning : uniform "<<getType()<<"type not supported for reading."<<std::endl;
+                OSG_WARN<<"Warning : uniform "<<getType()<<"type not supported for reading."<<std::endl;
                 break;
             }
         }

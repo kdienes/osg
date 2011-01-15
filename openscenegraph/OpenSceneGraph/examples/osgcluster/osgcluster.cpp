@@ -27,7 +27,9 @@
 #include <osgDB/ReadFile>
 
 #include <osgGA/TrackballManipulator>
+#include <osgGA/StateSetManipulator>
 #include <osgViewer/Viewer>
+#include <osgViewer/ViewerEventHandlers>
 
 #include <osg/Quat>
 #include <osg/io_utils>
@@ -406,6 +408,22 @@ void CameraPacket::readEventQueue(osgViewer::Viewer& viewer)
 {
     _events.clear();
 
+    osgViewer::ViewerBase::Contexts contexts;
+    viewer.getContexts(contexts);   
+
+    for(osgViewer::ViewerBase::Contexts::iterator citr =contexts.begin();  citr != contexts.end(); ++citr)
+    {
+        osgGA::EventQueue::Events gw_events;
+
+        osgViewer::GraphicsWindow* gw = dynamic_cast<osgViewer::GraphicsWindow*>(*citr);
+        if (gw)
+        {
+            gw->checkEvents();
+            gw->getEventQueue()->copyEvents(gw_events);
+        }
+        _events.insert(_events.end(), gw_events.begin(), gw_events.end());
+    }
+    
     viewer.getEventQueue()->copyEvents(_events);
 
     osg::notify(osg::INFO)<<"written events = "<<_events.size()<<std::endl;
@@ -509,6 +527,12 @@ int main( int argc, char **argv )
     }
 
     viewer.setCameraManipulator(new osgGA::TrackballManipulator());
+
+    // add the stats handler
+    viewer.addEventHandler(new osgViewer::StatsHandler);
+
+    // add the state manipulator
+    viewer.addEventHandler( new osgGA::StateSetManipulator(viewer.getCamera()->getOrCreateStateSet()) );
 
 
     // create the windows and run the threads.
@@ -614,9 +638,12 @@ int main( int argc, char **argv )
     {
         // need to broadcast my death.
         cp->setPacket(osg::Matrix::identity(),viewer.getFrameStamp());
-        cp->setMasterKilled(true);
+        cp->setMasterKilled(true); 
 
-        bc.setBuffer(cp, sizeof( CameraPacket ));
+        scratchPad.reset();
+        scratchPad.write(*cp);
+
+        bc.setBuffer(scratchPad._startPtr, scratchPad._numBytes);
         bc.sync();
 
         std::cout << "Broadcasting death."<<std::endl;

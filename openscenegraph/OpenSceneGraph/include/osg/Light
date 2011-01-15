@@ -18,6 +18,21 @@
 #include <osg/Vec3>
 #include <osg/Vec4>
 
+#ifndef GL_LIGHT0
+    #define GL_LIGHT0 0x4000
+    #define GL_LIGHT1 0x4001
+    #define GL_LIGHT2 0x4002
+    #define GL_LIGHT3 0x4003
+    #define GL_LIGHT4 0x4004
+    #define GL_LIGHT5 0x4005
+    #define GL_LIGHT6 0x4006
+    #define GL_LIGHT7 0x4007
+#endif
+
+#ifndef GL_LIGHTING
+    #define GL_LIGHTING 0x0B50
+#endif
+
 namespace osg {
 
 /** Light state class which encapsulates OpenGL glLight() functionality. */
@@ -55,7 +70,7 @@ class OSG_EXPORT Light : public StateAttribute
         virtual int compare(const StateAttribute& sa) const
         {
             // check the types are equal and then create the rhs variable
-            // used by the COMPARE_StateAttribute_Paramter macro's below.
+            // used by the COMPARE_StateAttribute_Parameter macros below.
             COMPARE_StateAttribute_Types(Light,sa)
 
             // compare each parameter in turn against the rhs.
@@ -71,7 +86,7 @@ class OSG_EXPORT Light : public StateAttribute
             COMPARE_StateAttribute_Parameter(_spot_exponent)
             COMPARE_StateAttribute_Parameter(_spot_cutoff)
 
-            return 0; // passed all the above comparison macro's, must be equal.
+            return 0; // passed all the above comparison macros, must be equal.
         }
 
         virtual unsigned int getMember() const { return _lightnum; }

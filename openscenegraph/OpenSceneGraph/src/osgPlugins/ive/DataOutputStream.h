@@ -19,6 +19,7 @@
 #include <osgDB/ReaderWriter>
 
 #include <osgTerrain/TerrainTile>
+#include <osgVolume/VolumeTile>
 
 #include "IveVersion.h"
 #include "DataTypeSize.h"
@@ -33,7 +34,7 @@ class DataOutputStream{
 
 public:
     DataOutputStream(std::ostream* ostream, const osgDB::ReaderWriter::Options* options);
-    ~DataOutputStream();
+    virtual ~DataOutputStream();
 
     const osgDB::ReaderWriter::Options* getOptions() const { return _options.get(); }
 
@@ -102,7 +103,11 @@ public:
 
     void writeLayer(const osgTerrain::Layer* layer);
     void writeLocator(const osgTerrain::Locator* locator);
-    
+
+    void writeVolumeLayer(const osgVolume::Layer* layer);
+    void writeVolumeLocator(const osgVolume::Locator* locator);
+    void writeVolumeProperty(const osgVolume::Property* propety);
+
     void writeObject(const osg::Object* object);
 
     void setWriteDirectory(const std::string& directoryName) { _writeDirectory = directoryName; }
@@ -125,6 +130,15 @@ public:
     void setUseOriginalExternalReferences(bool b) {_useOriginalExternalReferences=b;};
     bool getUseOriginalExternalReferences() const {return _useOriginalExternalReferences;};
 
+    // Set and get if export texture files during write
+    void setOutputTextureFiles(bool flag) { _outputTextureFiles = flag; }
+    bool getOutputTextureFiles() const { return _outputTextureFiles; }
+
+    // support code for OutputTextureFiles
+    virtual std::string getTextureFileNameForOutput();
+    void setFileName(std::string newFileName) {_filename = newFileName;}
+    std::string getFileName(void) const {return(_filename);}
+
     void setTerrainMaximumErrorToSizeRatio(double ratio) { _maximumErrorToSizeRatio = ratio; }
     double getTerrainMaximumErrorToSizeRatio() const { return _maximumErrorToSizeRatio; }
 
@@ -133,10 +147,19 @@ public:
 
     bool compress(std::ostream& fout, const std::string& source) const;
 
-private:
+
+    void setExternalFileWritten(const std::string& filename, bool hasBeenWritten=true);
+    bool getExternalFileWritten(const std::string& filename) const;
+
+    void throwException(const std::string& message) { _exception = new Exception(message); }
+    void throwException(Exception* exception) { _exception = exception; }
+    const Exception* getException() const { return _exception.get(); }
+
+    private:
 
     std::ostream* _ostream;
     std::ostream* _output_ostream;
+    std::string _filename; // not necessary, but optional for use in texture export
     
     std::stringstream _compressionStream;
     int _compressionLevel;
@@ -151,7 +174,10 @@ private:
     typedef std::map<const osg::Node*,int>              NodeMap;
     typedef std::map<const osgTerrain::Layer*,int>      LayerMap;
     typedef std::map<const osgTerrain::Locator*,int>    LocatorMap;
-        
+    typedef std::map<const osgVolume::Layer*,int>       VolumeLayerMap;
+    typedef std::map<const osgVolume::Locator*,int>     VolumeLocatorMap;
+    typedef std::map<const osgVolume::Property*,int>    VolumePropertyMap;
+
     StateSetMap         _stateSetMap;
     StateAttributeMap   _stateAttributeMap;
     UniformMap          _uniformMap;
@@ -161,6 +187,9 @@ private:
     NodeMap             _nodeMap;
     LayerMap            _layerMap;
     LocatorMap          _locatorMap;
+    VolumeLayerMap      _volumeLayerMap;
+    VolumeLocatorMap    _volumeLocatorMap;
+    VolumePropertyMap   _volumePropertyMap;
 
     std::string         _writeDirectory;
     bool                _includeExternalReferences;
@@ -169,8 +198,16 @@ private:
     double              _maximumErrorToSizeRatio;
 
     IncludeImageMode    _includeImageMode;
-    
+
+    bool _outputTextureFiles;
+    unsigned int _textureFileNameNumber;
+
     osg::ref_ptr<const osgDB::ReaderWriter::Options> _options;
+
+    typedef std::map<std::string, bool> ExternalFileWrittenMap;
+    ExternalFileWrittenMap _externalFileWritten;
+
+    osg::ref_ptr<Exception> _exception;
 };
 
 }

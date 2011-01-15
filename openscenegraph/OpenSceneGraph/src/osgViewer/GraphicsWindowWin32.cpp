@@ -20,6 +20,7 @@
 #include <osgViewer/api/Win32/PixelBufferWin32>
 #include <osgViewer/View>
 
+#include <osg/GL>
 #include <osg/DeleteHandler>
 #include <osg/ApplicationUsage>
 
@@ -91,6 +92,25 @@ static osg::ApplicationUsageProxy GraphicsWindowWin32_e0(osg::ApplicationUsage::
 #define WGL_TYPE_COLORINDEX_ARB                 0x202C
 #define WGL_SAMPLE_BUFFERS_ARB                  0x2041
 #define WGL_SAMPLES_ARB                         0x2042
+
+#ifndef WGL_ARB_create_context
+#define WGL_CONTEXT_DEBUG_BIT_ARB      0x00000001
+#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x00000002
+#define WGL_CONTEXT_MAJOR_VERSION_ARB  0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB  0x2092
+#define WGL_CONTEXT_LAYER_PLANE_ARB    0x2093
+#define WGL_CONTEXT_FLAGS_ARB          0x2094
+#define WGL_CONTEXT_PROFILE_MASK_ARB   0x9126
+#define ERROR_INVALID_VERSION_ARB      0x2095
+#endif
+
+#ifndef WGL_ARB_create_context
+#define WGL_ARB_create_context 1
+#ifdef WGL_WGLEXT_PROTOTYPES
+extern HGLRC WINAPI wglCreateContextAttribsARB (HDC, HGLRC, const int *);
+#endif /* WGL_WGLEXT_PROTOTYPES */
+typedef HGLRC (WINAPI * PFNWGLCREATECONTEXTATTRIBSARBPROC) (HDC hDC, HGLRC hShareContext, const int *attribList);
+#endif
 
 //
 // Entry points used from the WGL extensions
@@ -313,7 +333,7 @@ class Win32WindowingSystem : public osg::GraphicsContext::WindowingSystemInterfa
 
 static void reportError( const std::string& msg )
 {
-    osg::notify(osg::WARN) << "Error: " << msg.c_str() << std::endl;
+    OSG_WARN << "Error: " << msg.c_str() << std::endl;
 }
 
 static void reportError( const std::string& msg, unsigned int errorCode )
@@ -329,7 +349,7 @@ static void reportError( const std::string& msg, unsigned int errorCode )
         return;
     }
 
-    osg::notify(osg::WARN) << "Windows Error #"   << errorCode << ": " << msg.c_str();
+    OSG_WARN << "Windows Error #"   << errorCode << ": " << msg.c_str();
 
     LPVOID lpMsgBuf;
 
@@ -341,12 +361,12 @@ static void reportError( const std::string& msg, unsigned int errorCode )
                       0,
                       NULL)!=0)
     {
-        osg::notify(osg::WARN) << ". Reason: " << LPTSTR(lpMsgBuf) << std::endl;
+        OSG_WARN << ". Reason: " << LPTSTR(lpMsgBuf) << std::endl;
         ::LocalFree(lpMsgBuf);
     }
     else
     {
-        osg::notify(osg::WARN) << std::endl;
+        OSG_WARN << std::endl;
     }
 }
 
@@ -772,7 +792,7 @@ bool Win32WindowingSystem::getScreenInformation( const osg::GraphicsContext::Scr
 {
     if (si.displayNum>0)
     {
-        osg::notify(osg::WARN) << "Win32WindowingSystem::getScreenInformation() - The screen identifier on the Win32 platform must always use display number 0. Value received was " << si.displayNum << std::endl;
+        OSG_WARN << "Win32WindowingSystem::getScreenInformation() - The screen identifier on the Win32 platform must always use display number 0. Value received was " << si.displayNum << std::endl;
         return false;
     }
 
@@ -781,7 +801,7 @@ bool Win32WindowingSystem::getScreenInformation( const osg::GraphicsContext::Scr
 
     if (si.screenNum>=static_cast<int>(displayDevices.size()))
     {
-        osg::notify(osg::WARN) << "Win32WindowingSystem::getScreenInformation() - Cannot get information for screen " << si.screenNum << " because it does not exist." << std::endl;
+        OSG_WARN << "Win32WindowingSystem::getScreenInformation() - Cannot get information for screen " << si.screenNum << " because it does not exist." << std::endl;
         return false;
     }
 
@@ -824,7 +844,7 @@ void Win32WindowingSystem::getScreenSettings( const osg::GraphicsContext::Screen
         if (resolution.refreshRate == 0 || resolution.refreshRate == 1) {
             // Windows specific: 0 and 1 represent the hhardware's default refresh rate.
             // If someone knows how to get this refresh rate (in Hz)...
-            osg::notify(osg::NOTICE) << "Win32WindowingSystem::getScreenSettings() is not fully implemented (cannot retreive the hardware's default refresh rate)."<<std::endl;
+            OSG_NOTICE << "Win32WindowingSystem::getScreenSettings() is not fully implemented (cannot retreive the hardware's default refresh rate)."<<std::endl;
             resolution.refreshRate = 0;
         }
     } else
@@ -912,7 +932,7 @@ void Win32WindowingSystem::enumerateScreenSettings(const osg::GraphicsContext::S
 
     if (si.displayNum>0)
     {
-        osg::notify(osg::WARN) << "Win32WindowingSystem::enumerateScreenSettings() - The screen identifier on the Win32 platform must always use display number 0. Value received was " << si.displayNum << std::endl;
+        OSG_WARN << "Win32WindowingSystem::enumerateScreenSettings() - The screen identifier on the Win32 platform must always use display number 0. Value received was " << si.displayNum << std::endl;
         return;
     }
 
@@ -921,7 +941,7 @@ void Win32WindowingSystem::enumerateScreenSettings(const osg::GraphicsContext::S
 
     if (si.screenNum>=static_cast<int>(displayDevices.size()))
     {
-        osg::notify(osg::WARN) << "Win32WindowingSystem::enumerateScreenSettings() - Cannot get information for screen " << si.screenNum << " because it does not exist." << std::endl;
+        OSG_WARN << "Win32WindowingSystem::enumerateScreenSettings() - Cannot get information for screen " << si.screenNum << " because it does not exist." << std::endl;
         return;
     }
 
@@ -1009,10 +1029,7 @@ osgViewer::GraphicsWindowWin32* Win32WindowingSystem::getGraphicsWindowFor( HWND
 //////////////////////////////////////////////////////////////////////////////
 
 GraphicsWindowWin32::GraphicsWindowWin32( osg::GraphicsContext::Traits* traits )
-: _hwnd(0),
-  _hdc(0),
-  _hglrc(0),
-  _currentCursor(0),
+: _currentCursor(0),
   _windowProcedure(0),
   _timeOfLastCheckEvents(-1.0),
   _screenOriginX(0),
@@ -1036,6 +1053,7 @@ GraphicsWindowWin32::GraphicsWindowWin32( osg::GraphicsContext::Traits* traits )
 {
     _traits = traits;
     if (_traits->useCursor) setCursor(LeftArrowCursor);
+    else setCursor(NoCursor);
 
     init();
     
@@ -1178,7 +1196,7 @@ bool GraphicsWindowWin32::createWindow()
     // Create the OpenGL rendering context associated with this window
     //
 
-    _hglrc = ::wglCreateContext(_hdc);
+    _hglrc = createContextImplementation();
     if (_hglrc==0)
     {
         reportErrorForScreen("GraphicsWindowWin32::createWindow() - Unable to create OpenGL rendering context", _traits->screenNum, ::GetLastError());
@@ -1244,14 +1262,19 @@ bool GraphicsWindowWin32::setWindow( HWND handle )
         return false;
     }
 
-    if (!registerWindowProcedure())
+    WindowData *windowData = _traits.get() ? dynamic_cast<WindowData*>(_traits->inheritedWindowData.get()) : 0;
+
+    if (!windowData || windowData->_installEventHandler)
     {
-        ::wglDeleteContext(_hglrc);
-        _hglrc = 0;
-        ::ReleaseDC(_hwnd, _hdc);
-        _hdc  = 0;
-        _hwnd = 0;
-        return false;
+        if (!registerWindowProcedure())
+        {
+            ::wglDeleteContext(_hglrc);
+            _hglrc = 0;
+            ::ReleaseDC(_hwnd, _hdc);
+            _hdc  = 0;
+            _hwnd = 0;
+            return false;
+        }
     }
 
     Win32WindowingSystem::getInterface()->registerWindow(_hwnd, this);
@@ -1309,6 +1332,16 @@ void GraphicsWindowWin32::destroyWindow( bool deleteNativeWindow )
     _realized    = false;
     _valid       = false;
     _destroying  = false;
+}
+
+void GraphicsWindowWin32::registerWindow()
+{
+  Win32WindowingSystem::getInterface()->registerWindow(_hwnd, this);
+}
+
+void GraphicsWindowWin32::unregisterWindow()
+{
+  Win32WindowingSystem::getInterface()->unregisterWindow(_hwnd);
 }
 
 bool GraphicsWindowWin32::registerWindowProcedure()
@@ -1441,7 +1474,30 @@ static void PreparePixelFormatSpecifications( const osg::GraphicsContext::Traits
     if (traits.doubleBuffer)
     {
         attributes.enable(WGL_DOUBLE_BUFFER_ARB);
-        if (allowSwapExchangeARB) attributes.set(WGL_SWAP_METHOD_ARB, WGL_SWAP_EXCHANGE_ARB);
+
+        switch ( traits.swapMethod )
+        {
+            case osg::DisplaySettings::SWAP_COPY:
+                attributes.set(WGL_SWAP_METHOD_ARB, WGL_SWAP_COPY_ARB);
+                break;
+            case osg::DisplaySettings::SWAP_EXCHANGE:
+                attributes.set(WGL_SWAP_METHOD_ARB, WGL_SWAP_EXCHANGE_ARB);
+                break;
+            case osg::DisplaySettings::SWAP_UNDEFINED:
+                attributes.set(WGL_SWAP_METHOD_ARB, WGL_SWAP_UNDEFINED_ARB);
+                break;
+            case osg::DisplaySettings::SWAP_DEFAULT:
+                // Wojtek Lewandowski 2010-09-28:
+                // Keep backward compatibility if no method is selected via traits
+                // and let wglSwapExchangeARB flag select swap method. 
+                // However, I would rather remove this flag because its 
+                // now redundant to Traits::swapMethod and it looks like 
+                // WGL_SWAP_EXCHANGE_ARB is the GL default when no WGL_SWAP attrib is given.
+                // To be precise: At least on Windows 7 and Nvidia it seems to be a default.
+                if ( allowSwapExchangeARB )
+                    attributes.set(WGL_SWAP_METHOD_ARB, WGL_SWAP_EXCHANGE_ARB);
+                break;
+        }
     }
 
     if (traits.alpha)         attributes.set(WGL_ALPHA_BITS_ARB,     traits.alpha);
@@ -1470,7 +1526,9 @@ static int ChooseMatchingPixelFormat( HDC hdc, int screenNum, const WGLIntegerAt
             1,                     // version number 
             PFD_DRAW_TO_WINDOW |   // support window 
             PFD_SUPPORT_OPENGL |   // support OpenGL 
-            (_traits->doubleBuffer ? PFD_DOUBLEBUFFER : NULL),      // double buffered ?
+            (_traits->doubleBuffer ? PFD_DOUBLEBUFFER : NULL) |      // double buffered ?            
+            (_traits->swapMethod ==  osg::DisplaySettings::SWAP_COPY ? PFD_SWAP_COPY : NULL) |
+            (_traits->swapMethod ==  osg::DisplaySettings::SWAP_EXCHANGE ? PFD_SWAP_EXCHANGE : NULL),
             PFD_TYPE_RGBA,         // RGBA type 
             _traits->red + _traits->green + _traits->blue,                // color depth
             _traits->red ,0, _traits->green ,0, _traits->blue, 0,          // shift bits ignored 
@@ -1495,7 +1553,7 @@ static int ChooseMatchingPixelFormat( HDC hdc, int screenNum, const WGLIntegerAt
         ::DescribePixelFormat(hdc, pixelFormatIndex ,sizeof(PIXELFORMATDESCRIPTOR),&pixelFormat);
         if (((pixelFormat.dwFlags & PFD_GENERIC_FORMAT) != 0)  && ((pixelFormat.dwFlags & PFD_GENERIC_ACCELERATED) == 0))
         {
-            osg::notify(osg::WARN) << "Rendering in software: pixelFormatIndex " << pixelFormatIndex << std::endl;
+            OSG_WARN << "Rendering in software: pixelFormatIndex " << pixelFormatIndex << std::endl;
         }
         return pixelFormatIndex;
     }
@@ -1540,7 +1598,7 @@ bool GraphicsWindowWin32::setPixelFormat()
             unsigned int bpp;
             Win32WindowingSystem::getInterface()->getScreenColorDepth(*_traits.get(), bpp);
             if (bpp < 32) {
-                osg::notify(osg::INFO)    << "GraphicsWindowWin32::setPixelFormat() - Display setting is not 32 bit colors, "
+                OSG_INFO    << "GraphicsWindowWin32::setPixelFormat() - Display setting is not 32 bit colors, "
                                         << bpp
                                         << " bits per pixel on screen #"
                                         << _traits->screenNum
@@ -1563,7 +1621,7 @@ bool GraphicsWindowWin32::setPixelFormat()
             return false;
         }
 
-        osg::notify(osg::INFO) << "GraphicsWindowWin32::setPixelFormat() - Found a matching pixel format but without the WGL_SWAP_METHOD_ARB specification for screen #"
+        OSG_INFO << "GraphicsWindowWin32::setPixelFormat() - Found a matching pixel format but without the WGL_SWAP_METHOD_ARB specification for screen #"
                                << _traits->screenNum
                                << std::endl;
     }
@@ -1584,6 +1642,93 @@ bool GraphicsWindowWin32::setPixelFormat()
     }
 
     return true;
+}
+
+HGLRC GraphicsWindowWin32::createContextImplementation()
+{
+    HGLRC context( NULL );
+
+    if( OSG_GL3_FEATURES )
+    {
+        OSG_NOTIFY( osg::INFO ) << "GL3: Attempting to create OpenGL3 context." << std::endl;
+        OSG_NOTIFY( osg::INFO ) << "GL3: version: " << _traits->glContextVersion << std::endl;
+        OSG_NOTIFY( osg::INFO ) << "GL3: context flags: " << _traits->glContextFlags << std::endl;
+        OSG_NOTIFY( osg::INFO ) << "GL3: profile: " << _traits->glContextProfileMask << std::endl;
+
+        Win32WindowingSystem::OpenGLContext openGLContext;
+        if( !Win32WindowingSystem::getInterface()->getSampleOpenGLContext( openGLContext, _hdc, _screenOriginX, _screenOriginY ) )
+        {
+            reportErrorForScreen( "GL3: Can't create sample context.",
+                _traits->screenNum, ::GetLastError() );
+        }
+        else
+        {
+            PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB =
+                ( PFNWGLCREATECONTEXTATTRIBSARBPROC ) wglGetProcAddress( "wglCreateContextAttribsARB" );
+            if( wglCreateContextAttribsARB==0 )
+            {
+                reportErrorForScreen( "GL3: wglCreateContextAttribsARB not available.",
+                    _traits->screenNum, ::GetLastError() );
+            }
+            else
+            {
+                unsigned int idx( 0 );
+                int attribs[ 16 ];
+
+                std::istringstream istr( _traits->glContextVersion );
+                unsigned int major, minor;
+                unsigned char dot;
+                istr >> major >> dot >> minor;
+                if( major < 3 )
+                {
+                    OSG_NOTIFY( osg::WARN ) << "GL3: Non-GL3 version number: " << _traits->glContextVersion << std::endl;
+                }
+
+                attribs[ idx++ ] = WGL_CONTEXT_MAJOR_VERSION_ARB;
+                attribs[ idx++ ] = major;
+                attribs[ idx++ ] = WGL_CONTEXT_MINOR_VERSION_ARB;
+                attribs[ idx++ ] = minor;
+                if( _traits->glContextFlags != 0 )
+                {
+                    attribs[ idx++ ] = WGL_CONTEXT_FLAGS_ARB;
+                    attribs[ idx++ ] = _traits->glContextFlags;
+                }
+                if( _traits->glContextProfileMask != 0 )
+                {
+                    attribs[ idx++ ] = WGL_CONTEXT_PROFILE_MASK_ARB;
+                    attribs[ idx++ ] = _traits->glContextProfileMask;
+                }
+                attribs[ idx++ ] = 0;
+
+                context = wglCreateContextAttribsARB( _hdc, 0, attribs );
+                if( context == NULL )
+                {
+                    reportErrorForScreen( "GL3: wglCreateContextAttribsARB returned NULL.",
+                        _traits->screenNum, ::GetLastError() );
+                }
+                else
+                {
+                    OSG_NOTIFY( osg::INFO ) << "GL3: context created successfully." << std::endl;
+                }
+            }
+        }
+    }
+
+    // TBD insert GL ES 2 suppurt, if required for Win32.
+
+    // If platform context creation fails for any reason,
+    // we'll create a standard context. This means you could
+    // build OSG for GL3, have the context creation fail
+    // (because you have the wrong driver), and end up with
+    // a GL3 context. Something else will likely fail down
+    // the line, as the GL3-built OSG will assume GL3 features
+    // are present.
+    //
+    // This is also the typical path for GL 1/2 context creation.
+    if( context == NULL )
+        context = ::wglCreateContext(_hdc);
+
+    return( context );
 }
 
 bool GraphicsWindowWin32::setWindowDecorationImplementation( bool decorated )
@@ -1669,46 +1814,53 @@ bool GraphicsWindowWin32::realizeImplementation()
         init();
         if (!_initialized) return false;
     }
-    {
-        
-        if (_traits.valid() && _traits->sharedContext)
-        {
-            GraphicsWindowWin32* sharedContextWin32 = dynamic_cast<GraphicsWindowWin32*>(_traits->sharedContext);
-            if (sharedContextWin32)
-            {
-                struct RestoreContext
-                {
-                    RestoreContext()
-                    {
-                        _hdc = wglGetCurrentDC();
-                        _hglrc = wglGetCurrentContext();
-                    }
-                    ~RestoreContext()
-                    {
-                        if (_hdc)
-                        {
-                            wglMakeCurrent(_hdc,_hglrc);
-                        }
-                    }
-                protected:
-                    HDC        _hdc;
-                    HGLRC    _hglrc;
-                } restoreContext;
-                
-                _realized = true;
-                bool result = makeCurrent();
-                _realized = false;
 
-                if (!result) 
+    if (_traits.valid() && (_traits->sharedContext /*|| _traits->vsync*/))
+    {
+        // make context current so we can test capabilities and set up context sharing
+        struct RestoreContext
+        {
+            RestoreContext()
+            {
+                _hdc = wglGetCurrentDC();
+                _hglrc = wglGetCurrentContext();
+            }
+            ~RestoreContext()
+            {
+                if (_hdc)
                 {
-                    return false;        
-                }
-                if (!wglShareLists(sharedContextWin32->getWGLContext(), getWGLContext()))
-                {
-                    reportErrorForScreen("GraphicsWindowWin32::realizeImplementation() - Unable to share OpenGL context", _traits->screenNum, ::GetLastError());
-                    return false;
+                    wglMakeCurrent(_hdc,_hglrc);
                 }
             }
+        protected:
+            HDC        _hdc;
+            HGLRC    _hglrc;
+        } restoreContext;
+
+        _realized = true;
+        bool result = makeCurrent();
+        _realized = false;
+
+        if (!result)
+        {
+            return false;
+        }
+
+        // set up sharing of contexts if required
+        GraphicsHandleWin32* graphicsHandleWin32 = dynamic_cast<GraphicsHandleWin32*>(_traits->sharedContext);
+        if (graphicsHandleWin32)
+        {
+            if (!wglShareLists(graphicsHandleWin32->getWGLContext(), getWGLContext()))
+            {
+                reportErrorForScreen("GraphicsWindowWin32::realizeImplementation() - Unable to share OpenGL context", _traits->screenNum, ::GetLastError());
+                return false;
+            }
+        }
+
+        // if vysnc should be on then enable it.
+        if (_traits->vsync)
+        {
+            setSyncToVBlank(_traits->vsync);
         }
     }
 
@@ -1833,7 +1985,7 @@ void GraphicsWindowWin32::grabFocus()
 {
     if (!::SetForegroundWindow(_hwnd))
     {
-        osg::notify(osg::WARN) << "Warning: GraphicsWindowWin32::grabFocus() - Failed grabbing the focus" << std::endl;
+        OSG_WARN << "Warning: GraphicsWindowWin32::grabFocus() - Failed grabbing the focus" << std::endl;
     }
 }
 
@@ -1864,7 +2016,7 @@ void GraphicsWindowWin32::requestWarpPointer( float x, float y )
 {
     if (!_realized)
     {
-        reportErrorForScreen("GraphicsWindowWin32::requestWarpPointer() - Window not realized; cannot warp pointer", _traits->screenNum, 0);
+        OSG_INFO<<"GraphicsWindowWin32::requestWarpPointer() - Window not realized; cannot warp pointer, screenNum="<< _traits->screenNum<<std::endl;
         return;
     }
 
@@ -1948,29 +2100,29 @@ void GraphicsWindowWin32::setWindowName( const std::string & name )
 void GraphicsWindowWin32::useCursor( bool cursorOn )
 {
     _traits->useCursor = cursorOn;
+    if (_traits->useCursor == false)
+    {
+       setCursor(NoCursor);
+    }    
 }
 
 void GraphicsWindowWin32::setCursor( MouseCursor mouseCursor )
 {
+    _appMouseCursor = mouseCursor;
+    setCursorImpl(mouseCursor);
+}
+
+void GraphicsWindowWin32::setCursorImpl( MouseCursor mouseCursor )
+{
     if (_mouseCursor != mouseCursor)
     {
-        if (mouseCursor != LeftRightCursor && 
-            mouseCursor != UpDownCursor && 
-            mouseCursor != TopLeftCorner && 
-            mouseCursor != TopRightCorner && 
-            mouseCursor != BottomLeftCorner && 
-            mouseCursor != BottomRightCorner)
-        {
-            _appMouseCursor = mouseCursor;
-        }
-
         _mouseCursor = mouseCursor;
         HCURSOR newCursor = getOrCreateCursor( mouseCursor);
         if (newCursor == _currentCursor) return;
-
+    
         _currentCursor = newCursor;
-        _traits->useCursor = (_currentCursor != NULL);
-
+        _traits->useCursor = (_currentCursor != NULL) && (_mouseCursor != NoCursor);
+    
         if (_mouseCursor != InheritCursor)
             ::SetCursor(_currentCursor);
     }
@@ -2045,11 +2197,44 @@ HCURSOR GraphicsWindowWin32::getOrCreateCursor(MouseCursor mouseCursor)
     case BottomLeftCorner:
         _mouseCursorMap[mouseCursor] = LoadCursor( NULL, IDC_SIZENESW );
         break;
+    case HandCursor:
+        _mouseCursorMap[mouseCursor] = LoadCursor( NULL, IDC_HAND );
+        break;
     default:
         break;
     }
     
     return _mouseCursorMap[mouseCursor];
+}
+
+void GraphicsWindowWin32::setSyncToVBlank( bool on )
+{
+    if (_traits.valid())
+    {
+        _traits->vsync = on;
+    }
+
+#if 0
+    // we ought to properly check if the extension is listed as supported rather than just
+    // if the function pointer resolves through wglGetProcAddress, but in practice everything
+    // supports this extension
+    typedef BOOL (GL_APIENTRY *PFNWGLSWAPINTERVALFARPROC)( int );
+    PFNWGLSWAPINTERVALFARPROC wglSwapIntervalEXT = 0;
+
+    wglSwapIntervalEXT = (PFNWGLSWAPINTERVALFARPROC)wglGetProcAddress( "wglSwapIntervalEXT" );
+    if( wglSwapIntervalEXT )
+    {
+        int swapInterval = (on ? 1 : 0);
+        wglSwapIntervalEXT(swapInterval);
+        OSG_INFO << "GraphicsWindowWin32::setSyncToVBlank " << (on ? "on" : "off") << std::endl;
+    }
+    else
+    {
+        OSG_INFO << "GraphicsWindowWin32::setSyncToVBlank(bool) not supported" << std::endl;
+    }
+#else
+    OSG_INFO << "GraphicsWindowWin32::setSyncToVBlank(bool) not yet implemented."<< std::endl;
+#endif
 }
 
 void GraphicsWindowWin32::adaptKey( WPARAM wParam, LPARAM lParam, int& keySymbol, unsigned int& modifierMask )
@@ -2146,6 +2331,18 @@ LRESULT GraphicsWindowWin32::handleNativeWindowingEvent( HWND hwnd, UINT uMsg, W
 
     switch(uMsg)
     {
+        // Wojtek Lewandowski 2010-09-28: 
+        // All web docs on Windows Aero and OpenGL compatibiltiy 
+        // suggest WM_ERASEBKGND should be handled with non NULL value return.
+        // This sugesstion may be irrelevant for our window class 
+        // as default brush pattern is not set so erase flag is forwarded to WM_PAINT 
+        // and gets ignored when WM_PAINT is handled.
+        // But it will certainly be safer and not make things worse 
+        // if we handle this message to be sure everything is done as suggested.
+        case WM_ERASEBKGND :
+            return TRUE;
+            break;
+
         /////////////////
         case WM_PAINT   :
         /////////////////
@@ -2363,28 +2560,37 @@ LRESULT GraphicsWindowWin32::handleNativeWindowingEvent( HWND hwnd, UINT uMsg, W
                 {
                 case HTLEFT:
                 case HTRIGHT:
-                    setCursor(LeftRightCursor);
+                    setCursorImpl(LeftRightCursor);
                     break;
                 case HTTOP:
                 case HTBOTTOM:
-                    setCursor(UpDownCursor);
+                    setCursorImpl(UpDownCursor);
                     break;
                 case HTTOPLEFT:
-                    setCursor(TopLeftCorner);
+                    setCursorImpl(TopLeftCorner);
                     break;
                 case HTTOPRIGHT:
-                    setCursor(TopRightCorner);
+                    setCursorImpl(TopRightCorner);
                     break;
                 case HTBOTTOMLEFT:
-                    setCursor(BottomLeftCorner);
+                    setCursorImpl(BottomLeftCorner);
                     break;
                 case HTBOTTOMRIGHT:
                 case HTGROWBOX:
-                    setCursor(BottomRightCorner);
+                    setCursorImpl(BottomRightCorner);
                     break;
+                case HTSYSMENU:
+                case HTCAPTION:
+                case HTMAXBUTTON:
+                case HTMINBUTTON:
+                case HTCLOSE:
+                case HTHELP:
+                   setCursorImpl(LeftArrowCursor);
+                   break;
+
                 default:
                     if (_traits->useCursor && _appMouseCursor != InheritCursor)
-                        setCursor(_appMouseCursor);
+                        setCursorImpl(_appMouseCursor);
                     break;
                 }
                 return result;

@@ -19,12 +19,6 @@
 #ifndef _WIN32CONDITIONPRIVATEDATA_H_
 #define _WIN32CONDITIONPRIVATEDATA_H_
 
-#ifndef _WINDOWS_
-#define WIN32_LEAN_AND_MEAN
-#define _WIN32_WINNT 0x0400
-#include <windows.h>
-#endif
-
 #include <OpenThreads/ScopedLock>
 
 #include "Win32ThreadPrivateData.h"
@@ -44,9 +38,9 @@ public:
 
     Win32ConditionPrivateData ()
         :waiters_(0), 
-         was_broadcast_(0),
          sema_(CreateSemaphore(NULL,0,0x7fffffff,NULL)),
-         waiters_done_(CreateEvent(NULL,FALSE,FALSE,NULL))
+         waiters_done_(CreateEvent(NULL,FALSE,FALSE,NULL)),
+         was_broadcast_(0)
     {
     }
 

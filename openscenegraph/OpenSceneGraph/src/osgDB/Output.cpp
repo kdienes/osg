@@ -63,7 +63,7 @@ void Output::init()
     }
 }
 
-void Output::setOptions(const ReaderWriter::Options* options)
+void Output::setOptions(const Options* options)
 {
     _options = options;
 }
@@ -136,7 +136,7 @@ std::string Output::wrapString(const std::string& str)
 
 bool Output::writeObject(const osg::Object& obj)
 {
-    return Registry::instance()->writeObject(obj,*this);
+    return Registry::instance()->getDeprecatedDotOsgObjectWrapperManager()->writeObject(obj,*this);
 }
 
 
@@ -194,13 +194,13 @@ std::string Output::getFileNameForOutput(const std::string& filename) const
     case(FULL_PATH):
         {
             // need to think about how best to implement this first...
-            osg::notify(osg::WARN)<<"Warning: Output::getFileNameForOutput() does not support FULL_PATH yet."<< std::endl;        
+            OSG_WARN<<"Warning: Output::getFileNameForOutput() does not support FULL_PATH yet."<< std::endl;        
             return filename;
         }
     case(RELATIVE_PATH):
         {
             // need to think about how best to implement this as well...
-            osg::notify(osg::WARN)<<"Warning: Output::getFileNameForOutput() does not support RELATIVE_PATH yet."<< std::endl;        
+            OSG_WARN<<"Warning: Output::getFileNameForOutput() does not support RELATIVE_PATH yet."<< std::endl;        
             return filename;
         }
     case(FILENAME_ONLY):
@@ -245,3 +245,14 @@ std::string Output::getShaderFileNameForOutput()
     return fileName;
 }
 
+void Output::setExternalFileWritten(const std::string& filename, bool hasBeenWritten)
+{
+    _externalFileWritten[filename] = hasBeenWritten;
+}
+
+bool Output::getExternalFileWritten(const std::string& filename) const
+{
+    ExternalFileWrittenMap::const_iterator itr = _externalFileWritten.find(filename);
+    if (itr != _externalFileWritten.end()) return itr->second;
+    return false;
+}

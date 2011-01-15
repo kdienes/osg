@@ -16,6 +16,8 @@
 #include "dxfBlock.h"
 #include "codeValue.h"
 
+#include <osg/io_utils> // just for debugging
+
 using namespace std;
 using namespace osg;
 
@@ -24,6 +26,7 @@ std::map<std::string, ref_ptr<dxfBasicEntity> > dxfEntity::_registry;
 RegisterEntityProxy<dxf3DFace> g_dxf3DFace;
 RegisterEntityProxy<dxfCircle> g_dxfCircle;
 RegisterEntityProxy<dxfArc> g_dxfArc;
+RegisterEntityProxy<dxfPoint> g_dxfPoint;
 RegisterEntityProxy<dxfLine> g_dxfLine;
 RegisterEntityProxy<dxfVertex> g_dxfVertex;
 RegisterEntityProxy<dxfPolyline> g_dxfPolyline;
@@ -172,27 +175,41 @@ dxfCircle::drawScene(scene* sc)
     getOCSMatrix(_ocs, m);
     sc->ocs(m);
     std::vector<Vec3d> vlist;
-    int numsteps = 360/5; // baaarghf.
-    double angle_step = osg::DegreesToRadians((double)360.0 / (double) numsteps);
-    double angle1 = 0.0f;
-    double angle2 = 0.0f;
+
+    double theta=5.0; // we generate polyline from "spokes" at theta degrees at arc's center
+
+    if (_useAccuracy) {
+        // we generate points on a polyline where each point lies on the arc, thus the maximum error occurs at the midpoint of each line segment where it lies furthest inside the arc 
+        // If we divide the segment in half and connect the bisection point to the arc's center, we have two rightangled triangles with 
+        // one side=r-maxError, hypotenuse=r, and internal angle at center is half the angle we will step with:
+        double maxError=min(_maxError,_radius); // Avoid offending acos() in the edge case where allowable deviation is greater than radius. 
+        double newtheta=acos( (_radius-maxError) / _radius);
+        newtheta=osg::RadiansToDegrees(newtheta)*2.0; 
+        
+        // Option to only use the new accuracy code when it would improve on the accuracy of the old method
+        if (_improveAccuracyOnly) {
+            theta=min(newtheta,theta);
+        } else {
+            theta=newtheta;
+        }
+    } 
+    theta=osg::DegreesToRadians(theta);
+
+    // We create an anglestep<=theta so that the line's points are evenly distributed around the circle
+    unsigned int numsteps=static_cast<unsigned int>(floor(osg::PI*2/theta));
+    if (numsteps<3) numsteps=3; // Sanity check: minimal representation of a circle is a tri 
+    double anglestep=osg::PI*2/numsteps;
+
+    double angle1 = 0.0;
     Vec3d a = _center;
-    Vec3d b,c;
-    for (int r = 0; r < numsteps; r++) 
-    {
-        angle1 = angle2;
-        if (r == numsteps - 1)
-            angle2 = 0.0f;
-        else
-            angle2 += angle_step;
+    Vec3d b;
+    for(unsigned int r=0;r<=numsteps;r++) {
         b = a + Vec3d(_radius * (double) sin(angle1), _radius * (double) cos(angle1), 0);
-        c = a + Vec3d(_radius * (double) sin(angle2), _radius * (double) cos(angle2), 0);
-//        vlist.push_back(a);
+        angle1 += anglestep;
         vlist.push_back(b);
-        vlist.push_back(c);
     }
-    sc->addLineStrip(getLayer(), _color, vlist);
-//    sc->addTriangles(getLayer(), _color, vlist);
+
+    sc->addLineStrip(getLayer(), _color, vlist); // Should really add LineLoop implementation and save a vertex 
     sc->ocs_clear();
 }
 
@@ -252,25 +269,46 @@ dxfArc::drawScene(scene* sc)
         start = _startAngle;
         end = _endAngle;
     }
+
+    double theta=5.0; // we generate polyline from "spokes" at theta degrees at arc's center
+
+    if (_useAccuracy) {
+        // we generate points on a polyline where each point lies on the arc, thus the maximum error occurs at the midpoint of each line segment where it lies furthest inside the arc 
+        // If we divide the segment in half and connect the bisection point to the arc's center, we have two rightangled triangles with 
+        // one side=r-maxError, hypotenuse=r, and internal angle at center is half the angle we will step with:
+        double maxError=min(_maxError,_radius); // Avoid offending acos() in the edge case where allowable deviation is greater than radius. 
+        double newtheta=acos( (_radius-maxError) / _radius);
+        newtheta=osg::RadiansToDegrees(newtheta)*2.0; 
+        //cout<<"r="<<_radius<<" _me="<<_maxError<<" (_radius-_maxError)="<<(_radius-_maxError)<<" newtheta="<<newtheta<<endl;
+        // Option to only use the new accuracy code when it would improve on the accuracy of the old method
+        if (_improveAccuracyOnly) {
+            theta=min(newtheta,theta);
+        } else {
+            theta=newtheta;
+        }
+    } 
+
     double angle_step = DegreesToRadians(end - start);
-    int numsteps = (int)((end - start)/5.0); // hurmghf. say 5 degrees?
-    if (numsteps * 5 < (end - start)) numsteps++;
+    int numsteps = (int)((end - start)/theta); 
+    //cout<<"arc theta="<<osg::RadiansToDegrees(theta)<<" end="<<end<<" start="<<start<<" numsteps="<<numsteps<<" e-s/theta="<<((end-start)/theta)<<" end-start="<<(end-start)<<endl;
+    if (numsteps * theta < (end - start)) numsteps++;
+    numsteps=max(numsteps,2); // Whatever else, minimum representation of an arc is a straightline
     angle_step /=  (double) numsteps;
     end = DegreesToRadians((-_startAngle)+90.0);
     start = DegreesToRadians((-_endAngle)+90.0);
-    double angle1 = 0.0f;
-    double angle2 = (start);
+    double angle1 = start;
+    
     Vec3d a = _center;
-    Vec3d b,c;
-    for (int r = 0; r < numsteps; r++) 
+    Vec3d b;
+
+    for (int r = 0; r <= numsteps; r++) 
     {
-        angle1 = angle2;
-        angle2 = angle1 + angle_step;
         b = a + Vec3d(_radius * (double) sin(angle1), _radius * (double) cos(angle1), 0);
-        c = a + Vec3d(_radius * (double) sin(angle2), _radius * (double) cos(angle2), 0);
+        angle1 += angle_step;
         vlist.push_back(b);
-        vlist.push_back(c);
     }
+
+
     sc->addLineStrip(getLayer(), _color, vlist);
     sc->ocs_clear();
 }
@@ -325,6 +363,34 @@ dxfLine::drawScene(scene* sc)
 //    static long lcount = 0;
 //    std::cout << ++lcount << " ";
 //    sc->ocs_clear();
+}
+void
+dxfPoint::assign(dxfFile* dxf, codeValue& cv)
+{
+    double d = cv._double;
+    //unsigned short s = cv._short;
+    switch (cv._groupCode) {
+        case 10:
+            _a.x() = d;
+            break;
+        case 20:
+            _a.y() = d;
+            break;
+        case 30:
+            _a.z() = d;
+            break;
+        default:
+            dxfBasicEntity::assign(dxf, cv);
+            break;
+    }
+}
+
+void
+dxfPoint::drawScene(scene* sc)
+{
+    Matrixd m;
+    getOCSMatrix(_ocs, m);
+    sc->addPoint(getLayer(), _color,_a);
 }
 
 void 
@@ -522,14 +588,14 @@ dxfPolyline::drawScene(scene* sc)
             }
         }
 
+/*
         // a naive attempt to determine vertex ordering
         VList::iterator itr = nlist.begin();
         Vec3d lastn = (*itr++);
         double bad_c = 0;
         double good_c = 0;
         long bad=0,good=0;
-        for (; itr != nlist.end(); ) {
-            ++itr;
+        for (; itr != nlist.end(); ++itr) {
             if ((*itr)== lastn) continue;
             Vec3d diff = ((*itr)-lastn);
             diff.normalize();
@@ -545,6 +611,7 @@ dxfPolyline::drawScene(scene* sc)
         if (bad > good) {
             invert_order = true;
         }
+*/
 
         if (qlist.size())
             sc->addQuads(getLayer(), _color, qlist, invert_order);

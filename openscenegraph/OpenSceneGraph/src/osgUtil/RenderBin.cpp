@@ -30,14 +30,23 @@ class RenderBinPrototypeList : osg::depends_on<OpenThreads::Mutex*, osg::Referen
                                public osg::Referenced, public std::map< std::string, osg::ref_ptr<RenderBin> >
 {
     public:
-        RenderBinPrototypeList() {}
+        RenderBinPrototypeList()
+        {
+            add("RenderBin",new RenderBin(RenderBin::getDefaultRenderBinSortMode()));
+            add("StateSortedBin",new RenderBin(RenderBin::SORT_BY_STATE));
+            add("DepthSortedBin",new RenderBin(RenderBin::SORT_BACK_TO_FRONT));
+            add("SORT_BACK_TO_FRONT",new RenderBin(RenderBin::SORT_BACK_TO_FRONT));
+            add("SORT_FRONT_TO_BACK",new RenderBin(RenderBin::SORT_FRONT_TO_BACK));
+            add("TraversalOrderBin",new RenderBin(RenderBin::TRAVERSAL_ORDER));
+        }
+
+        void add(const std::string& name, RenderBin* bin)
+        {
+            (*this)[name] = bin;
+        }
+
         ~RenderBinPrototypeList() {}
 };
-
-// register a RenderStage prototype with the RenderBin prototype list.
-RegisterRenderBinProxy s_registerRenderBinProxy("RenderBin",new RenderBin(RenderBin::getDefaultRenderBinSortMode()));
-RegisterRenderBinProxy s_registerDepthSortedBinProxy("DepthSortedBin",new RenderBin(RenderBin::SORT_BACK_TO_FRONT));
-
 
 static RenderBinPrototypeList* renderBinPrototypeList()
 {
@@ -65,7 +74,7 @@ RenderBin* RenderBin::createRenderBin(const std::string& binName)
         if (prototype) return dynamic_cast<RenderBin*>(prototype->clone(osg::CopyOp::DEEP_COPY_ALL));
     }
     
-    osg::notify(osg::WARN) <<"Warning: RenderBin \""<<binName<<"\" implemention not found, using default RenderBin as a fallback."<<std::endl;
+    OSG_WARN <<"Warning: RenderBin \""<<binName<<"\" implementation not found, using default RenderBin as a fallback."<<std::endl;
     return new RenderBin;
 }
 
@@ -89,12 +98,13 @@ void RenderBin::removeRenderBinPrototype(RenderBin* proto)
         {
             if (itr->second == proto)
             {
-                // osg::notify(osg::NOTICE)<<"Found protype, now erasing "<<itr->first<<std::endl;
+                // OSG_NOTICE<<"Found protype, now erasing "<<itr->first<<std::endl;
                 list->erase(itr);
                 return;
             }
         }
     }
+    // OSG_NOTICE<<"Not found protype"<<std::endl;
 }
 
 static bool s_defaultBinSortModeInitialized = false;
@@ -121,6 +131,7 @@ RenderBin::SortMode RenderBin::getDefaultRenderBinSortMode()
             else if (strcmp(str,"SORT_BY_STATE_THEN_FRONT_TO_BACK")==0) s_defaultBinSortMode = RenderBin::SORT_BY_STATE_THEN_FRONT_TO_BACK;
             else if (strcmp(str,"SORT_FRONT_TO_BACK")==0) s_defaultBinSortMode = RenderBin::SORT_FRONT_TO_BACK;
             else if (strcmp(str,"SORT_BACK_TO_FRONT")==0) s_defaultBinSortMode = RenderBin::SORT_BACK_TO_FRONT;
+            else if (strcmp(str,"TRAVERSAL_ORDER")==0) s_defaultBinSortMode = RenderBin::TRAVERSAL_ORDER;
         }
     }
     
@@ -151,11 +162,13 @@ RenderBin::RenderBin(SortMode mode)
         _stateset->setThreadSafeRefUnref(true);
         
          // set up an alphafunc by default to speed up blending operations.
+#ifdef OSG_GL_FIXED_FUNCTION_AVAILABLE
         osg::AlphaFunc* alphafunc = new osg::AlphaFunc;
         alphafunc->setFunction(osg::AlphaFunc::GREATER,0.0f);
         alphafunc->setThreadSafeRefUnref(true);
         
         _stateset->setAttributeAndModes(alphafunc, osg::StateAttribute::ON);
+#endif
     }
 #endif    
 }
@@ -230,7 +243,8 @@ void RenderBin::sortImplementation()
         case(SORT_BACK_TO_FRONT):
             sortBackToFront();
             break;
-        default:
+        case(TRAVERSAL_ORDER):
+            sortTraversalOrder();
             break;
     }
 }
@@ -245,7 +259,7 @@ struct SortByStateFunctor
 
 void RenderBin::sortByState()
 {
-    //osg::notify(osg::NOTICE)<<"sortByState()"<<std::endl;
+    //OSG_NOTICE<<"sortByState()"<<std::endl;
     // actually we'll do nothing right now, as fine grained sorting by state
     // appears to cost more to do than it saves in draw.  The contents of
     // the StateGraph leaves is already coarse grained sorted, this
@@ -311,6 +325,23 @@ void RenderBin::sortBackToFront()
 //    cout << "sort back to front"<<endl;
 }
 
+
+struct TraversalOrderFunctor
+{
+    bool operator() (const RenderLeaf* lhs,const RenderLeaf* rhs) const
+    {
+        return (lhs->_traversalNumber<rhs->_traversalNumber);
+    }
+};
+
+void RenderBin::sortTraversalOrder()
+{
+    copyLeavesFromStateGraphListToRenderLeafList();
+
+    // now sort the list into acending depth order.
+    std::sort(_renderLeafList.begin(),_renderLeafList.end(),TraversalOrderFunctor());
+}
+
 void RenderBin::copyLeavesFromStateGraphListToRenderLeafList()
 {
     _renderLeafList.clear();
@@ -348,7 +379,7 @@ void RenderBin::copyLeavesFromStateGraphListToRenderLeafList()
         }
     }
     
-    if (detectedNaN) osg::notify(osg::NOTICE)<<"Warning: RenderBin::copyLeavesFromStateGraphListToRenderLeafList() detected NaN depth values, database may be corrupted."<<std::endl;
+    if (detectedNaN) OSG_NOTICE<<"Warning: RenderBin::copyLeavesFromStateGraphListToRenderLeafList() detected NaN depth values, database may be corrupted."<<std::endl;
     
     // empty the render graph list to prevent it being drawn along side the render leaf list (see drawImplementation.)
     _stateGraphList.clear();
@@ -360,7 +391,7 @@ RenderBin* RenderBin::find_or_insert(int binNum,const std::string& binName)
     RenderBinList::iterator itr = _bins.find(binNum);
     if (itr!=_bins.end()) return itr->second.get();
 
-    // create a renderin bin and insert into bin list.
+    // create a rendering bin and insert into bin list.
     RenderBin* rb = RenderBin::createRenderBin(binName);
     if (rb)
     {
@@ -397,7 +428,7 @@ void RenderBin::drawImplementation(osg::RenderInfo& renderInfo,RenderLeaf*& prev
 {
     osg::State& state = *renderInfo.getState();
 
-    // osg::notify(osg::NOTICE)<<"begin RenderBin::drawImplementation "<<className()<<" sortMode "<<getSortMode()<<std::endl;
+    // OSG_NOTICE<<"begin RenderBin::drawImplementation "<<className()<<" sortMode "<<getSortMode()<<std::endl;
 
 
     unsigned int numToPop = (previous ? StateGraph::numToPop(previous->_parent) : 0);
@@ -485,7 +516,7 @@ void RenderBin::drawImplementation(osg::RenderInfo& renderInfo,RenderLeaf*& prev
     }
 
 
-    // osg::notify(osg::NOTICE)<<"end RenderBin::drawImplementation "<<className()<<std::endl;
+    // OSG_NOTICE<<"end RenderBin::drawImplementation "<<className()<<std::endl;
 }
 
 // stats
@@ -495,7 +526,7 @@ bool RenderBin::getStats(Statistics& stats) const
 
     // different by return type - collects the stats in this renderrBin
     bool statsCollected = false;
-
+    stats.addOrderedLeaves(_renderLeafList.size());
     // draw fine grained ordering.
     for(RenderLeafList::const_iterator dw_itr = _renderLeafList.begin();
         dw_itr != _renderLeafList.end();
@@ -504,6 +535,14 @@ bool RenderBin::getStats(Statistics& stats) const
         const RenderLeaf* rl = *dw_itr;
         const Drawable* dw= rl->getDrawable();
         stats.addDrawable(); // number of geosets
+        
+        const Geometry* geom = dw->asGeometry();
+        if (geom)
+        {
+            if (geom->areFastPathsUsed())
+                stats.addFastDrawable();
+        }
+
         if (rl->_modelview.get())
         {
             stats.addMatrix(); // number of matrices
@@ -516,7 +555,7 @@ bool RenderBin::getStats(Statistics& stats) const
         }
         statsCollected = true;
     }
-
+    stats.addStateGraphs(_stateGraphList.size());
     for(StateGraphList::const_iterator oitr=_stateGraphList.begin();
         oitr!=_stateGraphList.end();
         ++oitr)
@@ -529,6 +568,14 @@ bool RenderBin::getStats(Statistics& stats) const
             const RenderLeaf* rl = dw_itr->get();
             const Drawable* dw= rl->getDrawable();
             stats.addDrawable(); // number of geosets
+
+            const Geometry* geom = dw->asGeometry();
+            if (geom)
+            {
+                if (geom->areFastPathsUsed())
+                    stats.addFastDrawable();
+            }
+
             if (rl->_modelview.get()) stats.addMatrix(); // number of matrices
             if (dw)
             {

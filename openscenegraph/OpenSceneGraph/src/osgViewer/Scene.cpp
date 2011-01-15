@@ -17,8 +17,18 @@
 using namespace osgViewer;
 
 typedef std::vector< osg::observer_ptr<Scene> >  SceneCache;
-static OpenThreads::Mutex s_sceneCacheMutex;
-static SceneCache s_sceneCache;
+
+static SceneCache& getSceneCache()
+{
+    static SceneCache s_sceneCache;
+    return s_sceneCache;
+}
+
+static OpenThreads::Mutex& getSceneCacheMutex()
+{
+    static OpenThreads::Mutex s_sceneCacheMutex;
+    return s_sceneCacheMutex;
+}
 
 Scene::Scene():
     osg::Referenced(true)
@@ -26,21 +36,21 @@ Scene::Scene():
     setDatabasePager(osgDB::DatabasePager::create());
     setImagePager(new osgDB::ImagePager);
     
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_sceneCacheMutex);
-    s_sceneCache.push_back(this);
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(getSceneCacheMutex());
+    getSceneCache().push_back(this);
 }
 
 Scene::~Scene()
 {
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_sceneCacheMutex);
-    for(SceneCache::iterator itr = s_sceneCache.begin();
-        itr != s_sceneCache.end();
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(getSceneCacheMutex());
+    for(SceneCache::iterator itr = getSceneCache().begin();
+        itr != getSceneCache().end();
         ++itr)
     {
         Scene* scene = itr->get();
         if (scene==this)
         {
-            s_sceneCache.erase(itr);
+            getSceneCache().erase(itr);
             break;
         }
     }
@@ -49,12 +59,6 @@ Scene::~Scene()
 void Scene::setSceneData(osg::Node* node)
 {
     _sceneData = node;
-    
-    if (_databasePager.valid())
-    {    
-        // register any PagedLOD that need to be tracked in the scene graph
-        if (node) _databasePager->registerPagedLODs(node);
-    }
 }
 
 osg::Node* Scene::getSceneData()
@@ -81,12 +85,6 @@ void Scene::updateSceneGraph(osg::NodeVisitor& updateVisitor)
 {
     if (!_sceneData) return;
 
-    if (getSceneData())
-    {
-        updateVisitor.setImageRequestHandler(getImagePager());
-        getSceneData()->accept(updateVisitor);
-    }
-
     if (getDatabasePager())
     {
         // synchronize changes required by the DatabasePager thread to the scene graph
@@ -99,15 +97,19 @@ void Scene::updateSceneGraph(osg::NodeVisitor& updateVisitor)
         getImagePager()->updateSceneGraph(*(updateVisitor.getFrameStamp()));
     }
 
-
+    if (getSceneData())
+    {
+        updateVisitor.setImageRequestHandler(getImagePager());
+        getSceneData()->accept(updateVisitor);
+    }
 }
 
 
 Scene* Scene::getScene(osg::Node* node)
 {
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_sceneCacheMutex);
-    for(SceneCache::iterator itr = s_sceneCache.begin();
-        itr != s_sceneCache.end();
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(getSceneCacheMutex());
+    for(SceneCache::iterator itr = getSceneCache().begin();
+        itr != getSceneCache().end();
         ++itr)
     {
         Scene* scene = itr->get();

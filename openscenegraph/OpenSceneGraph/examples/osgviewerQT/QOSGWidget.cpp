@@ -91,6 +91,11 @@ class QOSGWidget : public QWidget
         osgViewer::GraphicsWindow* getGraphicsWindow() { return _gw.get(); }
         const osgViewer::GraphicsWindow* getGraphicsWindow() const { return _gw.get(); }
 
+#ifdef WIN32
+        // Prevent flicker on Windows Qt
+        QPaintEngine* paintEngine () const { return 0; }
+#endif
+
     protected:
 
         void init();
@@ -135,7 +140,7 @@ QOSGWidget::QOSGWidget( QWidget * parent, const char * name, WindowFlags f, bool
 
 void QOSGWidget::createContext()
 {
-    osg::DisplaySettings* ds = osg::DisplaySettings::instance();
+    osg::DisplaySettings* ds = osg::DisplaySettings::instance().get();
 
     osg::ref_ptr<osg::GraphicsContext::Traits> traits = new osg::GraphicsContext::Traits;
 

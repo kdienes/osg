@@ -22,6 +22,7 @@
 #include <osgDB/WriteFile>
 #include <osgDB/Registry>
 
+#include <osgGA/StateSetManipulator>
 #include <osgViewer/Viewer>
 #include <osgViewer/ViewerEventHandlers>
 
@@ -697,10 +698,14 @@ int main(int argc, char** argv)
         viewer.setSceneData(group);
     }
 
-#if 0
-    osgDB::writeNodeFile(*viewer.getSceneData(),"text.osg");
-#endif
+    std::string filename;
+    if (arguments.read("-o",filename))
+    {
+        osgDB::writeNodeFile(*viewer.getSceneData(),filename);
+        return 0;
+    }
 
+    viewer.addEventHandler( new osgGA::StateSetManipulator(viewer.getCamera()->getOrCreateStateSet()) );
     viewer.addEventHandler(new osgViewer::StatsHandler());
 
     viewer.run();
@@ -714,5 +719,7 @@ int main(int argc, char** argv)
             (*itr)->cancel();
         }
     }
+
+    return 0;
 }
 

@@ -428,6 +428,8 @@ class OSG_EXPORT InfinitePlane : public Shape, public Plane
         virtual ~InfinitePlane();
 };
 
+/** Exists to support collision detection engines not for doing rendering, use \ref osg::Geometry instead.
+ */
 class OSG_EXPORT TriangleMesh : public Shape
 {
     public:
@@ -505,7 +507,7 @@ class OSG_EXPORT HeightField : public Shape
         /** Get the FloatArray height data.*/
         osg::FloatArray* getFloatArray() { return _heights.get(); }
 
-        /** Get the const sFloatArray height data.*/
+        /** Get the const FloatArray height data.*/
         const osg::FloatArray* getFloatArray() const { return _heights.get(); }
 
         HeightList& getHeightList() { return _heights->asVector(); }
@@ -568,7 +570,7 @@ class OSG_EXPORT HeightField : public Shape
 
         unsigned int                    _columns,_rows;
 
-        osg::Vec3                       _origin;
+        osg::Vec3                       _origin; // _origin is the min value of the X and Y coordinates.
         float                           _dx;
         float                           _dy;
 

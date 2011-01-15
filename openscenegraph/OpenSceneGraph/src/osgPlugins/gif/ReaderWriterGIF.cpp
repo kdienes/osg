@@ -99,7 +99,7 @@ public:
         {
             while( isRunning() )
                 OpenThreads::Thread::YieldCurrentThread();
-            osg::notify(osg::DEBUG_INFO)<<"GifImageStream thread quitted"<<std::endl;
+            OSG_DEBUG<<"GifImageStream thread quitted"<<std::endl;
         }
     }
 
@@ -183,7 +183,7 @@ public:
     {
         if ( isRunning() )
         {
-            osg::notify(osg::WARN)<<"GifImageStream::addToImageStream: thread is running!"<<std::endl;
+            OSG_WARN<<"GifImageStream::addToImageStream: thread is running!"<<std::endl;
             return;
         }
 
@@ -546,6 +546,10 @@ GifImageStream** obj)
     }
     while (recordtype != TERMINATE_RECORD_TYPE);
 
+    // Delete the last allocated buffer to avoid memory leaks if we using GifImageStream
+    if ( obj && *obj )
+        delete [] buffer;
+
     delete [] rowdata;
     *width_ret = giffile->SWidth;
     *height_ret = giffile->SHeight;
@@ -588,7 +592,7 @@ class ReaderWriterGIF : public osgDB::ReaderWriter
             // Use GifImageStream to display animate GIFs 
             if ( gifStream )
             {
-                osg::notify(osg::DEBUG_INFO)<<"Using GifImageStream ..."<<std::endl;
+                OSG_DEBUG<<"Using GifImageStream ..."<<std::endl;
                 return gifStream;
             }
 
@@ -642,7 +646,7 @@ class ReaderWriterGIF : public osgDB::ReaderWriter
             std::string fileName = osgDB::findDataFile( file, options );
             if (fileName.empty()) return ReadResult::FILE_NOT_FOUND;
 
-            std::ifstream istream(fileName.c_str(), std::ios::in | std::ios::binary);
+            osgDB::ifstream istream(fileName.c_str(), std::ios::in | std::ios::binary);
             if(!istream) return ReadResult::FILE_NOT_HANDLED;
             ReadResult rr = readGIFStream(istream);
             if(rr.validImage()) rr.getImage()->setFileName(file);

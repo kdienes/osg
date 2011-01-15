@@ -24,6 +24,8 @@
 #include <set>
 #include <map> //GWM July 2005 map is used in constraints.
 #include <osgUtil/Tessellator> // tessellator triangulates the constrained triangles
+#include <stdlib.h>
+#include <iterator>
 
 namespace osgUtil
 {
@@ -295,7 +297,7 @@ public:
         osg::Vec2 vecca=osg::Vec2(cpt.x(), cpt.y())-osg::Vec2(apt.x(), apt.y());
         float cprodzba=vp2tp.x()*vecba.y() - vp2tp.y()*vecba.x();
         float cprodzca=vp2tp.x()*vecca.y() - vp2tp.y()*vecca.x();
-    //    osg::notify(osg::WARN) << "linebisect test " << " tri " << a_<<","<< b_<<","<< c_<<std::endl;
+    //    OSG_WARN << "linebisect test " << " tri " << a_<<","<< b_<<","<< c_<<std::endl;
         if (cprodzba*cprodzca<0)
         {
             // more tests - check dot products are at least partly parallel to test line.
@@ -379,7 +381,7 @@ bool Sample_point_compare(const osg::Vec3 &p1, const osg::Vec3 &p2)
     // errors can occur if the delaunay triangulation specifies 2 points at same XY and different Z
     if (p1.x() != p2.x()) return p1.x() < p2.x();
     if (p1.y() != p2.y()) return p1.y() < p2.y(); // GWM 30.06.05 - further rule if x coords are same.
-    osg::notify(osg::INFO) << "Two points are coincident at "<<p1.x() <<","<<p1.y() << std::endl;
+    OSG_INFO << "Two points are coincident at "<<p1.x() <<","<<p1.y() << std::endl;
     return p1.z() < p2.z(); // never get here unless 2 points coincide
 }
 
@@ -452,7 +454,7 @@ Triangle_list fillHole(osg::Vec3Array *points,    std::vector<unsigned int> vind
     
     for (std::vector<unsigned int>::iterator itint=vindexlist.begin(); itint!=vindexlist.end(); itint++)
     {
-    //    osg::notify(osg::WARN)<< "add point " << (*itint) << " at " << (*points)[*itint].x() << ","<< (*points)[*itint].y() <<std::endl;
+    //    OSG_WARN<< "add point " << (*itint) << " at " << (*points)[*itint].x() << ","<< (*points)[*itint].y() <<std::endl;
         constraintverts->push_back((*points)[*itint]);
     }
     
@@ -473,7 +475,7 @@ Triangle_list fillHole(osg::Vec3Array *points,    std::vector<unsigned int> vind
     {
         unsigned int ic;
         osg::PrimitiveSet* prset=gtess->getPrimitiveSet(ipr);
-        //                    osg::notify(osg::WARN)<< "gtess set " << ipr << " nprims " << prset->getNumPrimitives() <<
+        //                    OSG_WARN<< "gtess set " << ipr << " nprims " << prset->getNumPrimitives() <<
         //                        " type " << prset->getMode() << std::endl;
         unsigned int pidx,pidx1,pidx2;
         switch (prset->getMode()) {
@@ -513,7 +515,7 @@ Triangle_list fillHole(osg::Vec3Array *points,    std::vector<unsigned int> vind
                     pidx2=vindexlist[prset->index(ic+2)];
                 }
                 triangles.push_back(Triangle(pidx, pidx1, pidx2, points));
-                //                    osg::notify(osg::WARN)<< "vert " << prset->index(ic) << " in array"<<std::endl;
+                //                    OSG_WARN<< "vert " << prset->index(ic) << " in array"<<std::endl;
             }
             break;
         case osg::PrimitiveSet::TRIANGLE_STRIP: // 123, 234, 345...
@@ -558,7 +560,7 @@ Triangle_list fillHole(osg::Vec3Array *points,    std::vector<unsigned int> vind
                 {
                     triangles.push_back(Triangle(pidx1, pidx, pidx2, points));
                 }
-                //                    osg::notify(osg::WARN)<< "vert " << prset->index(ic) << " in array"<<std::endl;
+                //                    OSG_WARN<< "vert " << prset->index(ic) << " in array"<<std::endl;
             }
             break;
             
@@ -575,7 +577,7 @@ Triangle_list fillHole(osg::Vec3Array *points,    std::vector<unsigned int> vind
                 {
                     pidx=vindexlist[prset->index(0)];
                 }
-                //        osg::notify(osg::WARN)<< "tfan has " << prset->getNumIndices() << " indices"<<std::endl;
+                //        OSG_WARN<< "tfan has " << prset->getNumIndices() << " indices"<<std::endl;
                 for (ic=1; ic<prset->getNumIndices()-1; ic++)
                 {
                     if (prset->index(ic)>=npts)
@@ -603,13 +605,31 @@ Triangle_list fillHole(osg::Vec3Array *points,    std::vector<unsigned int> vind
             }
             break;
         default:
-            osg::notify(osg::WARN)<< "WARNING set " << ipr << " nprims " << prset->getNumPrimitives() <<
+            OSG_WARN<< "WARNING set " << ipr << " nprims " << prset->getNumPrimitives() <<
                 " type " << prset->getMode() << " Type not triangle, tfan or strip"<< std::endl;
             break;
         }
     }
     return triangles;
 }
+
+template <typename TVector>
+void removeIndices( TVector& elements, unsigned int index )
+{
+    typename TVector::iterator itr = elements.begin();
+    while ( itr != elements.end() )
+    {
+        if ( (*itr)==index )
+        { // remove entirely
+            itr = elements.erase(itr);
+        }
+        else
+        {
+            if ((*itr)>index) --(*itr); // move indices down 1
+            ++itr; // next index
+        }
+    }
+ }
 
 void DelaunayConstraint::removeVerticesInside(const DelaunayConstraint *dco)
 {    /** remove vertices from this which are internal to dco.
@@ -629,24 +649,20 @@ void DelaunayConstraint::removeVerticesInside(const DelaunayConstraint *dco)
                 for (unsigned int ipr=0; ipr<getNumPrimitiveSets(); ipr++)
                 {
                     osg::PrimitiveSet* prset=getPrimitiveSet(ipr);
-                    osg::DrawElementsUShort *dsup=dynamic_cast<osg::DrawElementsUShort *>(prset);
-                    if (dsup) {
-                        for (osg::DrawElementsUShort::iterator usitr=dsup->begin(); usitr!=dsup->end(); )
-                        {
-                            if ((*usitr)==idx)
-                            { // remove entirely
-                                usitr=dsup->erase(usitr);
-                            }
-                            else
-                            {
-                                if ((*usitr)>idx) (*usitr)--; // move indices down 1
-                                usitr++; // next index
-                            }
-                        }
-                    }
-                    else
+                    switch (prset->getType())
                     {
-                        osg::notify(osg::WARN) << "Invalid prset " <<ipr<< " tp " << prset->getType() << " types PrimitiveType,DrawArraysPrimitiveType=1 etc" << std::endl;
+                    case osg::PrimitiveSet::DrawElementsUBytePrimitiveType:
+                        removeIndices( *static_cast<osg::DrawElementsUByte *>(prset), idx );
+                        break;
+                    case osg::PrimitiveSet::DrawElementsUShortPrimitiveType:
+                        removeIndices( *static_cast<osg::DrawElementsUShort *>(prset), idx );
+                        break;
+                    case osg::PrimitiveSet::DrawElementsUIntPrimitiveType:
+                        removeIndices( *static_cast<osg::DrawElementsUInt *>(prset), idx );
+                        break;
+                    default:
+                        OSG_WARN << "Invalid prset " <<ipr<< " tp " << prset->getType() << " types PrimitiveType,DrawArraysPrimitiveType=1 etc" << std::endl;
+                        break;
                     }
                 }
                 vitr=vertices->erase(vitr);
@@ -759,7 +775,7 @@ bool DelaunayTriangulator::triangulate()
     // check validity of input array
     if (!points_.valid())
     {
-        osg::notify(osg::WARN) << "Warning: DelaunayTriangulator::triangulate(): invalid sample point array" << std::endl;
+        OSG_WARN << "Warning: DelaunayTriangulator::triangulate(): invalid sample point array" << std::endl;
         return false;
     }
 
@@ -767,7 +783,7 @@ bool DelaunayTriangulator::triangulate()
 
     if (points->size() < 1)
     {
-        osg::notify(osg::WARN) << "Warning: DelaunayTriangulator::triangulate(): too few sample points" << std::endl;
+        OSG_WARN << "Warning: DelaunayTriangulator::triangulate(): too few sample points" << std::endl;
         return false;
     }
 
@@ -799,16 +815,16 @@ bool DelaunayTriangulator::triangulate()
                 }
                 else
                 {
-                    osg::notify(osg::WARN) << "DelaunayTriangulator: ignore a duplicate point at "<< p1.x()<< " " << p1.y() << std::endl;;
+                    OSG_WARN << "DelaunayTriangulator: ignore a duplicate point at "<< p1.x()<< " " << p1.y() << std::endl;;
                 }
             }
         }
-    //    osg::notify(osg::WARN)<< "constraint size "<<vercon->size()<<" " <<nadded<< std::endl;
+    //    OSG_WARN<< "constraint size "<<vercon->size()<<" " <<nadded<< std::endl;
     }
         // GWM July 2005 end
 
     // pre-sort sample points
-    osg::notify(osg::INFO) << "DelaunayTriangulator: pre-sorting sample points\n";
+    OSG_INFO << "DelaunayTriangulator: pre-sorting sample points\n";
     std::sort(points->begin(), points->end(), Sample_point_compare);    
     // 24.12.06 add convex hull of points to force sensible outline.
     osg::ref_ptr<osgUtil::DelaunayConstraint> dcconvexhull=getconvexhull(points);
@@ -825,7 +841,7 @@ bool DelaunayTriangulator::triangulate()
     float miny = (*points)[0].y();
     float maxy = miny;
     
-    osg::notify(osg::INFO) << "DelaunayTriangulator: finding minimum and maximum Y values\n";
+    OSG_INFO << "DelaunayTriangulator: finding minimum and maximum Y values\n";
     osg::Vec3Array::const_iterator mmi;
     for (mmi=points->begin(); mmi!=points->end(); ++mmi)
     {
@@ -854,7 +870,7 @@ bool DelaunayTriangulator::triangulate()
     GLuint pidx = 0;
     osg::Vec3Array::const_iterator i;    
     
-    osg::notify(osg::INFO) << "DelaunayTriangulator: triangulating vertex grid (" << (points->size()-3) <<" points)\n";    
+    OSG_INFO << "DelaunayTriangulator: triangulating vertex grid (" << (points->size()-3) <<" points)\n";    
 
     for (i=points->begin(); i!=points->end(); ++i, ++pidx)
     {
@@ -925,7 +941,7 @@ bool DelaunayTriangulator::triangulate()
     // dec 2006 we used to remove supertriangle vertices here, but then we cant strictly use the supertriangle
     // vertices to find intersections of constraints with terrain, so moved to later.
 
-    osg::notify(osg::INFO) << "DelaunayTriangulator: finalizing and cleaning up structures\n";
+    OSG_INFO << "DelaunayTriangulator: finalizing and cleaning up structures\n";
 
      // rejoin the two triangle lists
     triangles.insert(triangles.begin(), discarded_tris.begin(), discarded_tris.end());
@@ -967,7 +983,7 @@ bool DelaunayTriangulator::triangulate()
                                 //check that the edge ip1-ip2 is not already part of the triangulation.
                                 if (titr->isedge(ip1,ip2)) edgused=true;
                                 if (titr->isedge(ip2,ip1)) edgused=true;
-                                //        if (edgused) osg::notify(osg::WARN) << "Edge used in triangle " << it << " " << 
+                                //        if (edgused) OSG_WARN << "Edge used in triangle " << it << " " << 
                                 //            titr->a()<<","<< titr->b()<<","<< titr->c()<<  std::endl;
                                 it++;
                             }
@@ -987,7 +1003,7 @@ bool DelaunayTriangulator::triangulate()
                                 for (titr=triangles.begin(); titr!=triangles.end(); )
                                 {
                                     int icut=titr->lineBisects(points_.get(),ip1,p2);
-                                    //    osg::notify(osg::WARN) << "Testing triangle " << ntr << " "<< ip1 << " ti " <<
+                                    //    OSG_WARN << "Testing triangle " << ntr << " "<< ip1 << " ti " <<
                                     //        titr->a()<< ","<<titr->b() <<"," <<titr->c() << std::endl;
                                     if (icut>0)
                                     {
@@ -995,7 +1011,7 @@ bool DelaunayTriangulator::triangulate()
                                         std::vector<unsigned int> edgeRight, edgeLeft; 
                                         edgeRight.push_back(ip1);
                                         edgeLeft.push_back(ip1);
-                                        //        osg::notify(osg::WARN) << "hole first " << edgeLeft.back()<<  " rt " << edgeRight.back()<< std::endl;
+                                        //        OSG_WARN << "hole first " << edgeLeft.back()<<  " rt " << edgeRight.back()<< std::endl;
                                         trisToDelete.push_back(&(*titr));
                                         // now find the unique triangle that shares the defined edge
                                         unsigned int e1, e2; // indices of ends of test triangle titr
@@ -1014,7 +1030,7 @@ bool DelaunayTriangulator::triangulate()
                                         }
                                         edgeRight.push_back(e2);
                                         edgeLeft.push_back(e1);
-                                        //        osg::notify(osg::WARN) << icut << "hole edges " << edgeLeft.back()<<  " rt " << edgeRight.back()<< std::endl;
+                                        //        OSG_WARN << icut << "hole edges " << edgeLeft.back()<<  " rt " << edgeRight.back()<< std::endl;
                                         const Triangle *tradj=getTriangleWithEdge(e2,e1, &triangles);
                                         if (tradj)
                                         {
@@ -1022,7 +1038,7 @@ bool DelaunayTriangulator::triangulate()
                                             {
                                                 trisToDelete.push_back(tradj);
                                                 icut=tradj->whichEdge(points_.get(),p1,p2,e1,e2);
-                                                //    osg::notify(osg::WARN)  << ntr << " cur triedge " << icut << " " << ip1 <<
+                                                //    OSG_WARN  << ntr << " cur triedge " << icut << " " << ip1 <<
                                                 //        " to " << ip2 << " tadj " << tradj->a()<< ","<<tradj->b() <<"," 
                                                 //        <<tradj->c() <<std::endl;
                                                 if        (icut==1) {e1=tradj->b(); e2=tradj->c();} // icut=1 implies vertex a is not involved
@@ -1033,12 +1049,16 @@ bool DelaunayTriangulator::triangulate()
                                                 } else if(edgeRight.back()!=e2 && edgeLeft.back()==e1 && e2!=ip2) {
                                                     edgeRight.push_back(e2);
                                                 } else {
-                                                    if (!tradj->usesVertex(ip2)) osg::notify(osg::WARN) << "tradj error " << tradj->a()<<  " , " << tradj->b()<<  " , " << tradj->c()<< std::endl;
+                                                    if (!tradj->usesVertex(ip2)) OSG_WARN << "tradj error " << tradj->a()<<  " , " << tradj->b()<<  " , " << tradj->c()<< std::endl;
                                                 }
+                                                const Triangle *previousTradj = tradj;
                                                 tradj=getTriangleWithEdge(e2,e1, &triangles);
+                                                if (tradj == previousTradj) {
+                                                    tradj = 0;
+                                                }
                                             }
                                             if (trisToDelete.size()>=900) {
-                                                osg::notify(osg::WARN) << " found " << trisToDelete.size() << " adjacent tris " <<std::endl;
+                                                OSG_WARN << " found " << trisToDelete.size() << " adjacent tris " <<std::endl;
                                             }
                                         }
 
@@ -1046,7 +1066,7 @@ bool DelaunayTriangulator::triangulate()
                                         edgeLeft.push_back(ip2);
                                         edgeRight.push_back(ip2);
                                         if (tradj) trisToDelete.push_back(tradj);
-                                        //        osg::notify(osg::WARN) << icut << "hole last " << edgeLeft.back()<<  " rt " << edgeRight.back()<< std::endl;
+                                        //        OSG_WARN << icut << "hole last " << edgeLeft.back()<<  " rt " << edgeRight.back()<< std::endl;
                                         Triangle_list constrainedtris=fillHole(points_.get(),edgeLeft);
                                         triangles.insert(triangles.begin(), constrainedtris.begin(), constrainedtris.end());
                                         constrainedtris=fillHole(points_.get(),edgeRight);
@@ -1118,7 +1138,7 @@ bool DelaunayTriangulator::triangulate()
     pt_indices.reserve(triangles.size() * 3);
 
     // build osg primitive
-    osg::notify(osg::INFO) << "DelaunayTriangulator: building primitive(s)\n";
+    OSG_INFO << "DelaunayTriangulator: building primitive(s)\n";
     Triangle_list::const_iterator ti;
     for (ti=triangles.begin(); ti!=triangles.end(); ++ti)
     {
@@ -1143,7 +1163,7 @@ bool DelaunayTriangulator::triangulate()
 
     prim_tris_ = new osg::DrawElementsUInt(GL_TRIANGLES, pt_indices.size(), &(pt_indices.front()));
 
-    osg::notify(osg::INFO) << "DelaunayTriangulator: process done, " << prim_tris_->getNumPrimitives() << " triangles remain\n";
+    OSG_INFO << "DelaunayTriangulator: process done, " << prim_tris_->getNumPrimitives() << " triangles remain\n";
     
     return true;
 }
@@ -1160,7 +1180,7 @@ void DelaunayTriangulator::removeInternalTriangles(DelaunayConstraint *dc )
         if( normals_.valid() )
             normitr = normals_->begin();
 
-        //        osg::notify(osg::WARN) << "DelaunayTriangulator: removeinternals, " << std::endl;
+        //        OSG_WARN << "DelaunayTriangulator: removeinternals, " << std::endl;
         for (osg::DrawElementsUInt::iterator triit=prim_tris_->begin(); triit!=prim_tris_->end(); )
         {
             // triangle joins points_[itr, itr+1, itr+2]
@@ -1168,7 +1188,7 @@ void DelaunayTriangulator::removeInternalTriangles(DelaunayConstraint *dc )
             if ( dc->contains(tritest.compute_centroid( points_.get()) ) )
             {
                 // centroid is inside the triangle, so IF inside linear, remove
-                // osg::notify(osg::WARN) << "DelaunayTriangulator: remove, " << (*triit) << "," << *(triit+1) <<","<<*(triit+2)<< std::endl;
+                // OSG_WARN << "DelaunayTriangulator: remove, " << (*triit) << "," << *(triit+1) <<","<<*(triit+2)<< std::endl;
                 dc->addtriangle((*triit), *(triit+1), *(triit+2));
                 triit=prim_tris_->erase(triit);
                 triit=prim_tris_->erase(triit);
@@ -1191,7 +1211,7 @@ void DelaunayTriangulator::removeInternalTriangles(DelaunayConstraint *dc )
             }
         }
 
-        osg::notify(osg::INFO) << "end of test dc, deleted " << ndel << std::endl;
+        OSG_INFO << "end of test dc, deleted " << ndel << std::endl;
     }
 }
 //=== DelaunayConstraint functions

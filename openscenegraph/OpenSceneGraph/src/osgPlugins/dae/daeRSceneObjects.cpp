@@ -25,10 +25,11 @@
 #include <osgSim/MultiSwitch>
 #include <osg/Sequence>
 #include <osg/CameraView>
+#include <osg/LightModel>
 
-using namespace osgdae;
+using namespace osgDAE;
 
-osg::Node* daeReader::processOsgMultiSwitch(domTechnique* teq)
+osg::Group* daeReader::processOsgMultiSwitch(domTechnique* teq)
 {
     osgSim::MultiSwitch* msw = new osgSim::MultiSwitch;
 
@@ -39,7 +40,7 @@ osg::Node* daeReader::processOsgMultiSwitch(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'ActiveSwitchSet' not found" << std::endl;
+        OSG_WARN << "Expected element 'ActiveSwitchSet' not found" << std::endl;
     }
     
     any = daeSafeCast<domAny>(teq->getChild("ValueLists"));
@@ -69,23 +70,23 @@ osg::Node* daeReader::processOsgMultiSwitch(domTechnique* teq)
                 }
                 else
                 {
-                    osg::notify(osg::WARN) << "Child of element 'ValueLists' is not of type 'ValueList'" << std::endl;
+                    OSG_WARN << "Child of element 'ValueLists' is not of type 'ValueList'" << std::endl;
                 }
             }
             else
             {
-                osg::notify(osg::WARN) << "Element 'ValueLists' does not contain expected elements." << std::endl;
+                OSG_WARN << "Element 'ValueLists' does not contain expected elements." << std::endl;
             }
         }
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'ValueLists' not found" << std::endl;
+        OSG_WARN << "Expected element 'ValueLists' not found" << std::endl;
     }
     return msw;
 }
 
-osg::Node* daeReader::processOsgSwitch(domTechnique* teq)
+osg::Group* daeReader::processOsgSwitch(domTechnique* teq)
 {
     osg::Switch* sw = new osg::Switch;
 
@@ -106,12 +107,12 @@ osg::Node* daeReader::processOsgSwitch(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'ValueList' not found" << std::endl;
+        OSG_WARN << "Expected element 'ValueList' not found" << std::endl;
     }
     return sw;
 }
 
-osg::Node* daeReader::processOsgSequence(domTechnique* teq)
+osg::Group* daeReader::processOsgSequence(domTechnique* teq)
 {
     osg::Sequence* sq = new osg::Sequence;
 
@@ -132,7 +133,7 @@ osg::Node* daeReader::processOsgSequence(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'FrameTime' not found" << std::endl;
+        OSG_WARN << "Expected element 'FrameTime' not found" << std::endl;
     }
 
     any = daeSafeCast< domAny >(teq->getChild("LastFrameTime"));
@@ -142,7 +143,7 @@ osg::Node* daeReader::processOsgSequence(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'LastFrameTime' not found" << std::endl;
+        OSG_WARN << "Expected element 'LastFrameTime' not found" << std::endl;
     }
 
     osg::Sequence::LoopMode loopmode = osg::Sequence::LOOP;
@@ -153,7 +154,7 @@ osg::Node* daeReader::processOsgSequence(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'LoopMode' not found" << std::endl;
+        OSG_WARN << "Expected element 'LoopMode' not found" << std::endl;
     }
     
     int begin=0;
@@ -164,7 +165,7 @@ osg::Node* daeReader::processOsgSequence(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'IntervalBegin' not found" << std::endl;
+        OSG_WARN << "Expected element 'IntervalBegin' not found" << std::endl;
     }
     
     int end=-1;
@@ -175,7 +176,7 @@ osg::Node* daeReader::processOsgSequence(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'IntervalEnd' not found" << std::endl;
+        OSG_WARN << "Expected element 'IntervalEnd' not found" << std::endl;
     }
 
     sq->setInterval(loopmode, begin, end);
@@ -188,7 +189,7 @@ osg::Node* daeReader::processOsgSequence(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'DurationSpeed' not found" << std::endl;
+        OSG_WARN << "Expected element 'DurationSpeed' not found" << std::endl;
     }
     
     int nreps = -1;
@@ -199,7 +200,7 @@ osg::Node* daeReader::processOsgSequence(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'DurationNReps' not found" << std::endl;
+        OSG_WARN << "Expected element 'DurationNReps' not found" << std::endl;
     }
 
     sq->setDuration(speed, nreps);
@@ -211,14 +212,14 @@ osg::Node* daeReader::processOsgSequence(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'SequenceMode' not found" << std::endl;
+        OSG_WARN << "Expected element 'SequenceMode' not found" << std::endl;
     }
 
     return sq;
 }
 
 
-osg::Node* daeReader::processOsgLOD(domTechnique* teq)
+osg::Group* daeReader::processOsgLOD(domTechnique* teq)
 {
     osg::LOD* lod = new osg::LOD;
 
@@ -236,7 +237,7 @@ osg::Node* daeReader::processOsgLOD(domTechnique* teq)
         }
         else
         {
-            osg::notify(osg::WARN) << "Expected element 'Radius' not found" << std::endl;
+            OSG_WARN << "Expected element 'Radius' not found" << std::endl;
         }
     }
 
@@ -247,7 +248,7 @@ osg::Node* daeReader::processOsgLOD(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'RangeMode' not found" << std::endl;
+        OSG_WARN << "Expected element 'RangeMode' not found" << std::endl;
     }
 
     any = daeSafeCast< domAny >(teq->getChild("RangeList"));
@@ -276,7 +277,7 @@ osg::Node* daeReader::processOsgLOD(domTechnique* teq)
                     }
                     else
                     {
-                        osg::notify(osg::WARN) << "'MinMax' does not contain a valid minimum value" << std::endl;
+                        OSG_WARN << "'MinMax' does not contain a valid minimum value" << std::endl;
                     }
 
                     if (iter != stringValues.end())
@@ -285,19 +286,19 @@ osg::Node* daeReader::processOsgLOD(domTechnique* teq)
                     }
                     else
                     {
-                        osg::notify(osg::WARN) << "'MinMax' does not contain a valid maximum value" << std::endl;
+                        OSG_WARN << "'MinMax' does not contain a valid maximum value" << std::endl;
                     }
 
                     rangelist.push_back(minMaxPair);
                 }
                 else
                 {
-                    osg::notify(osg::WARN) << "Child of element 'RangeList' is not of type 'MinMax'" << std::endl;
+                    OSG_WARN << "Child of element 'RangeList' is not of type 'MinMax'" << std::endl;
                 }
             }
             else
             {
-                osg::notify(osg::WARN) << "Element 'RangeList' does not contain expected elements." << std::endl;
+                OSG_WARN << "Element 'RangeList' does not contain expected elements." << std::endl;
             }
         }
 
@@ -305,7 +306,7 @@ osg::Node* daeReader::processOsgLOD(domTechnique* teq)
     }
     else
     {
-        osg::notify(osg::WARN) << "Expected element 'RangeList' not found" << std::endl;
+        OSG_WARN << "Expected element 'RangeList' not found" << std::endl;
     }
 
     return lod;
@@ -322,7 +323,10 @@ osg::Node* daeReader::processOsgLOD(domTechnique* teq)
 // 0..* <extra>
 osg::Node* daeReader::processLight( domLight *dlight )
 {
-    osg::Node *node = new osg::Switch();
+    if (_numlights >= 7)
+    {
+        OSG_WARN << "More than 8 lights may not be supported by OpenGL driver." << std::endl;
+    }
 
     //do light processing here.
     domLight::domTechnique_common::domAmbient *ambient;
@@ -331,19 +335,30 @@ osg::Node* daeReader::processLight( domLight *dlight )
     domLight::domTechnique_common::domSpot *spot;
 
     if ( dlight->getTechnique_common() == NULL || 
-        dlight->getTechnique_common()->getContents().getCount() == 0 )
+         dlight->getTechnique_common()->getContents().getCount() == 0 )
     {
-        osg::notify( osg::WARN ) << "Invalid content for light" << std::endl;
+        OSG_WARN << "Invalid content for light" << std::endl;
         return NULL;
     }
 
     osg::Light* light = new osg::Light();
+    light->setPosition(osg::Vec4(0,0,0,1));
+    light->setLightNum(_numlights);
+
+    // Enable OpenGL lighting
+    _rootStateSet->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+    // Enable this OpenGL light
+    _rootStateSet->setMode(GL_LIGHT0 + _numlights++, osg::StateAttribute::ON);
+    
+    // Set ambient of lightmodel to zero
+    // Ambient lights are added as separate lights with only an ambient term
+    osg::LightModel* lightmodel = new osg::LightModel;
+    lightmodel->setAmbientIntensity(osg::Vec4(0.0f,0.0f,0.0f,1.0f));
+    _rootStateSet->setAttributeAndModes(lightmodel, osg::StateAttribute::ON); 
 
     osg::LightSource* lightsource = new osg::LightSource();
-
-    lightsource->setLight( light );
-    light->setPosition(osg::Vec4(0,0,0,1));
-    light->setLightNum( m_numlights );
+    lightsource->setLight(light);
+    lightsource->setName(dlight->getId());
 
     daeElement *el = dlight->getTechnique_common()->getContents()[0];
     ambient = daeSafeCast< domLight::domTechnique_common::domAmbient >( el );
@@ -354,37 +369,53 @@ osg::Node* daeReader::processLight( domLight *dlight )
     {
         if ( ambient->getColor() == NULL ) 
         {
-            osg::notify( osg::WARN ) << "Invalid content for ambient light" << std::endl;
+            OSG_WARN << "Invalid content for ambient light" << std::endl;
             return NULL;
         }
-        light->setAmbient( osg::Vec4( ambient->getColor()->getValue()[0], ambient->getColor()->getValue()[1], 
-            ambient->getColor()->getValue()[2], 1.0f ) );
+
+        light->setAmbient(    osg::Vec4(    ambient->getColor()->getValue()[0],
+                                        ambient->getColor()->getValue()[1], 
+                                        ambient->getColor()->getValue()[2], 1.0f ) );
+        light->setDiffuse(    osg::Vec4(    0, 0, 0, 0));
+        light->setSpecular(    osg::Vec4(    0, 0, 0, 0));
+        
+        // Tell OpenGL to make it a directional light (w=0)
+        light->setPosition(    osg::Vec4(0,0,0,0));
     }
     else if ( directional != NULL )
     {
         if ( directional->getColor() == NULL ) 
         {
-            osg::notify( osg::WARN ) << "Invalid content for ambient light" << std::endl;
+            OSG_WARN << "Invalid content for directional light" << std::endl;
             return NULL;
         }
-        light->setDiffuse( osg::Vec4( directional->getColor()->getValue()[0], directional->getColor()->getValue()[1], 
-            directional->getColor()->getValue()[2], 1.0f ) );
-        light->setSpecular( osg::Vec4( directional->getColor()->getValue()[0], directional->getColor()->getValue()[1], 
-            directional->getColor()->getValue()[2], 1.0f ) );
+        light->setAmbient(    osg::Vec4(    0, 0, 0, 0));
+        light->setDiffuse(    osg::Vec4(    directional->getColor()->getValue()[0], 
+                                        directional->getColor()->getValue()[1], 
+                                        directional->getColor()->getValue()[2], 1.0f ) );
+        light->setSpecular( osg::Vec4(    directional->getColor()->getValue()[0],
+                                        directional->getColor()->getValue()[1], 
+                                        directional->getColor()->getValue()[2], 1.0f ) );
         
-        light->setDirection( osg::Vec3( 0, 0, -1 ) );
+        light->setDirection(osg::Vec3(0,0,-1));
+
+        // Tell OpenGL it is a directional light (w=0)
+        light->setPosition(    osg::Vec4(0,0,1,0));
     }
     else if ( point != NULL )
     {
         if ( point->getColor() == NULL ) 
         {
-            osg::notify( osg::WARN ) << "Invalid content for ambient light" << std::endl;
+            OSG_WARN << "Invalid content for point light" << std::endl;
             return NULL;
         }
-        light->setDiffuse( osg::Vec4( point->getColor()->getValue()[0], point->getColor()->getValue()[1], 
-            point->getColor()->getValue()[2], 1.0f ) );
-        light->setSpecular( osg::Vec4( point->getColor()->getValue()[0], point->getColor()->getValue()[1], 
-            point->getColor()->getValue()[2], 1.0f ) );
+        light->setAmbient(    osg::Vec4(    0, 0, 0, 0));
+        light->setDiffuse(    osg::Vec4(    point->getColor()->getValue()[0], 
+                                        point->getColor()->getValue()[1], 
+                                        point->getColor()->getValue()[2], 1.0f ) );
+        light->setSpecular( osg::Vec4(    point->getColor()->getValue()[0], 
+                                        point->getColor()->getValue()[1], 
+                                        point->getColor()->getValue()[2], 1.0f ) );
 
         if ( point->getConstant_attenuation() != NULL )
         {
@@ -411,18 +442,23 @@ osg::Node* daeReader::processLight( domLight *dlight )
             light->setQuadraticAttenuation( 0.0 );
         }
 
+        // Tell OpenGL this is an omni directional light
+        light->setDirection(osg::Vec3(0, 0, 0));
     }
     else if ( spot != NULL )
     {
         if ( spot->getColor() == NULL ) 
         {
-            osg::notify( osg::WARN ) << "Invalid content for ambient light" << std::endl;
+            OSG_WARN << "Invalid content for spot light" << std::endl;
             return NULL;
         }
-        light->setDiffuse( osg::Vec4( spot->getColor()->getValue()[0], spot->getColor()->getValue()[1], 
-            spot->getColor()->getValue()[2], 1.0f ) );
-        light->setSpecular( osg::Vec4( spot->getColor()->getValue()[0], spot->getColor()->getValue()[1], 
-            spot->getColor()->getValue()[2], 1.0f ) );
+        light->setAmbient(    osg::Vec4(    0, 0, 0, 0));
+        light->setDiffuse(    osg::Vec4(    spot->getColor()->getValue()[0], 
+                                        spot->getColor()->getValue()[1], 
+                                        spot->getColor()->getValue()[2], 1.0f ) );
+        light->setSpecular( osg::Vec4(    spot->getColor()->getValue()[0], 
+                                        spot->getColor()->getValue()[1], 
+                                        spot->getColor()->getValue()[2], 1.0f ) );
 
         if ( spot->getConstant_attenuation() != NULL )
         {
@@ -448,35 +484,35 @@ osg::Node* daeReader::processLight( domLight *dlight )
         {
             light->setQuadraticAttenuation( 0.0f );
         }
-
+        // OpenGL range [0, 90] (degrees) or 180 (omni)
         if ( spot->getFalloff_angle() != NULL )
         {
-            light->setSpotCutoff( spot->getFalloff_angle()->getValue() );
+            float falloffAngle = spot->getFalloff_angle()->getValue();
+            if (falloffAngle != 180)
+            {
+                falloffAngle = osg::clampTo<float>(falloffAngle, 0, 90);
+            }
+            light->setSpotCutoff(falloffAngle);
         }
         else
         {
             light->setSpotCutoff( 180.0f );
         }
-
+        // OpenGL range [0, 128], where 0 means hard edge, and 128 means soft edge
         if ( spot->getFalloff_exponent() != NULL )
         {
-            light->setSpotExponent( spot->getFalloff_exponent()->getValue() );
+            float falloffExponent = spot->getFalloff_exponent()->getValue();
+            falloffExponent = osg::clampTo<float>(falloffExponent, 0, 128);
+            light->setSpotExponent(falloffExponent);
         }
         else
         {
             light->setSpotExponent( 0.0f );
         }
-
+        light->setDirection(osg::Vec3(0, 0, -1));
     }
 
-    osg::Switch* svitch = static_cast<osg::Switch*>(node);
-
-    // Switched of by default to avoid excessively large scene bound
-    svitch->addChild(lightsource,false);
-
-    m_numlights++;
-
-    return node;
+    return lightsource;
 }
 
 // <camera>
@@ -521,7 +557,7 @@ osg::Node* daeReader::processCamera( domCamera * dcamera )
                 
                 if (pAspectRatio)
                 {
-                    osg::notify(osg::WARN) << "Unexpected <aspectratio> in <camera> '" << dcamera->getId() << "'" << std::endl;
+                    OSG_WARN << "Unexpected <aspectratio> in <camera> '" << dcamera->getId() << "'" << std::endl;
                 }
             }
             else if (pAspectRatio)
@@ -555,7 +591,7 @@ osg::Node* daeReader::processCamera( domCamera * dcamera )
         else
         {
             // xfov or yfov expected
-            osg::notify(osg::WARN) << "Expected <xfov> or <yfov> in <camera> '" << dcamera->getId() << "'" << std::endl;
+            OSG_WARN << "Expected <xfov> or <yfov> in <camera> '" << dcamera->getId() << "'" << std::endl;
         }
 
         //domTargetableFloat *pZnear = daeSafeCast< domTargetableFloat >(pDomPerspective->getZnear());
@@ -575,7 +611,7 @@ osg::Node* daeReader::processCamera( domCamera * dcamera )
         //domTargetableFloat *pAspectRatio = daeSafeCast< domTargetableFloat >(pDomOrthographic->getAspect_ratio());
 
         // TODO The current osg::CameraView does not support an orthographic view
-        osg::notify(osg::WARN) << "Orthographic in <camera> '" << dcamera->getId() << "' not supported" << std::endl;
+        OSG_WARN << "Orthographic in <camera> '" << dcamera->getId() << "' not supported" << std::endl;
 
         //domTargetableFloat *pZnear = daeSafeCast< domTargetableFloat >(pDomOrthographic->getZnear());
         //domTargetableFloat *pZfar = daeSafeCast< domTargetableFloat >(pDomOrthographic->getZfar());    

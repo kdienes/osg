@@ -15,7 +15,6 @@
 #include <osg/Image>
 #include <osg/State>
 #include <osg/TextureCubeMap>
-#include <osg/ImageSequence>
 #include <osg/Notify>
 
 #include <osg/GLU>
@@ -74,7 +73,7 @@ TextureCubeMap::~TextureCubeMap()
 int TextureCubeMap::compare(const StateAttribute& sa) const
 {
     // check the types are equal and then create the rhs variable
-    // used by the COMPARE_StateAttribute_Paramter macro's below.
+    // used by the COMPARE_StateAttribute_Parameter macros below.
     COMPARE_StateAttribute_Types(TextureCubeMap,sa)
 
     bool noImages = true;
@@ -118,12 +117,12 @@ int TextureCubeMap::compare(const StateAttribute& sa) const
     int result = compareTexture(rhs);
     if (result!=0) return result;
 
-    // compare each paramter in turn against the rhs.
+    // compare each parameter in turn against the rhs.
     COMPARE_StateAttribute_Parameter(_textureWidth)
     COMPARE_StateAttribute_Parameter(_textureHeight)
     COMPARE_StateAttribute_Parameter(_subloadCallback)
 
-    return 0; // passed all the above comparison macro's, must be equal.
+    return 0; // passed all the above comparison macros, must be equal.
 }
 
 
@@ -131,36 +130,34 @@ void TextureCubeMap::setImage( unsigned int face, Image* image)
 {
     if (_images[face] == image) return;
 
-    unsigned numImageSequencesBefore = 0;
+    unsigned numImageRequireUpdateBefore = 0;
     for (unsigned int i=0; i<getNumImages(); ++i)
     {
-        osg::ImageSequence* is = dynamic_cast<osg::ImageSequence*>(_images[i].get());
-        if (is) ++numImageSequencesBefore;
+        if (_images[i].valid() && _images[i]->requiresUpdateCall()) ++numImageRequireUpdateBefore;
     }
 
     _images[face] = image;
     _modifiedCount[face].setAllElementsTo(0);
 
 
-    // find out if we need to reset the update callback to handle the animation of ImageSequence
-    unsigned numImageSequencesAfter = 0;
+    // find out if we need to reset the update callback to handle the animation of image
+    unsigned numImageRequireUpdateAfter = 0;
     for (unsigned int i=0; i<getNumImages(); ++i)
     {
-        osg::ImageSequence* is = dynamic_cast<osg::ImageSequence*>(_images[i].get());
-        if (is) ++numImageSequencesAfter;
+        if (_images[i].valid() && _images[i]->requiresUpdateCall()) ++numImageRequireUpdateAfter;
     }
 
-    if (numImageSequencesBefore>0)
+    if (numImageRequireUpdateBefore>0)
     {
-        if (numImageSequencesAfter==0)
+        if (numImageRequireUpdateAfter==0)
         {
             setUpdateCallback(0);
             setDataVariance(osg::Object::STATIC);
         }
     }
-    else if (numImageSequencesAfter>0)
+    else if (numImageRequireUpdateAfter>0)
     {
-        setUpdateCallback(new ImageSequence::UpdateCallback());
+        setUpdateCallback(new Image::UpdateCallback());
         setDataVariance(osg::Object::DYNAMIC);
     }
 }
@@ -196,6 +193,11 @@ void TextureCubeMap::apply(State& state) const
     // get the contextID (user defined ID of 0 upwards) for the 
     // current OpenGL context.
     const unsigned int contextID = state.getContextID();
+
+    Texture::TextureObjectManager* tom = Texture::getTextureObjectManager(contextID).get();
+    ElapsedTime elapsedTime(&(tom->getApplyTime()));
+    tom->getNumberApplied()++;
+
     const Extensions* extensions = getExtensions(contextID,true);
 
     if (!extensions->isCubeMapSupported())
@@ -204,7 +206,29 @@ void TextureCubeMap::apply(State& state) const
     // get the texture object for the current contextID.
     TextureObject* textureObject = getTextureObject(contextID);
 
-    if (textureObject != 0)
+    if (textureObject)
+    {
+        const osg::Image* image = _images[0].get();
+        if (image && getModifiedCount(0, contextID) != image->getModifiedCount())
+        {
+            // compute the internal texture format, this set the _internalFormat to an appropriate value.
+            computeInternalFormat();
+
+            GLsizei new_width, new_height, new_numMipmapLevels;
+
+            // compute the dimensions of the texture.
+            computeRequiredTextureDimensions(state, *image, new_width, new_height, new_numMipmapLevels);
+
+            if (!textureObject->match(GL_TEXTURE_CUBE_MAP, new_numMipmapLevels, _internalFormat, new_width, new_height, 1, _borderWidth))
+            {
+                Texture::releaseTextureObject(contextID, _textureObjectBuffer[contextID].get());
+                _textureObjectBuffer[contextID] = 0;
+                textureObject = 0;
+            }
+        }
+    }
+
+    if (textureObject)
     {
         textureObject->bind();
 
@@ -230,7 +254,7 @@ void TextureCubeMap::apply(State& state) const
     }
     else if (_subloadCallback.valid())
     {
-        _textureObjectBuffer[contextID] = textureObject = generateTextureObject(contextID,GL_TEXTURE_CUBE_MAP);
+        _textureObjectBuffer[contextID] = textureObject = generateTextureObject(this, contextID,GL_TEXTURE_CUBE_MAP);
 
         textureObject->bind();
 
@@ -261,7 +285,7 @@ void TextureCubeMap::apply(State& state) const
         }
 
         textureObject = generateTextureObject(
-                contextID,GL_TEXTURE_CUBE_MAP,_numMipmapLevels,_internalFormat,_textureWidth,_textureHeight,1,0);
+                this, contextID,GL_TEXTURE_CUBE_MAP,_numMipmapLevels,_internalFormat,_textureWidth,_textureHeight,1,0);
         
         textureObject->bind();
 
@@ -288,14 +312,15 @@ void TextureCubeMap::apply(State& state) const
 
         _textureObjectBuffer[contextID] = textureObject;
 
-        if (_unrefImageDataAfterApply && areAllTextureObjectsLoaded())
+        // unref image data?
+        if (isSafeToUnrefImageData(state))
         {
             TextureCubeMap* non_const_this = const_cast<TextureCubeMap*>(this);
             for (int n=0; n<6; n++)
             {                
                 if (_images[n].valid() && _images[n]->getDataVariance()==STATIC)
                 {
-                    non_const_this->_images[n] = 0;
+                    non_const_this->_images[n] = NULL;
                 }
             }
         }
@@ -304,7 +329,7 @@ void TextureCubeMap::apply(State& state) const
     else if ( (_textureWidth!=0) && (_textureHeight!=0) && (_internalFormat!=0) )
     {
         _textureObjectBuffer[contextID] = textureObject = generateTextureObject(
-                contextID,GL_TEXTURE_CUBE_MAP,_numMipmapLevels,_internalFormat,_textureWidth,_textureHeight,1,0);
+                this, contextID,GL_TEXTURE_CUBE_MAP,_numMipmapLevels,_internalFormat,_textureWidth,_textureHeight,1,0);
         
         textureObject->bind();
 
@@ -360,7 +385,7 @@ void TextureCubeMap::copyTexSubImageCubeMap(State& state, int face, int xoffset,
         if (!textureObject)
         {
             // failed to create texture object
-            osg::notify(osg::NOTICE)<<"Warning : failed to create TextureCubeMap texture obeject, copyTexSubImageCubeMap abondoned."<<std::endl;
+            OSG_NOTICE<<"Warning : failed to create TextureCubeMap texture obeject, copyTexSubImageCubeMap abondoned."<<std::endl;
             return;
         }
         
@@ -384,7 +409,7 @@ void TextureCubeMap::copyTexSubImageCubeMap(State& state, int face, int xoffset,
             if (!hardwareMipMapOn)
             {
                 // have to switch off mip mapping
-                notify(NOTICE)<<"Warning: TextureCubeMap::copyTexImage2D(,,,,) switch off mip mapping as hardware support not available."<<std::endl;
+                OSG_NOTICE<<"Warning: TextureCubeMap::copyTexImage2D(,,,,) switch off mip mapping as hardware support not available."<<std::endl;
                 _min_filter = LINEAR;
             }
         }
@@ -479,7 +504,8 @@ void TextureCubeMap::Extensions::lowestCommonDenominator(const Extensions& rhs)
 
 void TextureCubeMap::Extensions::setupGLExtensions(unsigned int contextID)
 {
-    _isCubeMapSupported = isGLExtensionSupported(contextID,"GL_ARB_texture_cube_map") ||
+    _isCubeMapSupported = OSG_GLES2_FEATURES || OSG_GL3_FEATURES ||
+                          isGLExtensionSupported(contextID,"GL_ARB_texture_cube_map") ||
                           isGLExtensionSupported(contextID,"GL_EXT_texture_cube_map") ||
                           strncmp((const char*)glGetString(GL_VERSION),"1.3",3)>=0;;
 }

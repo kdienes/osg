@@ -12,6 +12,7 @@
 */
 #include <osg/Material>
 #include <osg/BoundsChecking>
+#include <osg/Notify>
 
 using namespace osg;
 
@@ -91,7 +92,7 @@ void Material::setAmbient(Face face, const Vec4& ambient )
             _ambientBack = _ambientFront;
             break;
         default:
-            notify(NOTICE)<<"Notice: invalid Face passed to Material::setAmbient()."<<std::endl;
+            OSG_NOTICE<<"Notice: invalid Face passed to Material::setAmbient()."<<std::endl;
     }
 }
 
@@ -107,12 +108,12 @@ const Vec4& Material::getAmbient(Face face) const
         case(FRONT_AND_BACK):
             if (!_ambientFrontAndBack)
             {
-                notify(NOTICE)<<"Notice: Material::getAmbient(FRONT_AND_BACK) called on material "<< std::endl;
-                notify(NOTICE)<<"        with separate FRONT and BACK ambient colors."<< std::endl;
+                OSG_NOTICE<<"Notice: Material::getAmbient(FRONT_AND_BACK) called on material "<< std::endl;
+                OSG_NOTICE<<"        with separate FRONT and BACK ambient colors."<< std::endl;
             }
             return _ambientFront;
     }
-    notify(NOTICE)<<"Notice: invalid Face passed to Material::getAmbient()."<< std::endl;
+    OSG_NOTICE<<"Notice: invalid Face passed to Material::getAmbient()."<< std::endl;
     return _ambientFront;
 }
 
@@ -138,7 +139,7 @@ void Material::setDiffuse(Face face, const Vec4& diffuse )
             _diffuseBack = _diffuseFront;
             break;
         default:
-            notify(NOTICE)<<"Notice: invalid Face passed to Material::setDiffuse()."<< std::endl;
+            OSG_NOTICE<<"Notice: invalid Face passed to Material::setDiffuse()."<< std::endl;
             break;
     }
 }
@@ -155,12 +156,12 @@ const Vec4& Material::getDiffuse(Face face) const
         case(FRONT_AND_BACK):
             if (!_diffuseFrontAndBack)
             {
-                notify(NOTICE)<<"Notice: Material::getDiffuse(FRONT_AND_BACK) called on material "<< std::endl;
-                notify(NOTICE)<<"        with separate FRONT and BACK diffuse colors."<< std::endl;
+                OSG_NOTICE<<"Notice: Material::getDiffuse(FRONT_AND_BACK) called on material "<< std::endl;
+                OSG_NOTICE<<"        with separate FRONT and BACK diffuse colors."<< std::endl;
             }
             return _diffuseFront;
     }
-    notify(NOTICE)<<"Notice: invalid Face passed to Material::getDiffuse()."<< std::endl;
+    OSG_NOTICE<<"Notice: invalid Face passed to Material::getDiffuse()."<< std::endl;
     return _diffuseFront;
 }
 
@@ -186,7 +187,7 @@ void Material::setSpecular(Face face, const Vec4& specular )
             _specularBack = _specularFront;
             break;
         default:
-            notify(NOTICE)<<"Notice: invalid Face passed to Material::setSpecular()."<< std::endl;
+            OSG_NOTICE<<"Notice: invalid Face passed to Material::setSpecular()."<< std::endl;
             break;
     }
 }
@@ -203,12 +204,12 @@ const Vec4& Material::getSpecular(Face face) const
         case(FRONT_AND_BACK):
             if (!_specularFrontAndBack)
             {
-                notify(NOTICE)<<"Notice: Material::getSpecular(FRONT_AND_BACK) called on material "<< std::endl;
-                notify(NOTICE)<<"        with separate FRONT and BACK specular colors."<< std::endl;
+                OSG_NOTICE<<"Notice: Material::getSpecular(FRONT_AND_BACK) called on material "<< std::endl;
+                OSG_NOTICE<<"        with separate FRONT and BACK specular colors."<< std::endl;
             }
             return _specularFront;
     }
-    notify(NOTICE)<<"Notice: invalid Face passed to Material::getSpecular()."<< std::endl;
+    OSG_NOTICE<<"Notice: invalid Face passed to Material::getSpecular()."<< std::endl;
     return _specularFront;
 }
 
@@ -234,7 +235,7 @@ void Material::setEmission(Face face, const Vec4& emission )
             _emissionBack = _emissionFront;
             break;
         default:
-            notify(NOTICE)<<"Notice: invalid Face passed to Material::setEmission()."<< std::endl;
+            OSG_NOTICE<<"Notice: invalid Face passed to Material::setEmission()."<< std::endl;
             break;
     }
 }
@@ -251,12 +252,12 @@ const Vec4& Material::getEmission(Face face) const
         case(FRONT_AND_BACK):
             if (!_emissionFrontAndBack)
             {
-                notify(NOTICE)<<"Notice: Material::getEmission(FRONT_AND_BACK) called on material "<< std::endl;
-                notify(NOTICE)<<"        with separate FRONT and BACK emission colors."<< std::endl;
+                OSG_NOTICE<<"Notice: Material::getEmission(FRONT_AND_BACK) called on material "<< std::endl;
+                OSG_NOTICE<<"        with separate FRONT and BACK emission colors."<< std::endl;
             }
             return _emissionFront;
     }
-    notify(NOTICE)<<"Notice: invalid Face passed to Material::getEmission()."<< std::endl;
+    OSG_NOTICE<<"Notice: invalid Face passed to Material::getEmission()."<< std::endl;
     return _emissionFront;
 }
 
@@ -281,7 +282,7 @@ void Material::setShininess(Face face, float shininess )
             _shininessBack = shininess;
             break;
         default:
-            notify(NOTICE)<<"Notice: invalid Face passed to Material::setShininess()."<< std::endl;
+            OSG_NOTICE<<"Notice: invalid Face passed to Material::setShininess()."<< std::endl;
             break;
     }
 }
@@ -298,12 +299,12 @@ float Material::getShininess(Face face) const
         case(FRONT_AND_BACK):
             if (!_shininessFrontAndBack)
             {
-                notify(NOTICE)<<"Notice: Material::getShininess(FRONT_AND_BACK) called on material "<< std::endl;
-                notify(NOTICE)<<"        with separate FRONT and BACK shininess colors."<< std::endl;
+                OSG_NOTICE<<"Notice: Material::getShininess(FRONT_AND_BACK) called on material "<< std::endl;
+                OSG_NOTICE<<"        with separate FRONT and BACK shininess colors."<< std::endl;
             }
             return _shininessFront;
     }
-    notify(NOTICE)<<"Notice: invalid Face passed to Material::getShininess()."<< std::endl;
+    OSG_NOTICE<<"Notice: invalid Face passed to Material::getShininess()."<< std::endl;
     return _shininessFront;
 }
 
@@ -351,9 +352,13 @@ void Material::setAlpha(Face face,float alpha)
 
 void Material::apply(State&) const
 {
+#ifdef OSG_GL_FIXED_FUNCTION_AVAILABLE
+
+#ifdef OSG_GL1_AVAILABLE
     if (_colorMode==OFF)
     {
         glDisable(GL_COLOR_MATERIAL);
+
         glColor4fv(_diffuseFront.ptr());
     }
     else
@@ -370,6 +375,7 @@ void Material::apply(State&) const
             case(OFF): break;
         }
     }
+#endif
 
     if (_colorMode!=AMBIENT && _colorMode!=AMBIENT_AND_DIFFUSE)
     {
@@ -432,5 +438,7 @@ void Material::apply(State&) const
         glMaterialf( GL_FRONT, GL_SHININESS, _shininessFront );
         glMaterialf( GL_BACK, GL_SHININESS, _shininessBack );
     }
-
+#else
+    OSG_NOTICE<<"Warning: Material::apply(State&) - not supported."<<std::endl;
+#endif
 }

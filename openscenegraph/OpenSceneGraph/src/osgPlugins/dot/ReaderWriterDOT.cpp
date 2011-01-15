@@ -21,7 +21,12 @@ class ReaderWriterDOT : public osgDB::ReaderWriter {
     virtual bool acceptsExtension(const std::string& extension) const { return osgDB::equalCaseInsensitive(extension,"dot"); }
 
     virtual WriteResult writeNode(const osg::Node& node,const std::string& fileName,const Options* options = NULL) const { 
-      std::ofstream o( fileName.c_str(), std::ios_base::out );
+      std::string ext = osgDB::getFileExtension(fileName);
+      if (!acceptsExtension(ext)) {
+        return WriteResult::FILE_NOT_HANDLED;
+      }
+
+      osgDB::ofstream o( fileName.c_str(), std::ios_base::out );
       if ( o ) {
         return writeNode( node, o, options );
       }
@@ -29,8 +34,10 @@ class ReaderWriterDOT : public osgDB::ReaderWriter {
       return WriteResult(WriteResult::ERROR_IN_WRITING_FILE);
     }
     
-    virtual WriteResult writeNode(const osg::Node& node,std::ostream& fout,const Options* options = NULL) const {
+    virtual WriteResult writeNode(const osg::Node& node,std::ostream& fout,const Options* options = NULL) const
+    {
       osgDot::SimpleDotVisitor sdv;
+      sdv.setOptions(options);
       sdv.run( *const_cast<osg::Node*>( &node ), &fout );
       return WriteResult(WriteResult::FILE_SAVED);
     }

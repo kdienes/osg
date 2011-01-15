@@ -108,10 +108,22 @@
 #define GL_MULTISAMPLE_COVERAGE_MODES_NV        0x8E12
 #endif
 
+#ifndef GL_DEPTH_COMPONENT
+#define GL_DEPTH_COMPONENT              0x1902
+#endif
+
 #ifndef GL_VERSION_1_4
 #define GL_DEPTH_COMPONENT16              0x81A5
 #define GL_DEPTH_COMPONENT24              0x81A6
 #define GL_DEPTH_COMPONENT32              0x81A7
+#endif
+
+#ifndef GL_DEPTH_COMPONENT32F
+#define GL_DEPTH_COMPONENT32F             0x8CAC
+#endif
+
+#ifndef GL_DEPTH_COMPONENT32F_NV
+#define GL_DEPTH_COMPONENT32F_NV          0x8DAB
 #endif
 
 #ifndef GL_EXT_packed_depth_stencil
@@ -132,46 +144,50 @@ namespace osg
     class OSG_EXPORT FBOExtensions : public osg::Referenced
     {
     public:
-        typedef void APIENTRY TglBindRenderbufferEXT(GLenum, GLuint);
-        typedef void APIENTRY TglDeleteRenderbuffersEXT(GLsizei n, const GLuint *renderbuffers);
-        typedef void APIENTRY TglGenRenderbuffersEXT(GLsizei, GLuint *);
-        typedef void APIENTRY TglRenderbufferStorageEXT(GLenum, GLenum, GLsizei, GLsizei);
-        typedef void APIENTRY TglRenderbufferStorageMultisampleEXT(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
-        typedef void APIENTRY TglRenderbufferStorageMultisampleCoverageNV(GLenum, GLsizei, GLsizei, GLenum, GLsizei, GLsizei);
-        typedef void APIENTRY TglBindFramebufferEXT(GLenum, GLuint);
-        typedef void APIENTRY TglDeleteFramebuffersEXT(GLsizei n, const GLuint *framebuffers);
-        typedef void APIENTRY TglGenFramebuffersEXT(GLsizei, GLuint *);
-        typedef GLenum APIENTRY TglCheckFramebufferStatusEXT(GLenum);
-        typedef void APIENTRY TglFramebufferTexture1DEXT(GLenum, GLenum, GLenum, GLuint, GLint);
-        typedef void APIENTRY TglFramebufferTexture2DEXT(GLenum, GLenum, GLenum, GLuint, GLint);
-        typedef void APIENTRY TglFramebufferTexture3DEXT(GLenum, GLenum, GLenum, GLuint, GLint, GLint);
-        typedef void APIENTRY TglFramebufferTextureLayerEXT(GLenum, GLenum, GLuint, GLint, GLint);
-        typedef void APIENTRY TglFramebufferRenderbufferEXT(GLenum, GLenum, GLenum, GLuint);
-        typedef void APIENTRY TglGenerateMipmapEXT(GLenum);
-        typedef void APIENTRY TglBlitFramebufferEXT(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
+        typedef void GL_APIENTRY TglBindRenderbuffer(GLenum, GLuint);
+        typedef void GL_APIENTRY TglDeleteRenderbuffers(GLsizei n, const GLuint *renderbuffers);
+        typedef void GL_APIENTRY TglGenRenderbuffers(GLsizei, GLuint *);
+        typedef void GL_APIENTRY TglRenderbufferStorage(GLenum, GLenum, GLsizei, GLsizei);
+        typedef void GL_APIENTRY TglRenderbufferStorageMultisample(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
+        typedef void GL_APIENTRY TglRenderbufferStorageMultisampleCoverageNV(GLenum, GLsizei, GLsizei, GLenum, GLsizei, GLsizei);
+        typedef void GL_APIENTRY TglBindFramebuffer(GLenum, GLuint);
+        typedef void GL_APIENTRY TglDeleteFramebuffers(GLsizei n, const GLuint *framebuffers);
+        typedef void GL_APIENTRY TglGenFramebuffers(GLsizei, GLuint *);
+        typedef GLenum GL_APIENTRY TglCheckFramebufferStatus(GLenum);
+        typedef void GL_APIENTRY TglFramebufferTexture1D(GLenum, GLenum, GLenum, GLuint, GLint);
+        typedef void GL_APIENTRY TglFramebufferTexture2D(GLenum, GLenum, GLenum, GLuint, GLint);
+        typedef void GL_APIENTRY TglFramebufferTexture3D(GLenum, GLenum, GLenum, GLuint, GLint, GLint);
+        typedef void GL_APIENTRY TglFramebufferTexture(GLenum, GLenum, GLint, GLint);
+        typedef void GL_APIENTRY TglFramebufferTextureLayer(GLenum, GLenum, GLuint, GLint, GLint);
+        typedef void GL_APIENTRY TglFramebufferRenderbuffer(GLenum, GLenum, GLenum, GLuint);
+        typedef void GL_APIENTRY TglGenerateMipmap(GLenum);
+        typedef void GL_APIENTRY TglBlitFramebuffer(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
+        typedef void GL_APIENTRY TglGetRenderbufferParameteriv(GLenum, GLenum, GLint*);
 
-        TglBindRenderbufferEXT* glBindRenderbufferEXT;
-        TglGenRenderbuffersEXT* glGenRenderbuffersEXT;
-        TglDeleteRenderbuffersEXT* glDeleteRenderbuffersEXT; 
-        TglRenderbufferStorageEXT* glRenderbufferStorageEXT;
-        TglRenderbufferStorageMultisampleEXT* glRenderbufferStorageMultisampleEXT;
+        TglBindRenderbuffer* glBindRenderbuffer;
+        TglGenRenderbuffers* glGenRenderbuffers;
+        TglDeleteRenderbuffers* glDeleteRenderbuffers; 
+        TglRenderbufferStorage* glRenderbufferStorage;
+        TglRenderbufferStorageMultisample* glRenderbufferStorageMultisample;
         TglRenderbufferStorageMultisampleCoverageNV* glRenderbufferStorageMultisampleCoverageNV;
-        TglBindFramebufferEXT* glBindFramebufferEXT;
-        TglDeleteFramebuffersEXT* glDeleteFramebuffersEXT;
-        TglGenFramebuffersEXT* glGenFramebuffersEXT;
-        TglCheckFramebufferStatusEXT* glCheckFramebufferStatusEXT;
-        TglFramebufferTexture1DEXT* glFramebufferTexture1DEXT;
-        TglFramebufferTexture2DEXT* glFramebufferTexture2DEXT;
-        TglFramebufferTexture3DEXT* glFramebufferTexture3DEXT;
-        TglFramebufferTextureLayerEXT* glFramebufferTextureLayerEXT;
-        TglFramebufferRenderbufferEXT* glFramebufferRenderbufferEXT;
-        TglGenerateMipmapEXT* glGenerateMipmapEXT;
-        TglBlitFramebufferEXT* glBlitFramebufferEXT;
+        TglBindFramebuffer* glBindFramebuffer;
+        TglDeleteFramebuffers* glDeleteFramebuffers;
+        TglGenFramebuffers* glGenFramebuffers;
+        TglCheckFramebufferStatus* glCheckFramebufferStatus;
+        TglFramebufferTexture1D* glFramebufferTexture1D;
+        TglFramebufferTexture2D* glFramebufferTexture2D;
+        TglFramebufferTexture3D* glFramebufferTexture3D;
+        TglFramebufferTexture* glFramebufferTexture;
+        TglFramebufferTextureLayer* glFramebufferTextureLayer;
+        TglFramebufferRenderbuffer* glFramebufferRenderbuffer;
+        TglGenerateMipmap* glGenerateMipmap;
+        TglBlitFramebuffer* glBlitFramebuffer;
+        TglGetRenderbufferParameteriv* glGetRenderbufferParameteriv;
 
         static FBOExtensions* instance(unsigned contextID, bool createIfNotInitalized);
 
         bool isSupported() const { return _supported; }
-        bool isMultisampleSupported() const { return glRenderbufferStorageMultisampleEXT != 0; }
+        bool isMultisampleSupported() const { return glRenderbufferStorageMultisample != 0; }
         bool isMultisampleCoverageSupported() const { return glRenderbufferStorageMultisampleCoverageNV != 0; }
         bool isPackedDepthStencilSupported() const { return _packed_depth_stencil_supported; }
 
@@ -331,6 +347,7 @@ namespace osg
  **************************************************************************/
     class Texture1D;
     class Texture2D;
+    class Texture2DMultisample;
     class Texture3D;
     class Texture2DArray;
     class TextureCubeMap;
@@ -343,11 +360,12 @@ namespace osg
         FrameBufferAttachment(const FrameBufferAttachment& copy);
 
         explicit FrameBufferAttachment(RenderBuffer* target);
-        explicit FrameBufferAttachment(Texture1D* target, int level = 0);
-        explicit FrameBufferAttachment(Texture2D* target, int level = 0);
-        explicit FrameBufferAttachment(Texture3D* target, int zoffset, int level = 0);
-        explicit FrameBufferAttachment(Texture2DArray* target, int layer, int level = 0);
-        explicit FrameBufferAttachment(TextureCubeMap* target, int face, int level = 0);
+        explicit FrameBufferAttachment(Texture1D* target, unsigned int level = 0);
+        explicit FrameBufferAttachment(Texture2D* target, unsigned int level = 0);
+        explicit FrameBufferAttachment(Texture2DMultisample* target, unsigned int level = 0);
+        explicit FrameBufferAttachment(Texture3D* target, unsigned int zoffset, unsigned int level = 0);
+        explicit FrameBufferAttachment(Texture2DArray* target, unsigned int layer, unsigned int level = 0);
+        explicit FrameBufferAttachment(TextureCubeMap* target, unsigned int face, unsigned int level = 0);
         explicit FrameBufferAttachment(TextureRectangle* target);
         explicit FrameBufferAttachment(Camera::Attachment& attachment);
         
@@ -366,10 +384,10 @@ namespace osg
         Texture* getTexture();
         const Texture* getTexture() const;
 
-        int getCubeMapFace() const;
-        int getTextureLevel() const;
-        int getTexture3DZOffset() const;
-        int getTextureArrayLayer() const;
+        unsigned int getCubeMapFace() const;
+        unsigned int getTextureLevel() const;
+        unsigned int getTexture3DZOffset() const;
+        unsigned int getTextureArrayLayer() const;
 
     private:
         // use the Pimpl idiom to avoid dependency from

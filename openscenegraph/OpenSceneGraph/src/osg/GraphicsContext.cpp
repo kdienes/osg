@@ -31,6 +31,7 @@
 #include <map>
 #include <sstream>
 #include <algorithm>
+#include <iterator>
 
 using namespace osg;
 
@@ -54,13 +55,13 @@ void GraphicsContext::setWindowingSystemInterface(WindowingSystemInterface* call
 {
     ref_ptr<GraphicsContext::WindowingSystemInterface> &wsref = windowingSystemInterfaceRef();
     wsref = callback;
-    osg::notify(osg::INFO)<<"GraphicsContext::setWindowingSystemInterface() "<<wsref.get()<<"\t"<<&wsref<<std::endl;
+    OSG_INFO<<"GraphicsContext::setWindowingSystemInterface() "<<wsref.get()<<"\t"<<&wsref<<std::endl;
 }
 
 GraphicsContext::WindowingSystemInterface* GraphicsContext::getWindowingSystemInterface()
 {
     ref_ptr<GraphicsContext::WindowingSystemInterface> &wsref = windowingSystemInterfaceRef();
-    osg::notify(osg::INFO)<<"GraphicsContext::getWindowingSystemInterface() "<<wsref.get()<<"\t"<<&wsref<<std::endl;
+    OSG_INFO<<"GraphicsContext::getWindowingSystemInterface() "<<wsref.get()<<"\t"<<&wsref<<std::endl;
     return wsref.get();
 }
 
@@ -147,10 +148,70 @@ void GraphicsContext::ScreenIdentifier::setScreenIdentifier(const std::string& d
     }
 
 #if 0    
-    osg::notify(osg::NOTICE)<<"   hostName ["<<hostName<<"]"<<std::endl;
-    osg::notify(osg::NOTICE)<<"   displayNum "<<displayNum<<std::endl;
-    osg::notify(osg::NOTICE)<<"   screenNum "<<screenNum<<std::endl;
+    OSG_NOTICE<<"   hostName ["<<hostName<<"]"<<std::endl;
+    OSG_NOTICE<<"   displayNum "<<displayNum<<std::endl;
+    OSG_NOTICE<<"   screenNum "<<screenNum<<std::endl;
 #endif
+}
+
+GraphicsContext::Traits::Traits(DisplaySettings* ds):
+            x(0),
+            y(0),
+            width(0),
+            height(0),
+            windowDecoration(false),
+            supportsResize(true),
+            red(8),
+            blue(8),
+            green(8),
+            alpha(0),
+            depth(24),
+            stencil(0),
+            sampleBuffers(0),
+            samples(0),
+            pbuffer(false),
+            quadBufferStereo(false),
+            doubleBuffer(false),
+            target(0),
+            format(0),
+            level(0),
+            face(0),
+            mipMapGeneration(false),
+            vsync(true),
+            useMultiThreadedOpenGLEngine(false),
+            useCursor(true),
+            glContextVersion("1.0"),
+            glContextFlags(0),
+            glContextProfileMask(0),
+            sharedContext(0),
+            setInheritedWindowPixelFormat(false),
+            overrideRedirect(false),
+            swapMethod( DisplaySettings::SWAP_DEFAULT )
+{
+    if (ds)
+    {
+        alpha = ds->getMinimumNumAlphaBits();
+        stencil = ds->getMinimumNumStencilBits();
+        sampleBuffers = ds->getMultiSamples();
+        samples = ds->getNumMultiSamples();
+        if (ds->getStereo())
+        {
+            switch(ds->getStereoMode())
+            {
+                case(osg::DisplaySettings::QUAD_BUFFER): quadBufferStereo = true; break;
+                case(osg::DisplaySettings::VERTICAL_INTERLACE):
+                case(osg::DisplaySettings::CHECKERBOARD):
+                case(osg::DisplaySettings::HORIZONTAL_INTERLACE): stencil = 8; break;
+                default: break;
+            }
+        }
+        
+        glContextVersion = ds->getGLContextVersion();
+        glContextFlags = ds->getGLContextFlags();
+        glContextProfileMask = ds->getGLContextProfileMask();
+
+        swapMethod = ds->getSwapMethod();
+    }
 }
 
 class ContextData
@@ -168,11 +229,11 @@ public:
     {
         --_numContexts;
 
-        osg::notify(osg::INFO)<<"decrementUsageCount()"<<_numContexts<<std::endl;
+        OSG_INFO<<"decrementUsageCount()"<<_numContexts<<std::endl;
 
         if (_numContexts <= 1 && _compileContext.valid())
         {
-            osg::notify(osg::INFO)<<"resetting compileContext "<<_compileContext.get()<<" refCount "<<_compileContext->referenceCount()<<std::endl;
+            OSG_INFO<<"resetting compileContext "<<_compileContext.get()<<" refCount "<<_compileContext->referenceCount()<<std::endl;
             
             _compileContext = 0;
         }
@@ -203,7 +264,7 @@ unsigned int GraphicsContext::createNewContextID()
             // reuse contextID;
             itr->second._numContexts = 1;
 
-            osg::notify(osg::INFO)<<"GraphicsContext::createNewContextID() reusing contextID="<<itr->first<<std::endl;
+            OSG_INFO<<"GraphicsContext::createNewContextID() reusing contextID="<<itr->first<<std::endl;
 
             return itr->first;
         }
@@ -212,8 +273,8 @@ unsigned int GraphicsContext::createNewContextID()
     unsigned int contextID = s_contextIDMap.size();
     s_contextIDMap[contextID]._numContexts = 1;
     
-    osg::notify(osg::INFO)<<"GraphicsContext::createNewContextID() creating contextID="<<contextID<<std::endl;
-    osg::notify(osg::INFO)<<"Updating the MaxNumberOfGraphicsContexts to "<<contextID+1<<std::endl;
+    OSG_INFO<<"GraphicsContext::createNewContextID() creating contextID="<<contextID<<std::endl;
+    OSG_INFO<<"Updating the MaxNumberOfGraphicsContexts to "<<contextID+1<<std::endl;
 
     // update the the maximum number of graphics contexts, 
     // to ensure that texture objects and display buffers are configured to the correct size.
@@ -240,7 +301,7 @@ void GraphicsContext::incrementContextIDUsageCount(unsigned int contextID)
 {
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_contextIDMapMutex);
     
-    osg::notify(osg::INFO)<<"GraphicsContext::incrementContextIDUsageCount("<<contextID<<") to "<<s_contextIDMap[contextID]._numContexts<<std::endl;
+    OSG_INFO<<"GraphicsContext::incrementContextIDUsageCount("<<contextID<<") to "<<s_contextIDMap[contextID]._numContexts<<std::endl;
 
     s_contextIDMap[contextID].incrementUsageCount();
 }
@@ -256,17 +317,17 @@ void GraphicsContext::decrementContextIDUsageCount(unsigned int contextID)
     }
     else
     {
-        osg::notify(osg::NOTICE)<<"Warning: decrementContextIDUsageCount("<<contextID<<") called on expired contextID."<<std::endl;
+        OSG_NOTICE<<"Warning: decrementContextIDUsageCount("<<contextID<<") called on expired contextID."<<std::endl;
     } 
 
-    osg::notify(osg::INFO)<<"GraphicsContext::decrementContextIDUsageCount("<<contextID<<") to "<<s_contextIDMap[contextID]._numContexts<<std::endl;
+    OSG_INFO<<"GraphicsContext::decrementContextIDUsageCount("<<contextID<<") to "<<s_contextIDMap[contextID]._numContexts<<std::endl;
 
 }
 
 
 void GraphicsContext::registerGraphicsContext(GraphicsContext* gc)
 {
-    osg::notify(osg::INFO)<<"GraphicsContext::registerGraphicsContext "<<gc<<std::endl;
+    OSG_INFO<<"GraphicsContext::registerGraphicsContext "<<gc<<std::endl;
 
     if (!gc) return;
 
@@ -280,7 +341,7 @@ void GraphicsContext::registerGraphicsContext(GraphicsContext* gc)
 
 void GraphicsContext::unregisterGraphicsContext(GraphicsContext* gc)
 {
-    osg::notify(osg::INFO)<<"GraphicsContext::unregisterGraphicsContext "<<gc<<std::endl;
+    OSG_INFO<<"GraphicsContext::unregisterGraphicsContext "<<gc<<std::endl;
 
     if (!gc) return;
 
@@ -292,7 +353,7 @@ void GraphicsContext::unregisterGraphicsContext(GraphicsContext* gc)
 
 GraphicsContext::GraphicsContexts GraphicsContext::getAllRegisteredGraphicsContexts()
 {
-    osg::notify(osg::INFO)<<"GraphicsContext::getAllRegisteredGraphicsContexts s_registeredContexts.size()="<<s_registeredContexts.size()<<std::endl;
+    OSG_INFO<<"GraphicsContext::getAllRegisteredGraphicsContexts s_registeredContexts.size()="<<s_registeredContexts.size()<<std::endl;
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_contextIDMapMutex);
     return s_registeredContexts;
 }
@@ -310,14 +371,14 @@ GraphicsContext::GraphicsContexts GraphicsContext::getRegisteredGraphicsContexts
         if (gc->getState() && gc->getState()->getContextID()==contextID) contexts.push_back(gc);
     }
 
-    osg::notify(osg::INFO)<<"GraphicsContext::getRegisteredGraphicsContexts "<<contextID<<" contexts.size()="<<contexts.size()<<std::endl;
+    OSG_INFO<<"GraphicsContext::getRegisteredGraphicsContexts "<<contextID<<" contexts.size()="<<contexts.size()<<std::endl;
     
     return contexts;
 }
 
 GraphicsContext* GraphicsContext::getOrCreateCompileContext(unsigned int contextID)
 {
-    osg::notify(osg::INFO)<<"GraphicsContext::createCompileContext."<<std::endl;
+    OSG_NOTICE<<"GraphicsContext::createCompileContext."<<std::endl;
 
     {    
         OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_contextIDMapMutex);
@@ -349,7 +410,7 @@ GraphicsContext* GraphicsContext::getOrCreateCompileContext(unsigned int context
     {    
         OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_contextIDMapMutex);
         s_contextIDMap[contextID]._compileContext = gc;
-        osg::notify(osg::INFO)<<"   succeeded GraphicsContext::createCompileContext."<<std::endl;
+        OSG_NOTICE<<"   succeeded GraphicsContext::createCompileContext."<<std::endl;
         return gc.release();
     }
     else
@@ -367,7 +428,7 @@ void GraphicsContext::setCompileContext(unsigned int contextID, GraphicsContext*
 
 GraphicsContext* GraphicsContext::getCompileContext(unsigned int contextID)
 {
-    // osg::notify(osg::NOTICE)<<"GraphicsContext::getCompileContext "<<contextID<<std::endl;
+    // OSG_NOTICE<<"GraphicsContext::getCompileContext "<<contextID<<std::endl;
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_contextIDMapMutex);
     ContextIDMap::iterator itr = s_contextIDMap.find(contextID);
     if (itr != s_contextIDMap.end()) return itr->second._compileContext.get();
@@ -382,7 +443,9 @@ GraphicsContext* GraphicsContext::getCompileContext(unsigned int contextID)
 GraphicsContext::GraphicsContext():
     _clearColor(osg::Vec4(0.0f,0.0f,0.0f,1.0f)),
     _clearMask(0),
-    _threadOfLastMakeCurrent(0)
+    _threadOfLastMakeCurrent(0),
+    _lastClearTick(0),
+    _defaultFboId(0)
 {
     setThreadSafeRefUnref(true);
     _operationsBlock = new RefBlock;
@@ -393,7 +456,9 @@ GraphicsContext::GraphicsContext():
 GraphicsContext::GraphicsContext(const GraphicsContext&, const osg::CopyOp&):
     _clearColor(osg::Vec4(0.0f,0.0f,0.0f,1.0f)),
     _clearMask(0),
-    _threadOfLastMakeCurrent(0)
+    _threadOfLastMakeCurrent(0),
+    _lastClearTick(0),
+    _defaultFboId(0)
 {
     setThreadSafeRefUnref(true);
     _operationsBlock = new RefBlock;
@@ -410,6 +475,8 @@ GraphicsContext::~GraphicsContext()
 
 void GraphicsContext::clear()
 {
+    _lastClearTick = osg::Timer::instance()->tick();
+
     if (_clearMask==0 || !_traits) return;
 
     glViewport(0, 0, _traits->width, _traits->height);
@@ -434,7 +501,7 @@ bool GraphicsContext::realize()
 
 void GraphicsContext::close(bool callCloseImplementation)
 {
-    osg::notify(osg::INFO)<<"close("<<callCloseImplementation<<")"<<this<<std::endl;
+    OSG_INFO<<"close("<<callCloseImplementation<<")"<<this<<std::endl;
 
     // switch off the graphics thread...
     setGraphicsThread(0);
@@ -456,7 +523,7 @@ void GraphicsContext::close(bool callCloseImplementation)
         Camera* camera = (*itr);
         if (camera)
         {
-            osg::notify(osg::INFO)<<"Releasing GL objects for Camera="<<camera<<" _state="<<_state.get()<<std::endl;
+            OSG_INFO<<"Releasing GL objects for Camera="<<camera<<" _state="<<_state.get()<<std::endl;
             camera->releaseGLObjects(_state.get());
         }
     }
@@ -464,16 +531,16 @@ void GraphicsContext::close(bool callCloseImplementation)
 
     if (callCloseImplementation && _state.valid() && isRealized())
     {
-        osg::notify(osg::INFO)<<"Closing still viable window "<<sharedContextExists<<" _state->getContextID()="<<_state->getContextID()<<std::endl;
+        OSG_INFO<<"Closing still viable window "<<sharedContextExists<<" _state->getContextID()="<<_state->getContextID()<<std::endl;
 
         if (makeCurrent())
         {
         
-            osg::notify(osg::INFO)<<"Doing Flush"<<std::endl;
+            OSG_INFO<<"Doing delete of GL objects"<<std::endl;
 
-            osg::flushAllDeletedGLObjects(_state->getContextID());
+            osg::deleteAllGLObjects(_state->getContextID());
 
-            osg::notify(osg::INFO)<<"Done Flush "<<std::endl;
+            OSG_INFO<<"Done delete of GL objects"<<std::endl;
 
             _state->reset();
 
@@ -481,7 +548,7 @@ void GraphicsContext::close(bool callCloseImplementation)
         }
         else
         {
-            osg::notify(osg::INFO)<<"makeCurrent did not succeed, could not do flush/deletion of OpenGL objects."<<std::endl;
+            OSG_INFO<<"makeCurrent did not succeed, could not do flush/deletion of OpenGL objects."<<std::endl;
         }
     }
     
@@ -493,9 +560,9 @@ void GraphicsContext::close(bool callCloseImplementation)
     // does not work.
     if (_state.valid())
     {
-        osg::notify(osg::INFO)<<"Doing discard of deleted OpenGL objects."<<std::endl;
+        OSG_INFO<<"Doing discard of deleted OpenGL objects."<<std::endl;
 
-        osg::discardAllDeletedGLObjects(_state->getContextID());
+        osg::discardAllGLObjects(_state->getContextID());
     }
 
     if (_state.valid())
@@ -552,7 +619,7 @@ void GraphicsContext::swapBuffers()
 {
     if (isCurrent())
     {
-        swapBuffersImplementation();
+        swapBuffersCallbackOrImplemenation();
         clear();
     }
     else if (_graphicsThread.valid() && 
@@ -563,12 +630,10 @@ void GraphicsContext::swapBuffers()
     else
     {
         makeCurrent();
-        swapBuffersImplementation();
+        swapBuffersCallbackOrImplemenation();
         clear();
     }
 }
-
-
 
 void GraphicsContext::createGraphicsThread()
 {
@@ -599,7 +664,7 @@ void GraphicsContext::setGraphicsThread(GraphicsThread* gt)
 
 void GraphicsContext::add(Operation* operation)
 {
-    osg::notify(osg::INFO)<<"Doing add"<<std::endl;
+    OSG_INFO<<"Doing add"<<std::endl;
 
     // acquire the lock on the operations queue to prevent anyone else for modifying it at the same time
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_operationsMutex);
@@ -612,12 +677,12 @@ void GraphicsContext::add(Operation* operation)
 
 void GraphicsContext::remove(Operation* operation)
 {
-    osg::notify(osg::INFO)<<"Doing remove operation"<<std::endl;
+    OSG_INFO<<"Doing remove operation"<<std::endl;
 
     // acquire the lock on the operations queue to prevent anyone else for modifying it at the same time
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_operationsMutex);
 
-    for(OperationQueue::iterator itr = _operations.begin();
+    for(GraphicsOperationQueue::iterator itr = _operations.begin();
         itr!=_operations.end();)
     {
         if ((*itr)==operation) itr = _operations.erase(itr);
@@ -632,13 +697,13 @@ void GraphicsContext::remove(Operation* operation)
 
 void GraphicsContext::remove(const std::string& name)
 {
-    osg::notify(osg::INFO)<<"Doing remove named operation"<<std::endl;
+    OSG_INFO<<"Doing remove named operation"<<std::endl;
     
     // acquire the lock on the operations queue to prevent anyone else for modifying it at the same time
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_operationsMutex);
 
     // find the remove all operations with specified name
-    for(OperationQueue::iterator itr = _operations.begin();
+    for(GraphicsOperationQueue::iterator itr = _operations.begin();
         itr!=_operations.end();)
     {
         if ((*itr)->getName()==name) itr = _operations.erase(itr);
@@ -653,7 +718,7 @@ void GraphicsContext::remove(const std::string& name)
 
 void GraphicsContext::removeAllOperations()
 {
-    osg::notify(osg::INFO)<<"Doing remove all operations"<<std::endl;
+    OSG_INFO<<"Doing remove all operations"<<std::endl;
 
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_operationsMutex);
     _operations.clear();
@@ -688,7 +753,7 @@ void GraphicsContext::runOperations()
         if (camera->getRenderer()) (*(camera->getRenderer()))(this);
     }
 
-    for(OperationQueue::iterator itr = _operations.begin();
+    for(GraphicsOperationQueue::iterator itr = _operations.begin();
         itr != _operations.end();
         )
     {
@@ -713,7 +778,7 @@ void GraphicsContext::runOperations()
                 
         if (_currentOperation.valid())
         {
-            // osg::notify(osg::INFO)<<"Doing op "<<_currentOperation->getName()<<" "<<this<<std::endl;
+            // OSG_INFO<<"Doing op "<<_currentOperation->getName()<<" "<<this<<std::endl;
 
             // call the graphics operation.
             (*_currentOperation)(this);
@@ -781,12 +846,15 @@ void GraphicsContext::removeCamera(osg::Camera* camera)
 
 void GraphicsContext::resizedImplementation(int x, int y, int width, int height)
 {
+    std::set<osg::Viewport*> processedViewports;
+
     if (!_traits) return;
     
     double widthChangeRatio = double(width) / double(_traits->width);
     double heigtChangeRatio = double(height) / double(_traits->height);
     double aspectRatioChange = widthChangeRatio / heigtChangeRatio; 
     
+
     for(Cameras::iterator itr = _cameras.begin();
         itr != _cameras.end();
         ++itr)
@@ -799,17 +867,23 @@ void GraphicsContext::resizedImplementation(int x, int y, int width, int height)
         Viewport* viewport = camera->getViewport();
         if (viewport)
         {
-            if (viewport->x()==0 && viewport->y()==0 &&
-                viewport->width()>=_traits->width && viewport->height()>=_traits->height)
+            // avoid processing a shared viewport twice
+            if (processedViewports.count(viewport)==0)
             {
-                viewport->setViewport(0,0,width,height);
-            }
-            else
-            {
-                viewport->x() = static_cast<osg::Viewport::value_type>(double(viewport->x())*widthChangeRatio);
-                viewport->y() = static_cast<osg::Viewport::value_type>(double(viewport->y())*heigtChangeRatio);
-                viewport->width() = static_cast<osg::Viewport::value_type>(double(viewport->width())*widthChangeRatio);
-                viewport->height() = static_cast<osg::Viewport::value_type>(double(viewport->height())*heigtChangeRatio);
+                processedViewports.insert(viewport);
+
+                if (viewport->x()==0 && viewport->y()==0 &&
+                    viewport->width()>=_traits->width && viewport->height()>=_traits->height)
+                {
+                    viewport->setViewport(0,0,width,height);
+                }
+                else
+                {
+                    viewport->x() = static_cast<osg::Viewport::value_type>(double(viewport->x())*widthChangeRatio);
+                    viewport->y() = static_cast<osg::Viewport::value_type>(double(viewport->y())*heigtChangeRatio);
+                    viewport->width() = static_cast<osg::Viewport::value_type>(double(viewport->width())*widthChangeRatio);
+                    viewport->height() = static_cast<osg::Viewport::value_type>(double(viewport->height())*heigtChangeRatio);
+                }
             }
         }
 

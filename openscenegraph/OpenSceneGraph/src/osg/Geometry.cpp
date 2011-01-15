@@ -13,386 +13,12 @@
 #include <stdlib.h>
 
 #include <osg/Geometry>
+#include <osg/ArrayDispatchers>
 #include <osg/Notify>
 
 using namespace osg;
 
 const Geometry::ArrayData Geometry::s_InvalidArrayData;
-
-class DrawVertex
-{
-    public:
-    
-        DrawVertex(const Array* vertices,const IndexArray* indices):
-            _vertices(vertices),
-            _indices(indices)
-        {
-            _verticesType = _vertices?_vertices->getType():Array::ArrayType;
-            _indicesType = _indices?_indices->getType():Array::ArrayType;
-        }
-    
-        inline unsigned int index(unsigned int pos)
-        {
-            if (_indices) 
-            {
-                return _indices->index(pos);
-            }
-            else 
-            {
-                return 0;
-            }
-        }
-
-        inline void operator () (unsigned int pos)
-        {
-            if (_indices) pos = index(pos);
-
-            switch(_verticesType)
-            {
-            case(Array::Vec3ArrayType): 
-                apply(static_cast<const Vec3*>(_vertices->getDataPointer())[pos]);
-                break;
-            case(Array::Vec2ArrayType): 
-                apply(static_cast<const Vec2*>(_vertices->getDataPointer())[pos]);
-                break;
-            case(Array::Vec4ArrayType): 
-                apply(static_cast<const Vec4*>(_vertices->getDataPointer())[pos]);
-                break;
-            case(Array::Vec3dArrayType): 
-                apply(static_cast<const Vec3d*>(_vertices->getDataPointer())[pos]);
-                break;
-            case(Array::Vec2dArrayType): 
-                apply(static_cast<const Vec2d*>(_vertices->getDataPointer())[pos]);
-                break;
-            case(Array::Vec4dArrayType): 
-                apply(static_cast<const Vec4d*>(_vertices->getDataPointer())[pos]);
-                break;
-            default:
-                break;
-            }
-            
-        }
-        
-        inline void apply(const Vec2& v)   { glVertex2fv(v.ptr()); }
-        inline void apply(const Vec3& v)   { glVertex3fv(v.ptr()); }
-        inline void apply(const Vec4& v)   { glVertex4fv(v.ptr()); }
-        inline void apply(const Vec2d& v)   { glVertex2dv(v.ptr()); }
-        inline void apply(const Vec3d& v)   { glVertex3dv(v.ptr()); }
-        inline void apply(const Vec4d& v)   { glVertex4dv(v.ptr()); }
-
-        const Array*        _vertices;
-        const IndexArray*   _indices;
-        Array::Type         _verticesType;
-        Array::Type         _indicesType;
-};
-
-class DrawNormal
-{
-    public:
-    
-        DrawNormal(const Array* normals,const IndexArray* indices):
-            _normals(normals),
-            _indices(indices) 
-        {
-            _normalsType = normals?normals->getType():Array::ArrayType;
-        }
-    
-        void operator () (unsigned int pos)
-        {
-            switch(_normalsType)
-            {
-                case (Array::Vec3ArrayType):
-                    {
-                        const Vec3* normals(static_cast<const Vec3*>(_normals->getDataPointer()));
-                        if (_indices) glNormal3fv(normals[_indices->index(pos)].ptr());
-                        else glNormal3fv(normals[pos].ptr());
-                    }
-                    break;
-                case (Array::Vec3sArrayType):
-                    {
-                        const Vec3s* normals(static_cast<const Vec3s*>(_normals->getDataPointer()));
-                        if (_indices) glNormal3sv(normals[_indices->index(pos)].ptr());
-                        else glNormal3sv(normals[pos].ptr());
-                    }
-                    break;
-                case (Array::Vec4sArrayType):
-                    {
-                        const Vec4s* normals(static_cast<const Vec4s*>(_normals->getDataPointer()));
-                        if (_indices) glNormal3sv(normals[_indices->index(pos)].ptr());
-                        else glNormal3sv(normals[pos].ptr());
-                    }
-                    break;
-                case (Array::Vec3bArrayType):
-                    {
-                        const Vec3b* normals(static_cast<const Vec3b*>(_normals->getDataPointer()));
-                        if (_indices) glNormal3bv((const GLbyte*)normals[_indices->index(pos)].ptr());
-                        else glNormal3bv((const GLbyte*)normals[pos].ptr());
-                    }
-                    break;
-                case (Array::Vec4bArrayType):
-                    {
-                        const Vec4b* normals(static_cast<const Vec4b*>(_normals->getDataPointer()));
-                        if (_indices) glNormal3bv((const GLbyte*)normals[_indices->index(pos)].ptr());
-                        else glNormal3bv((const GLbyte*)normals[pos].ptr());
-                    }
-                    break;
-                case (Array::Vec3dArrayType):
-                    {
-                        const Vec3d* normals(static_cast<const Vec3d*>(_normals->getDataPointer()));
-                        if (_indices) glNormal3dv(normals[_indices->index(pos)].ptr());
-                        else glNormal3dv(normals[pos].ptr());
-                    }
-                    break;
-                case (Array::Vec4dArrayType):
-                    {
-                        const Vec4d* normals(static_cast<const Vec4d*>(_normals->getDataPointer()));
-                        if (_indices) glNormal3dv(normals[_indices->index(pos)].ptr());
-                        else glNormal3dv(normals[pos].ptr());
-                    }
-                    break;
-                default:
-                    break;
-                    
-            }
-        }
-        
-        const Array*       _normals;
-        const IndexArray*  _indices;
-        Array::Type        _normalsType;
-};
-
-class DrawColor
-{
-    public:
-
-        DrawColor(const Array* colors,const IndexArray* indices):
-            _colors(colors),
-            _indices(indices)
-        {
-            _colorsType = _colors?_colors->getType():Array::ArrayType;
-            _indicesType = _indices?_indices->getType():Array::ArrayType;
-        }
-
-        inline unsigned int index(unsigned int pos)
-        {
-            if (_indices) {
-                return _indices->index(pos);
-            }
-            else {
-                return 0;
-            }
-        }
-
-        inline void operator () (unsigned int pos)
-        {
-            if (_indices) pos = index(pos);
-
-            switch(_colorsType)
-            {
-            case(Array::Vec4ArrayType):
-                apply(static_cast<const Vec4*>(_colors->getDataPointer())[pos]);
-                break;
-            case(Array::Vec4ubArrayType):
-                apply(static_cast<const Vec4ub*>(_colors->getDataPointer())[pos]);
-                break;
-            case(Array::Vec3ArrayType):
-                apply(static_cast<const Vec3*>(_colors->getDataPointer())[pos]);
-                break;
-            case(Array::Vec3dArrayType):
-                apply(static_cast<const Vec3d*>(_colors->getDataPointer())[pos]);
-                break;
-            case(Array::Vec4dArrayType):
-                apply(static_cast<const Vec4d*>(_colors->getDataPointer())[pos]);
-                break;
-            default:
-                break;
-            }
-        }
-
-        inline void apply(const Vec4ub& v) { glColor4ubv(v.ptr()); }
-        inline void apply(const Vec3& v)   { glColor3fv(v.ptr()); }
-        inline void apply(const Vec4& v)   { glColor4fv(v.ptr()); }
-        
-        const Array*        _colors;
-        const IndexArray*   _indices;
-        Array::Type         _colorsType;
-        Array::Type         _indicesType;
-};
-
-class DrawVertexAttrib : public osg::Referenced, public osg::ConstValueVisitor
-{
-public:
-
-    DrawVertexAttrib(const Drawable::Extensions * extensions,unsigned int vertAttribIndex,GLboolean normalized,const Array* attribcoords,const IndexArray* indices):    
-            _vertAttribIndex(vertAttribIndex),
-            _normalized(normalized),
-            _extensions(extensions),
-            _attribcoords(attribcoords),
-            _indices(indices),
-            _index(0) {;}
-            
-    inline void applyAndIncrement() { operator()(_index++); }
-
-    inline void operator () (unsigned int pos)
-    {
-        if (_indices) _attribcoords->accept(_indices->index(pos),*this);
-        else _attribcoords->accept(pos,*this);
-    }
-
-    virtual void apply(const GLshort& s) 
-    {
-        _extensions->glVertexAttrib1s( _vertAttribIndex, s );
-    }
-    virtual void apply(const GLfloat& f) 
-    {
-        _extensions->glVertexAttrib1f( _vertAttribIndex, f );
-    }
-    virtual void apply(const Vec4ub& v) 
-    {
-        if( _normalized )
-        {
-            _extensions->glVertexAttrib4Nubv( _vertAttribIndex, v.ptr() );
-        }
-        else
-        {
-            _extensions->glVertexAttrib4ubv( _vertAttribIndex, v.ptr() );
-        }
-    }
-    virtual void apply(const Vec2& v) 
-    {
-        _extensions->glVertexAttrib2fv( _vertAttribIndex, v.ptr() );
-    }
-    virtual void apply(const Vec3& v) 
-    {
-        _extensions->glVertexAttrib3fv( _vertAttribIndex, v.ptr() );
-    }
-    virtual void apply(const Vec4& v) 
-    {
-        _extensions->glVertexAttrib4fv( _vertAttribIndex, v.ptr() );
-    }
-    virtual void apply(const Vec2d& v) 
-    {
-        _extensions->glVertexAttrib2dv( _vertAttribIndex, v.ptr() );
-    }
-    virtual void apply(const Vec3d& v) 
-    {
-        _extensions->glVertexAttrib3dv( _vertAttribIndex, v.ptr() );
-    }
-    virtual void apply(const Vec4d& v) 
-    {
-        _extensions->glVertexAttrib4dv( _vertAttribIndex, v.ptr() );
-    }
-
-    unsigned int                    _vertAttribIndex;
-    GLboolean                       _normalized;
-    const Drawable::Extensions*     _extensions;
-    const Array*                    _attribcoords;
-    const IndexArray*               _indices;
-    unsigned int                    _index;
-};
-
-class DrawTexCoord : public osg::Referenced, public osg::ConstValueVisitor
-{
-    public:
-
-        DrawTexCoord(const Array* texcoords,const IndexArray* indices):
-            _texcoords(texcoords),
-            _indices(indices) {}
-
-        inline void operator () (unsigned int pos)
-        {
-            if (_indices) _texcoords->accept(_indices->index(pos),*this);
-            else _texcoords->accept(pos,*this);
-        }
-
-        virtual void apply(const GLfloat& v){ glTexCoord1f(v); }
-        virtual void apply(const Vec2& v)   { glTexCoord2fv(v.ptr()); }
-        virtual void apply(const Vec3& v)   { glTexCoord3fv(v.ptr()); }
-        virtual void apply(const Vec4& v)   { glTexCoord4fv(v.ptr()); }
-
-        const Array*        _texcoords;
-        const IndexArray*   _indices;
-};
-
-class DrawMultiTexCoord : public osg::Referenced, public osg::ConstValueVisitor
-{
-    public:
-    
-        DrawMultiTexCoord(GLenum target,const Array* texcoords,const IndexArray* indices,
-            const Drawable::Extensions * extensions):
-            _target(target),
-            _texcoords(texcoords),
-            _indices(indices),
-            _extensions(extensions) {}
-
-        inline void operator () (unsigned int pos)
-        {
-            if (_indices) _texcoords->accept(_indices->index(pos),*this);
-            else _texcoords->accept(pos,*this);
-        }
-
-        virtual void apply(const GLfloat& v){ _extensions->glMultiTexCoord1f(_target,v); }
-        virtual void apply(const Vec2& v)   { _extensions->glMultiTexCoord2fv(_target,v.ptr()); }
-        virtual void apply(const Vec3& v)   { _extensions->glMultiTexCoord3fv(_target,v.ptr()); }
-        virtual void apply(const Vec4& v)   { _extensions->glMultiTexCoord4fv(_target,v.ptr()); }
-        
-        GLenum _target;
-        const Array*        _texcoords;
-        const IndexArray*   _indices;
-
-        const Drawable::Extensions * _extensions;
-};
-
-
-class DrawSecondaryColor : public osg::ConstValueVisitor
-{
-    public:
-    
-        DrawSecondaryColor(const Array* colors,const IndexArray* indices,
-                           const Drawable::Extensions * extensions):
-            _colors(colors),
-            _indices(indices),
-            _extensions(extensions)
-            {}
-    
-        inline void operator () (unsigned int pos)
-        {
-            if (_indices) _colors->accept(_indices->index(pos),*this);
-            else _colors->accept(pos,*this);
-        }
-
-        virtual void apply(const Vec4ub& v) { _extensions->glSecondaryColor3ubv(v.ptr()); }
-        virtual void apply(const Vec3& v)   { _extensions->glSecondaryColor3fv(v.ptr()); }
-        virtual void apply(const Vec4& v)   { _extensions->glSecondaryColor3fv(v.ptr()); }
-
-        const Array*        _colors;
-        const IndexArray*   _indices;
-
-        const Drawable::Extensions * _extensions;
-};
-
-class DrawFogCoord : public osg::ConstValueVisitor
-{
-    public:
-    
-        DrawFogCoord(const Array* fogcoords,const IndexArray* indices,const Drawable::Extensions * extensions):
-            _fogcoords(fogcoords),
-            _indices(indices),
-            _extensions(extensions) {}
-    
-        inline void operator () (unsigned int pos)
-        {
-            if (_indices) _fogcoords->accept(_indices->index(pos),*this);
-            else _fogcoords->accept(pos,*this);
-        }
-
-        virtual void apply(const GLfloat& v) { _extensions->glFogCoordfv(&v); }
-
-        const Array*        _fogcoords;
-        const IndexArray*   _indices;
-
-        const Drawable::Extensions * _extensions;
-};
 
 Geometry::ArrayData::ArrayData(const ArrayData& data,const CopyOp& copyop):
     array(copyop(data.array.get())),
@@ -412,6 +38,9 @@ Geometry::Vec3ArrayData::Vec3ArrayData(const Vec3ArrayData& data,const CopyOp& c
 
 Geometry::Geometry()
 {
+    // temporary test
+    // setSupportsDisplayList(false);
+
     _fastPath = false;
     _fastPathHint = true;
 }
@@ -426,6 +55,9 @@ Geometry::Geometry(const Geometry& geometry,const CopyOp& copyop):
     _fastPath(geometry._fastPath),
     _fastPathHint(geometry._fastPathHint)
 {
+    // temporary test
+    // setSupportsDisplayList(false);
+
     for(PrimitiveSetList::const_iterator pitr=geometry._primitives.begin();
         pitr!=geometry._primitives.end();
         ++pitr)
@@ -447,6 +79,18 @@ Geometry::Geometry(const Geometry& geometry,const CopyOp& copyop):
     {
         _vertexAttribList.push_back(ArrayData(*vitr, copyop));
     }
+
+    if ((copyop.getCopyFlags() & osg::CopyOp::DEEP_COPY_ARRAYS))
+    {
+        if (_useVertexBufferObjects)
+        {
+            // copying of arrays doesn't set up buffer objects so we'll need to force
+            // Geometry to assign these, we'll do this by switching off VBO's then renabling them.
+            setUseVertexBufferObjects(false);
+            setUseVertexBufferObjects(true);
+        }
+    }
+    
 }
 
 Geometry::~Geometry()
@@ -822,7 +466,7 @@ bool Geometry::addPrimitiveSet(PrimitiveSet* primitiveset)
         dirtyBound();
         return true;
     }
-    notify(WARN)<<"Warning: invalid index i or primitiveset passed to osg::Geometry::addPrimitiveSet(i,primitiveset), ignoring call."<<std::endl;
+    OSG_WARN<<"Warning: invalid index i or primitiveset passed to osg::Geometry::addPrimitiveSet(i,primitiveset), ignoring call."<<std::endl;
     return false;
 }
 
@@ -837,7 +481,7 @@ bool Geometry::setPrimitiveSet(unsigned int i,PrimitiveSet* primitiveset)
         dirtyBound();
         return true;
     }
-    notify(WARN)<<"Warning: invalid index i or primitiveset passed to osg::Geometry::setPrimitiveSet(i,primitiveset), ignoring call."<<std::endl;
+    OSG_WARN<<"Warning: invalid index i or primitiveset passed to osg::Geometry::setPrimitiveSet(i,primitiveset), ignoring call."<<std::endl;
     return false;
 }
 
@@ -861,8 +505,22 @@ bool Geometry::insertPrimitiveSet(unsigned int i,PrimitiveSet* primitiveset)
         }
         
     }
-    notify(WARN)<<"Warning: invalid index i or primitiveset passed to osg::Geometry::insertPrimitiveSet(i,primitiveset), ignoring call."<<std::endl;
+    OSG_WARN<<"Warning: invalid index i or primitiveset passed to osg::Geometry::insertPrimitiveSet(i,primitiveset), ignoring call."<<std::endl;
     return false;
+}
+
+void Geometry::setPrimitiveSetList(const PrimitiveSetList& primitives)
+{
+    _primitives = primitives;
+    if (_useVertexBufferObjects)
+    {
+        for (unsigned int primitiveSetIndex=0;primitiveSetIndex<_primitives.size();++primitiveSetIndex)
+        {
+            addElementBufferObjectIfRequired(_primitives[primitiveSetIndex].get());
+        }
+
+    }
+    dirtyDisplayList(); dirtyBound();
 }
 
 bool Geometry::removePrimitiveSet(unsigned int i, unsigned int numElementsToRemove)
@@ -879,8 +537,8 @@ bool Geometry::removePrimitiveSet(unsigned int i, unsigned int numElementsToRemo
         {
             // asking to delete too many elements, report a warning, and delete to
             // the end of the primitive list.
-            notify(WARN)<<"Warning: osg::Geometry::removePrimitiveSet(i,numElementsToRemove) has been asked to remove more elements than are available,"<<std::endl;
-            notify(WARN)<<"         removing on from i to the end of the list of primitive sets."<<std::endl;
+            OSG_WARN<<"Warning: osg::Geometry::removePrimitiveSet(i,numElementsToRemove) has been asked to remove more elements than are available,"<<std::endl;
+            OSG_WARN<<"         removing on from i to the end of the list of primitive sets."<<std::endl;
             _primitives.erase(_primitives.begin()+i,_primitives.end());
         }
     
@@ -888,7 +546,7 @@ bool Geometry::removePrimitiveSet(unsigned int i, unsigned int numElementsToRemo
         dirtyBound();
         return true;
     }
-    notify(WARN)<<"Warning: invalid index i passed to osg::Geometry::removePrimitiveSet(i,numElementsToRemove), ignoring call."<<std::endl;
+    OSG_WARN<<"Warning: invalid index i passed to osg::Geometry::removePrimitiveSet(i,numElementsToRemove), ignoring call."<<std::endl;
     return false;
 }
 
@@ -903,14 +561,6 @@ unsigned int Geometry::getPrimitiveSetIndex(const PrimitiveSet* primitiveset) co
 
 bool Geometry::computeFastPathsUsed()
 {
-    static bool s_DisableFastPathInDisplayLists = getenv("OSG_DISABLE_FAST_PATH_IN_DISPLAY_LISTS")!=0;
-    if (_useDisplayList && s_DisableFastPathInDisplayLists)
-    {
-        osg::notify(osg::DEBUG_INFO)<<"Geometry::computeFastPathsUsed() - Disabling fast paths in display lists"<<std::endl;
-        _supportsVertexBufferObjects = _fastPath = false;
-        return _fastPath;
-    }
-
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //
     // check to see if fast path can be used.
@@ -1089,20 +739,16 @@ osg::VertexBufferObject* Geometry::getOrCreateVertexBufferObject()
     ArrayList arrayList;
     getArrayList(arrayList);
 
-    osg::VertexBufferObject* vbo = 0;
-
     ArrayList::iterator vitr;
     for(vitr = arrayList.begin();
-        vitr != arrayList.end() && !vbo;
+        vitr != arrayList.end();
         ++vitr)
     {
         osg::Array* array = *vitr;
-        if (array->getVertexBufferObject()) vbo = array->getVertexBufferObject();
+        if (array->getVertexBufferObject()) return array->getVertexBufferObject();
     }
 
-    if (!vbo) vbo = new osg::VertexBufferObject;
-    
-    return vbo;
+    return new osg::VertexBufferObject;
 }
 
 osg::ElementBufferObject* Geometry::getOrCreateElementBufferObject()
@@ -1110,27 +756,23 @@ osg::ElementBufferObject* Geometry::getOrCreateElementBufferObject()
     DrawElementsList drawElementsList;
     getDrawElementsList(drawElementsList);
 
-    osg::ElementBufferObject* ebo = 0;
-
     DrawElementsList::iterator deitr;
     for(deitr = drawElementsList.begin();
         deitr != drawElementsList.end();
         ++deitr)
     {
         osg::DrawElements* elements = *deitr;
-        if (!elements->getElementBufferObject()) ebo = elements->getElementBufferObject();
+        if (elements->getElementBufferObject()) return elements->getElementBufferObject();
     }
 
-    if (!ebo) ebo = new osg::ElementBufferObject;
-    
-    return ebo;
+    return new osg::ElementBufferObject;
 }
 
 void Geometry::setUseVertexBufferObjects(bool flag)
 {
     // flag = true;
     
-    // osg::notify(osg::NOTICE)<<"Geometry::setUseVertexBufferObjects("<<flag<<")"<<std::endl;
+    // OSG_NOTICE<<"Geometry::setUseVertexBufferObjects("<<flag<<")"<<std::endl;
 
     if (_useVertexBufferObjects==flag) return;
 
@@ -1280,436 +922,197 @@ void Geometry::releaseGLObjects(State* state) const
 
 }
 
+void Geometry::compileGLObjects(RenderInfo& renderInfo) const
+{
+    bool useVertexArrays = _supportsVertexBufferObjects &&
+                           _useVertexBufferObjects &&
+                           renderInfo.getState()->isVertexBufferObjectSupported() &&
+                           areFastPathsUsed();
+    if (useVertexArrays)
+    {
+        // OSG_NOTICE<<"Geometry::compileGLObjects() use VBO's "<<this<<std::endl;
+        State& state = *renderInfo.getState();
+        unsigned int contextID = state.getContextID();
+        GLBufferObject::Extensions* extensions = GLBufferObject::getExtensions(contextID, true);
+        if (!extensions) return;
+
+        typedef std::set<BufferObject*> BufferObjects;
+        BufferObjects bufferObjects;
+
+        // first collect all the active unique BufferObjects
+        if (_vertexData.array.valid() && _vertexData.array->getBufferObject()) bufferObjects.insert(_vertexData.array->getBufferObject());
+        if (_normalData.array.valid() && _normalData.array->getBufferObject()) bufferObjects.insert(_normalData.array->getBufferObject());
+        if (_colorData.array.valid() && _colorData.array->getBufferObject()) bufferObjects.insert(_colorData.array->getBufferObject());
+        if (_secondaryColorData.array.valid() && _secondaryColorData.array->getBufferObject()) bufferObjects.insert(_secondaryColorData.array->getBufferObject());
+        if (_fogCoordData.array.valid() && _fogCoordData.array->getBufferObject()) bufferObjects.insert(_fogCoordData.array->getBufferObject());
+
+        for(ArrayDataList::const_iterator itr = _texCoordList.begin();
+            itr != _texCoordList.end();
+            ++itr)
+        {
+            if (itr->array.valid() && itr->array->getBufferObject()) bufferObjects.insert(itr->array->getBufferObject());
+        }
+
+        for(ArrayDataList::const_iterator itr = _vertexAttribList.begin();
+            itr != _vertexAttribList.end();
+            ++itr)
+        {
+            if (itr->array.valid() && itr->array->getBufferObject()) bufferObjects.insert(itr->array->getBufferObject());
+        }
+
+        for(PrimitiveSetList::const_iterator itr = _primitives.begin();
+            itr != _primitives.end();
+            ++itr)
+        {
+            if ((*itr)->getBufferObject()) bufferObjects.insert((*itr)->getBufferObject());
+        }
+
+        //osg::ElapsedTime timer;
+
+        // now compile any buffer objects that require it.
+        for(BufferObjects::iterator itr = bufferObjects.begin();
+            itr != bufferObjects.end();
+            ++itr)
+        {
+            GLBufferObject* glBufferObject = (*itr)->getOrCreateGLBufferObject(contextID);
+            if (glBufferObject && glBufferObject->isDirty())
+            {
+                // OSG_NOTICE<<"Compile buffer "<<glBufferObject<<std::endl;
+                glBufferObject->compileBuffer();
+            }
+        }
+
+        // OSG_NOTICE<<"Time to compile "<<timer.elapsedTime_m()<<"ms"<<std::endl;
+
+        // unbind the BufferObjects
+        extensions->glBindBuffer(GL_ARRAY_BUFFER_ARB,0);
+        extensions->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER_ARB,0);
+
+    }
+    else
+    {
+        Drawable::compileGLObjects(renderInfo);
+    }
+}
+
 void Geometry::drawImplementation(RenderInfo& renderInfo) const
 {
-    State& state = *renderInfo.getState();
-
-//    unsigned int contextID = state.getContextID();
-    
-    // osg::notify(osg::NOTICE)<<"Geometry::drawImplementation"<<std::endl;
-
     if (_internalOptimizedGeometry.valid())
     {
         _internalOptimizedGeometry->drawImplementation(renderInfo);
         return;
     }
 
-    const Extensions* extensions = getExtensions(state.getContextID(),true);
+    State& state = *renderInfo.getState();
 
-    if( !( ( _vertexData.array.valid() && _vertexData.array->getNumElements() != 0 ) ||
-           ( _vertexAttribList.size() > 0 && 
-             _vertexAttribList[0].array.valid() && 
-             _vertexAttribList[0].array->getNumElements() != 0 ) ) )
-    {
-        return;
-    }
-
-    if( ( _vertexData.indices.valid() && _vertexData.indices->getNumElements() == 0 ) ||
-          ( _vertexAttribList.size() > 0 && 
-          _vertexAttribList[0].indices.valid() && 
-          _vertexAttribList[0].indices->getNumElements() == 0 ) )
-    {
-        return;
-    }
-
-    DrawNormal         drawNormal(_normalData.array.get(),_normalData.indices.get());
-    DrawColor          drawColor(_colorData.array.get(),_colorData.indices.get());
-    DrawSecondaryColor drawSecondaryColor(_secondaryColorData.array.get(),_secondaryColorData.indices.get(),extensions);
-
-    DrawFogCoord       drawFogCoord(_fogCoordData.array.get(),_fogCoordData.indices.get(),extensions);
-
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //
-    // Set up secondary color if required.
-    //
-    AttributeBinding secondaryColorBinding = _secondaryColorData.binding;
-    if (secondaryColorBinding!=BIND_OFF && !extensions->isSecondaryColorSupported())
-    {
-        // switch off if not supported or have a valid data.
-        secondaryColorBinding = BIND_OFF;
-    }
-
+    bool checkForGLErrors = state.getCheckForGLErrors()==osg::State::ONCE_PER_ATTRIBUTE;
+    if (checkForGLErrors) state.checkGLErrors("start of Geometry::drawImplementation()");
     
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //
-    // Set up fog coord if required.
-    //
-    AttributeBinding fogCoordBinding = _fogCoordData.binding;
-    if (fogCoordBinding!=BIND_OFF && !extensions->isFogCoordSupported())
-    {
-        // switch off if not supported or have a valid data.
-        fogCoordBinding = BIND_OFF;
-    }
-
-    unsigned int normalIndex = 0;
-    unsigned int colorIndex = 0;
-    unsigned int secondaryColorIndex = 0;
-    unsigned int fogCoordIndex = 0;
-
-#if USE_DEFAULT_NORMAL
-    // if no values are defined for normal and color provide some defaults...
-    if (_normalData.binding==BIND_OFF) glNormal3f(0.0f,0.0f,1.0f);
-#endif
-
-#if USE_DEFAULT_COLOUR
-    if (_colorData.binding==BIND_OFF) glColor4f(1.0f,1.0f,1.0f,1.0f);
-#endif
-
-    typedef std::vector< ref_ptr<DrawVertexAttrib> > DrawVertexAttribList;
-    typedef std::map< Geometry::AttributeBinding, DrawVertexAttribList> DrawVertexAttribMap;
-    DrawVertexAttribMap drawVertexAttribMap;
-    
-    bool vertexVertexAttributesSupported = extensions->isVertexProgramSupported();
-    bool handleVertexAttributes = (!_vertexAttribList.empty() && vertexVertexAttributesSupported);
+    bool useFastPath = areFastPathsUsed();
+    // useFastPath = false;
 
     bool usingVertexBufferObjects = _useVertexBufferObjects && state.isVertexBufferObjectSupported();
-    
-    if (areFastPathsUsed())
+    bool handleVertexAttributes = !_vertexAttribList.empty();
+
+    ArrayDispatchers& arrayDispatchers = state.getArrayDispatchers();
+
+    arrayDispatchers.reset();
+    arrayDispatchers.setUseVertexAttribAlias(useFastPath && state.getUseVertexAttributeAliasing());
+    arrayDispatchers.setUseGLBeginEndAdapter(!useFastPath);
+
+    arrayDispatchers.activateNormalArray(_normalData.binding, _normalData.array.get(), _normalData.indices.get());
+    arrayDispatchers.activateColorArray(_colorData.binding, _colorData.array.get(), _colorData.indices.get());
+    arrayDispatchers.activateSecondaryColorArray(_secondaryColorData.binding, _secondaryColorData.array.get(), _secondaryColorData.indices.get());
+    arrayDispatchers.activateFogCoordArray(_fogCoordData.binding, _fogCoordData.array.get(), _fogCoordData.indices.get());
+
+    if (handleVertexAttributes)
     {
-    
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //
-        // fast path.        
-        //
-        if (usingVertexBufferObjects)
+        for(unsigned int unit=0;unit<_vertexAttribList.size();++unit)
         {
+            arrayDispatchers.activateVertexAttribArray(_vertexAttribList[unit].binding, unit, _vertexAttribList[unit].array.get(), _vertexAttribList[unit].indices.get());
+        }
+    }
 
-            //
-            // Vertex Buffer Object path for defining vertex arrays.
-            // 
-            state.setNormalPointer(_normalData.binding==BIND_PER_VERTEX ? _normalData.array.get() : 0);
-            state.setColorPointer(_colorData.binding==BIND_PER_VERTEX ? _colorData.array.get() : 0);
-            state.setSecondaryColorPointer(_secondaryColorData.binding==BIND_PER_VERTEX ? _secondaryColorData.array.get() : 0);
-            state.setFogCoordPointer(_fogCoordData.binding==BIND_PER_VERTEX ? _fogCoordData.array.get() : 0);
+    // dispatch any attributes that are bound overall
+    arrayDispatchers.dispatch(BIND_OVERALL,0);
 
-            unsigned int unit;
-            for(unit=0;unit<_texCoordList.size();++unit)
-            {
-                state.setTexCoordPointer(unit, _texCoordList[unit].array.get());
-            }
-            state.disableTexCoordPointersAboveAndIncluding(unit);
+    state.lazyDisablingOfVertexAttributes();
 
-            if( handleVertexAttributes )
-            {
-                unsigned int index;
-                for( index = 0; index < _vertexAttribList.size(); ++index )
-                {
-                    const Array* array = _vertexAttribList[index].array.get();
-                    const AttributeBinding ab = _vertexAttribList[index].binding;
-                    state.setVertexAttribPointer(index, (ab==BIND_PER_VERTEX ? array : 0), _vertexAttribList[index].normalize);
-
-                    if(array && ab!=BIND_PER_VERTEX)
-                    {
-                        const IndexArray* indexArray = _vertexAttribList[index].indices.get();
-
-                        if( indexArray && indexArray->getNumElements() > 0 )
-                        {
-                            drawVertexAttribMap[ab].push_back( 
-                                new DrawVertexAttrib(extensions,index,_vertexAttribList[index].normalize,array,indexArray) );
-                        }
-                        else
-                        {
-                            drawVertexAttribMap[ab].push_back( 
-                                new DrawVertexAttrib(extensions,index,_vertexAttribList[index].normalize,array,0) );
-                        }
-                    }
-                }
-                state.disableVertexAttribPointersAboveAndIncluding( index );
-                
-            }
-            else if (vertexVertexAttributesSupported)
-            {
-                state.disableVertexAttribPointersAboveAndIncluding( 0 );
-            }
-
+    if (useFastPath)
+    {
+        // set up arrays
+        if( _vertexData.array.valid() )
             state.setVertexPointer(_vertexData.array.get());
 
+        if (_normalData.binding==BIND_PER_VERTEX && _normalData.array.valid())
+            state.setNormalPointer(_normalData.array.get());
 
-        }
-        else
+        if (_colorData.binding==BIND_PER_VERTEX && _colorData.array.valid())
+            state.setColorPointer(_colorData.array.get());
+
+        if (_secondaryColorData.binding==BIND_PER_VERTEX && _secondaryColorData.array.valid())
+            state.setSecondaryColorPointer(_secondaryColorData.array.get());
+
+        if (_fogCoordData.binding==BIND_PER_VERTEX && _fogCoordData.array.valid())
+            state.setFogCoordPointer(_fogCoordData.array.get());
+
+        for(unsigned int unit=0;unit<_texCoordList.size();++unit)
         {
-            //std::cout << "none VertexBuffer path"<<std::endl;
+            const Array* array = _texCoordList[unit].array.get();
+            if (array) state.setTexCoordPointer(unit,array);
+        }
 
-            //
-            // Non Vertex Buffer Object path for defining vertex arrays.
-            //            
-            if( _vertexData.array.valid() )
-                state.setVertexPointer(_vertexData.array->getDataSize(),_vertexData.array->getDataType(),0,_vertexData.array->getDataPointer());
-            else
-                state.disableVertexPointer();
-
-            if (_normalData.binding==BIND_PER_VERTEX && _normalData.array.valid())
-                state.setNormalPointer(_normalData.array->getDataType(),0,_normalData.array->getDataPointer());
-            else
-                state.disableNormalPointer();
-
-            if (_colorData.binding==BIND_PER_VERTEX && _colorData.array.valid())
-                state.setColorPointer(_colorData.array->getDataSize(),_colorData.array->getDataType(),0,_colorData.array->getDataPointer());
-            else
-                state.disableColorPointer();
-
-            if (secondaryColorBinding==BIND_PER_VERTEX && _secondaryColorData.array.valid())
-                state.setSecondaryColorPointer(_secondaryColorData.array->getDataSize(),_secondaryColorData.array->getDataType(),0,_secondaryColorData.array->getDataPointer());
-            else
-                state.disableSecondaryColorPointer();
-
-            if (fogCoordBinding==BIND_PER_VERTEX && _fogCoordData.array.valid())
-                state.setFogCoordPointer(GL_FLOAT,0,_fogCoordData.array->getDataPointer());
-            else
-                state.disableFogCoordPointer();
-
-            unsigned int unit;
-            for(unit=0;unit<_texCoordList.size();++unit)
+        if( handleVertexAttributes )
+        {
+            for(unsigned int index = 0; index < _vertexAttribList.size(); ++index )
             {
-                const Array* array = _texCoordList[unit].array.get();
-                if (array)
-                    state.setTexCoordPointer(unit,array->getDataSize(),array->getDataType(),0,array->getDataPointer());
-                else
-                    state.disableTexCoordPointer(unit);
-            }
-            state.disableTexCoordPointersAboveAndIncluding(unit);
-
-            if( handleVertexAttributes )
-            {
-                unsigned int index;
-                for( index = 0; index < _vertexAttribList.size(); ++index )
+                const Array* array = _vertexAttribList[index].array.get();
+                const AttributeBinding ab = _vertexAttribList[index].binding;
+                if( ab == BIND_PER_VERTEX && array )
                 {
-                    const Array* array = _vertexAttribList[index].array.get();
-                    const AttributeBinding ab = _vertexAttribList[index].binding;
-
-                    if( ab == BIND_PER_VERTEX && array )
-                    {
-                        state.setVertexAttribPointer( index, array->getDataSize(), array->getDataType(), 
-                            _vertexAttribList[index].normalize, 0, array->getDataPointer() );
-                    }
-                    else
-                    {
-                        if( array )
-                        {
-                            const IndexArray* indexArray = _vertexAttribList[index].indices.get();
-
-                            if( indexArray && indexArray->getNumElements() > 0 )
-                            {
-                                drawVertexAttribMap[ab].push_back( 
-                                    new DrawVertexAttrib(extensions,index,_vertexAttribList[index].normalize,array,indexArray) );
-                            }
-                            else
-                            {
-                                drawVertexAttribMap[ab].push_back( 
-                                    new DrawVertexAttrib(extensions,index,_vertexAttribList[index].normalize,array,0) );
-                            }
-                        }
-
-                        state.disableVertexAttribPointer( index );
-                    }
-                }
-                state.disableVertexAttribPointersAboveAndIncluding( index );
-                
-            }
-            else if (vertexVertexAttributesSupported)
-            {
-                state.disableVertexAttribPointersAboveAndIncluding( 0 );
-            }
-        }
-        
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //
-        // pass the overall binding values onto OpenGL.
-        //
-        if (_normalData.binding==BIND_OVERALL)      drawNormal(normalIndex++);
-        if (_colorData.binding==BIND_OVERALL)       drawColor(colorIndex++);
-        if (secondaryColorBinding==BIND_OVERALL)    drawSecondaryColor(secondaryColorIndex++);
-        if (fogCoordBinding==BIND_OVERALL)          drawFogCoord(fogCoordIndex++);
-        if (handleVertexAttributes)
-        {
-            DrawVertexAttribList &list = drawVertexAttribMap[BIND_OVERALL];
-
-            for( unsigned int i = 0; i < list.size(); ++i )
-            {
-                list[i]->applyAndIncrement();
-            }
-        }
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //
-        // draw the primitives themselves.
-        //
-        for(PrimitiveSetList::const_iterator itr=_primitives.begin();
-            itr!=_primitives.end();
-            ++itr)
-        {
-
-            if (_normalData.binding==BIND_PER_PRIMITIVE_SET)      drawNormal(normalIndex++);
-            if (_colorData.binding==BIND_PER_PRIMITIVE_SET)       drawColor(colorIndex++);
-            if (secondaryColorBinding==BIND_PER_PRIMITIVE_SET)    drawSecondaryColor(secondaryColorIndex++);
-            if (fogCoordBinding==BIND_PER_PRIMITIVE_SET)          drawFogCoord(fogCoordIndex++);
-            if (handleVertexAttributes)
-            {
-                DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_PRIMITIVE_SET];
-
-                for( unsigned int i = 0; i < list.size(); ++i )
-                {
-                    list[i]->applyAndIncrement();
+                    state.setVertexAttribPointer( index, array, _vertexAttribList[index].normalize );
                 }
             }
-
-            (*itr)->draw(state, usingVertexBufferObjects);
-
         }
-
-        if (usingVertexBufferObjects)
-        {
-#if 1
-            state.unbindVertexBufferObject();
-            state.unbindElementBufferObject();
-#endif
-        }
-
     }
     else
-    {   
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //
-        // slow path.        
-        //
-        
-
-        typedef std::vector< ref_ptr<DrawMultiTexCoord> > DrawTexCoordList;
-        DrawTexCoordList drawTexCoordList;
-        drawTexCoordList.reserve(_texCoordList.size());
-
-        // fallback if multitexturing not supported.
-        ref_ptr<DrawTexCoord> drawTextCoord;
-
-        if (extensions->isMultiTexSupported() && _texCoordList.size()>1)
+    {
+        for(unsigned int unit=0;unit<_texCoordList.size();++unit)
         {
-            // multitexture supported..
-            for(unsigned int unit=0;unit!=_texCoordList.size();++unit)
-            {
-                const ArrayData& texcoordData = _texCoordList[unit];
-                if (texcoordData.array.valid() && texcoordData.array->getNumElements()>0)
-                {
-                    if (texcoordData.indices.valid() && texcoordData.indices->getNumElements()>0)
-                    {
-                        drawTexCoordList.push_back(new DrawMultiTexCoord(GL_TEXTURE0+unit,texcoordData.array.get(),texcoordData.indices.get(),
-                                                                         extensions));
-                    }
-                    else
-                    {
-                        drawTexCoordList.push_back(new DrawMultiTexCoord(GL_TEXTURE0+unit,texcoordData.array.get(),0,
-                                                                          extensions));
-                    }
-                }
-            }
+            arrayDispatchers.activateTexCoordArray(BIND_PER_VERTEX, unit, _texCoordList[unit].array.get(), _texCoordList[unit].indices.get());
+        }
+
+        arrayDispatchers.activateVertexArray(BIND_PER_VERTEX, _vertexData.array.get(), _vertexData.indices.get());
+    }
+
+    state.applyDisablingOfVertexAttributes();
+
+    bool bindPerPrimitiveSetActive = arrayDispatchers.active(BIND_PER_PRIMITIVE_SET);
+    bool bindPerPrimitiveActive = arrayDispatchers.active(BIND_PER_PRIMITIVE);
+
+    unsigned int primitiveNum = 0;
+
+    if (checkForGLErrors) state.checkGLErrors("Geometry::drawImplementation() after vertex arrays setup.");
+
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    // draw the primitives themselves.
+    //
+    for(unsigned int primitiveSetNum=0; primitiveSetNum!=_primitives.size(); ++primitiveSetNum)
+    {
+
+        // dispatch any attributes that are bound per primitive
+        if (bindPerPrimitiveSetActive) arrayDispatchers.dispatch(BIND_PER_PRIMITIVE_SET, primitiveSetNum);
+
+        const PrimitiveSet* primitiveset = _primitives[primitiveSetNum].get();
+
+        if (useFastPath)
+        {
+            primitiveset->draw(state, usingVertexBufferObjects);
         }
         else
         {
-            if (!_texCoordList.empty())
-            {
-                const ArrayData& texcoordData = _texCoordList[0];
-                if (texcoordData.array.valid() && texcoordData.array->getNumElements()>0)
-                {
-                    if (texcoordData.indices.valid())
-                    {
-                        if (texcoordData.indices->getNumElements()>0)
-                        {
-                            drawTextCoord = new DrawTexCoord(texcoordData.array.get(),texcoordData.indices.get());
-                        }
-                    }
-                    else
-                    {
-                        drawTextCoord = new DrawTexCoord(texcoordData.array.get(),0);
-                    }
-                }
-            }
-        }
-
-        if(handleVertexAttributes)
-        {
-            unsigned int index;
-            for( index = 1; index < _vertexAttribList.size(); ++index )
-            {
-                const ArrayData& vertAttribData = _vertexAttribList[index];
-            
-                if( vertAttribData.array.valid() && vertAttribData.array->getNumElements() > 0 )
-                {
-                    if( vertAttribData.indices.valid() && vertAttribData.indices->getNumElements() > 0 )
-                    {
-                        drawVertexAttribMap[vertAttribData.binding].push_back( 
-                            new DrawVertexAttrib(extensions,index,vertAttribData.normalize,vertAttribData.array.get(),vertAttribData.indices.get() ));
-                    }
-                    else
-                    {
-                        drawVertexAttribMap[vertAttribData.binding].push_back( 
-                            new DrawVertexAttrib(extensions,index,vertAttribData.normalize,vertAttribData.array.get(),0) );
-                    }            
-                }
-            }
-        }
-
-        // disable all the vertex arrays in the slow path as we are
-        // sending everything using glVertex etc.
-        state.disableAllVertexArrays();
-
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //
-        // pass the overall binding values onto OpenGL.
-        //
-        if (_normalData.binding==BIND_OVERALL)      drawNormal(normalIndex++);
-        if (_colorData.binding==BIND_OVERALL)       drawColor(colorIndex++);
-        if (secondaryColorBinding==BIND_OVERALL)    drawSecondaryColor(secondaryColorIndex++);
-        if (fogCoordBinding==BIND_OVERALL)          drawFogCoord(fogCoordIndex++);
-        if (handleVertexAttributes)
-        {
-            DrawVertexAttribList &list = drawVertexAttribMap[BIND_OVERALL];
-
-            for( unsigned int i = 0; i < list.size(); ++i )
-            {
-                list[i]->applyAndIncrement();
-            }
-        }
-
-        // set up vertex functor.
-        DrawVertex drawVertex(_vertexData.array.get(),_vertexData.indices.get());
-
-        bool useVertexAttrib =  _vertexAttribList.size() > 0 &&
-                                _vertexAttribList[0].array.valid() && 
-                                 _vertexAttribList[0].indices->getNumElements();
-
-        ref_ptr<DrawVertexAttrib> drawVertexAttribZero;
-        if( useVertexAttrib )
-        {
-            drawVertexAttribZero = new DrawVertexAttrib(extensions,0,
-                _vertexAttribList[0].normalize,_vertexAttribList[0].array.get(),
-                _vertexAttribList[0].indices.get()); 
-        }
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //
-        // draw the primitives themselves.
-        //
-        for(PrimitiveSetList::const_iterator itr=_primitives.begin();
-            itr!=_primitives.end();
-            ++itr)
-        {
-            if (_normalData.binding==BIND_PER_PRIMITIVE_SET)           drawNormal(normalIndex++);
-            if (_colorData.binding==BIND_PER_PRIMITIVE_SET)            drawColor(colorIndex++);
-            if (secondaryColorBinding==BIND_PER_PRIMITIVE_SET)    drawSecondaryColor(secondaryColorIndex++);
-            if (fogCoordBinding==BIND_PER_PRIMITIVE_SET)          drawFogCoord(fogCoordIndex++);
-            if (handleVertexAttributes)
-            {
-                DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_PRIMITIVE_SET];
-
-                for( unsigned int i = 0; i < list.size(); ++i )
-                {
-                    list[i]->applyAndIncrement();
-                }
-            }
-
-            const PrimitiveSet* primitiveset = itr->get();
             GLenum mode=primitiveset->getMode();
 
             unsigned int primLength;
@@ -1722,7 +1125,6 @@ void Geometry::drawImplementation(RenderInfo& renderInfo) const
                 default:            primLength=0; break; // compute later when =0.
             }
 
-
             // draw primitives by the more flexible "slow" path,
             // sending OpenGL glBegin/glVertex.../glEnd().
             switch(primitiveset->getType())
@@ -1732,7 +1134,7 @@ void Geometry::drawImplementation(RenderInfo& renderInfo) const
                     if (primLength==0) primLength=primitiveset->getNumIndices();
 
                     const DrawArrays* drawArray = static_cast<const DrawArrays*>(primitiveset);
-                    glBegin(mode);
+                    arrayDispatchers.Begin(mode);
 
                     unsigned int primCount=0;
                     unsigned int indexEnd = drawArray->getFirst()+drawArray->getCount();
@@ -1740,62 +1142,19 @@ void Geometry::drawImplementation(RenderInfo& renderInfo) const
                         vindex<indexEnd;
                         ++vindex,++primCount)
                     {
-
-                        if ((primCount%primLength)==0)
+                        if (bindPerPrimitiveActive && (primCount%primLength)==0)
                         {
-                            if (_normalData.binding==BIND_PER_PRIMITIVE)           drawNormal(normalIndex++);
-                            if (_colorData.binding==BIND_PER_PRIMITIVE)            drawColor(colorIndex++);
-                            if (secondaryColorBinding==BIND_PER_PRIMITIVE)    drawSecondaryColor(secondaryColorIndex++);
-                            if (fogCoordBinding==BIND_PER_PRIMITIVE)          drawFogCoord(fogCoordIndex++);
-                            if (handleVertexAttributes)
-                            {
-                                DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_PRIMITIVE];
-
-                                for( unsigned int i = 0; i < list.size(); ++i )
-                                {
-                                    list[i]->applyAndIncrement();
-                                }
-                            }                        
+                            arrayDispatchers.dispatch(BIND_PER_PRIMITIVE,primitiveNum++);
                         }
 
-                        if (_normalData.binding==BIND_PER_VERTEX)           drawNormal(vindex);
-                        if (_colorData.binding==BIND_PER_VERTEX)            drawColor(vindex);
-                        if (secondaryColorBinding==BIND_PER_VERTEX)    drawSecondaryColor(vindex);
-                        if (fogCoordBinding==BIND_PER_VERTEX)          drawFogCoord(vindex);
-                        if (handleVertexAttributes)
-                        {
-                            DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_VERTEX];
-
-                            for( unsigned int i = 0; i < list.size(); ++i )
-                            {
-                                list[i]->applyAndIncrement();
-                            }
-                        }  
-
-                        for(DrawTexCoordList::iterator texItr=drawTexCoordList.begin();
-                            texItr!=drawTexCoordList.end();
-                            ++texItr)
-                        {
-                            (*(*texItr))(vindex);
-                        }
-                        if (drawTextCoord.valid()) (*drawTextCoord)(vindex);
-
-                        if( useVertexAttrib )
-                        {
-                            (*drawVertexAttribZero)(vindex);
-                        }
-                        else
-                        {
-                            drawVertex(vindex);
-                        }
+                        arrayDispatchers.dispatch(BIND_PER_VERTEX, vindex);
                     }
-                    
-                    glEnd();
+
+                    arrayDispatchers.End();
                     break;
                 }
                 case(PrimitiveSet::DrawArrayLengthsPrimitiveType):
                 {
-
                     const DrawArrayLengths* drawArrayLengths = static_cast<const DrawArrayLengths*>(primitiveset);
                     unsigned int vindex=drawArrayLengths->getFirst();
                     for(DrawArrayLengths::const_iterator primItr=drawArrayLengths->begin();
@@ -1806,61 +1165,20 @@ void Geometry::drawImplementation(RenderInfo& renderInfo) const
                         if (primLength==0) localPrimLength=*primItr;
                         else localPrimLength=primLength;
 
-                        glBegin(mode);
+                        arrayDispatchers.Begin(mode);
 
-                        for(GLsizei primCount=0;primCount<*primItr;++primCount)
+                        for(GLsizei primCount=0;
+                            primCount<*primItr;
+                            ++vindex,++primCount)
                         {
-                            if ((primCount%localPrimLength)==0)
+                            if (bindPerPrimitiveActive && (primCount%localPrimLength)==0)
                             {
-                                if (_normalData.binding==BIND_PER_PRIMITIVE)           drawNormal(normalIndex++);
-                                if (_colorData.binding==BIND_PER_PRIMITIVE)            drawColor(colorIndex++);
-                                if (secondaryColorBinding==BIND_PER_PRIMITIVE)    drawSecondaryColor(secondaryColorIndex++);
-                                if (fogCoordBinding==BIND_PER_PRIMITIVE)          drawFogCoord(fogCoordIndex++);
-                                if (handleVertexAttributes)
-                                {
-                                    DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_PRIMITIVE];
-
-                                    for( unsigned int i = 0; i < list.size(); ++i )
-                                    {
-                                        list[i]->applyAndIncrement();
-                                    }
-                                }  
+                                arrayDispatchers.dispatch(BIND_PER_PRIMITIVE, primitiveNum++);
                             }
-                            
-                            if (_normalData.binding==BIND_PER_VERTEX)           drawNormal(vindex);
-                            if (_colorData.binding==BIND_PER_VERTEX)            drawColor(vindex);
-                            if (secondaryColorBinding==BIND_PER_VERTEX)    drawSecondaryColor(vindex);
-                            if (fogCoordBinding==BIND_PER_VERTEX)          drawFogCoord(vindex);
-                            if (handleVertexAttributes)
-                            {
-                                DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_VERTEX];
-
-                                for( unsigned int i = 0; i < list.size(); ++i )
-                                {
-                                    list[i]->applyAndIncrement();
-                                }
-                            }  
-                            for(DrawTexCoordList::iterator texItr=drawTexCoordList.begin();
-                                texItr!=drawTexCoordList.end();
-                                ++texItr)
-                            {
-                                (*(*texItr))(vindex);
-                            }
-                            if (drawTextCoord.valid()) (*drawTextCoord)(vindex);
-
-                            if( useVertexAttrib )
-                            {
-                                (*drawVertexAttribZero)(vindex);
-                            }
-                            else
-                            {
-                                drawVertex(vindex);
-                            }
-
-                            ++vindex;
+                            arrayDispatchers.dispatch(BIND_PER_VERTEX, vindex);
                         }
-                        
-                        glEnd();
+
+                        arrayDispatchers.End();
 
                     }
                     break;
@@ -1870,7 +1188,7 @@ void Geometry::drawImplementation(RenderInfo& renderInfo) const
                     if (primLength==0) primLength=primitiveset->getNumIndices();
 
                     const DrawElementsUByte* drawElements = static_cast<const DrawElementsUByte*>(primitiveset);
-                    glBegin(mode);
+                    arrayDispatchers.Begin(mode);
 
                     unsigned int primCount=0;
                     for(DrawElementsUByte::const_iterator primItr=drawElements->begin();
@@ -1878,58 +1196,16 @@ void Geometry::drawImplementation(RenderInfo& renderInfo) const
                         ++primCount,++primItr)
                     {
 
-                        if ((primCount%primLength)==0)
+                        if (bindPerPrimitiveActive && (primCount%primLength)==0)
                         {
-                            if (_normalData.binding==BIND_PER_PRIMITIVE)           drawNormal(normalIndex++);
-                            if (_colorData.binding==BIND_PER_PRIMITIVE)            drawColor(colorIndex++);
-                            if (secondaryColorBinding==BIND_PER_PRIMITIVE)    drawSecondaryColor(secondaryColorIndex++);
-                            if (fogCoordBinding==BIND_PER_PRIMITIVE)          drawFogCoord(fogCoordIndex++);
-                            if (handleVertexAttributes)
-                            {
-                                DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_PRIMITIVE];
-
-                                for( unsigned int i = 0; i < list.size(); ++i )
-                                {
-                                    list[i]->applyAndIncrement();
-                                }
-                            }  
+                            arrayDispatchers.dispatch(BIND_PER_PRIMITIVE, primitiveNum++);
                         }
-                        
+
                         unsigned int vindex=*primItr;
-
-                        if (_normalData.binding==BIND_PER_VERTEX)           drawNormal(vindex);
-                        if (_colorData.binding==BIND_PER_VERTEX)            drawColor(vindex);
-                        if (secondaryColorBinding==BIND_PER_VERTEX)    drawSecondaryColor(vindex);
-                        if (fogCoordBinding==BIND_PER_VERTEX)          drawFogCoord(vindex);
-                        if ( extensions->isVertexProgramSupported() )
-                        {
-                            DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_VERTEX];
-
-                            for( unsigned int i = 0; i < list.size(); ++i )
-                            {
-                                list[i]->applyAndIncrement();
-                            }
-                        }  
-
-                        for(DrawTexCoordList::iterator texItr=drawTexCoordList.begin();
-                            texItr!=drawTexCoordList.end();
-                            ++texItr)
-                        {
-                            (*(*texItr))(vindex);
-                        }
-                        if (drawTextCoord.valid()) (*drawTextCoord)(vindex);
-
-                        if( useVertexAttrib )
-                        {
-                            (*drawVertexAttribZero)(vindex);
-                        }
-                        else
-                        {
-                            drawVertex(vindex);
-                        }
+                        arrayDispatchers.dispatch(BIND_PER_VERTEX, vindex);
                     }
 
-                    glEnd();
+                    arrayDispatchers.End();
                     break;
                 }
                 case(PrimitiveSet::DrawElementsUShortPrimitiveType):
@@ -1937,66 +1213,23 @@ void Geometry::drawImplementation(RenderInfo& renderInfo) const
                     if (primLength==0) primLength=primitiveset->getNumIndices();
 
                     const DrawElementsUShort* drawElements = static_cast<const DrawElementsUShort*>(primitiveset);
-                    glBegin(mode);
+                    arrayDispatchers.Begin(mode);
 
                     unsigned int primCount=0;
                     for(DrawElementsUShort::const_iterator primItr=drawElements->begin();
                         primItr!=drawElements->end();
                         ++primCount,++primItr)
                     {
-
-                        if ((primCount%primLength)==0)
+                        if (bindPerPrimitiveActive && (primCount%primLength)==0)
                         {
-                            if (_normalData.binding==BIND_PER_PRIMITIVE)           drawNormal(normalIndex++);
-                            if (_colorData.binding==BIND_PER_PRIMITIVE)            drawColor(colorIndex++);
-                            if (secondaryColorBinding==BIND_PER_PRIMITIVE)    drawSecondaryColor(secondaryColorIndex++);
-                            if (fogCoordBinding==BIND_PER_PRIMITIVE)          drawFogCoord(fogCoordIndex++);
-                            if (handleVertexAttributes)
-                            {
-                                DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_PRIMITIVE];
-
-                                for( unsigned int i = 0; i < list.size(); ++i )
-                                {
-                                    list[i]->applyAndIncrement();
-                                }
-                            }  
+                            arrayDispatchers.dispatch(BIND_PER_PRIMITIVE, primitiveNum++);
                         }
-                        
+
                         unsigned int vindex=*primItr;
-
-                        if (_normalData.binding==BIND_PER_VERTEX)           drawNormal(vindex);
-                        if (_colorData.binding==BIND_PER_VERTEX)            drawColor(vindex);
-                        if (secondaryColorBinding==BIND_PER_VERTEX)    drawSecondaryColor(vindex);
-                        if (fogCoordBinding==BIND_PER_VERTEX)          drawFogCoord(vindex);
-                        if (handleVertexAttributes)
-                        {
-                            DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_VERTEX];
-
-                            for( unsigned int i = 0; i < list.size(); ++i )
-                            {
-                                list[i]->applyAndIncrement();
-                            }
-                        }  
-
-                        for(DrawTexCoordList::iterator texItr=drawTexCoordList.begin();
-                            texItr!=drawTexCoordList.end();
-                            ++texItr)
-                        {
-                            (*(*texItr))(vindex);
-                        }
-                        if (drawTextCoord.valid()) (*drawTextCoord)(vindex);
-
-                        if( useVertexAttrib )
-                        {
-                            (*drawVertexAttribZero)(vindex);
-                        }
-                        else
-                        {
-                            drawVertex(vindex);
-                        }
+                        arrayDispatchers.dispatch(BIND_PER_VERTEX, vindex);
                     }
 
-                    glEnd();
+                    arrayDispatchers.End();
                     break;
                 }
                 case(PrimitiveSet::DrawElementsUIntPrimitiveType):
@@ -2004,66 +1237,23 @@ void Geometry::drawImplementation(RenderInfo& renderInfo) const
                     if (primLength==0) primLength=primitiveset->getNumIndices();
 
                     const DrawElementsUInt* drawElements = static_cast<const DrawElementsUInt*>(primitiveset);
-                    glBegin(mode);
+                    arrayDispatchers.Begin(mode);
 
                     unsigned int primCount=0;
                     for(DrawElementsUInt::const_iterator primItr=drawElements->begin();
                         primItr!=drawElements->end();
                         ++primCount,++primItr)
                     {
-
-                        if ((primCount%primLength)==0)
+                        if (bindPerPrimitiveActive && (primCount%primLength)==0)
                         {
-                            if (_normalData.binding==BIND_PER_PRIMITIVE)           drawNormal(normalIndex++);
-                            if (_colorData.binding==BIND_PER_PRIMITIVE)            drawColor(colorIndex++);
-                            if (secondaryColorBinding==BIND_PER_PRIMITIVE)    drawSecondaryColor(secondaryColorIndex++);
-                            if (fogCoordBinding==BIND_PER_PRIMITIVE)          drawFogCoord(fogCoordIndex++);
-                            if ( extensions->isVertexProgramSupported() )
-                            {
-                                DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_PRIMITIVE];
-
-                                for( unsigned int i = 0; i < list.size(); ++i )
-                                {
-                                    list[i]->applyAndIncrement();
-                                }
-                            }  
+                            arrayDispatchers.dispatch(BIND_PER_PRIMITIVE, primitiveNum++);
                         }
-                        
+
                         unsigned int vindex=*primItr;
-
-                        if (_normalData.binding==BIND_PER_VERTEX)           drawNormal(vindex);
-                        if (_colorData.binding==BIND_PER_VERTEX)            drawColor(vindex);
-                        if (secondaryColorBinding==BIND_PER_VERTEX)    drawSecondaryColor(vindex);
-                        if (fogCoordBinding==BIND_PER_VERTEX)          drawFogCoord(vindex);
-                        if ( extensions->isVertexProgramSupported() )
-                        {
-                            DrawVertexAttribList &list = drawVertexAttribMap[BIND_PER_VERTEX];
-
-                            for( unsigned int i = 0; i < list.size(); ++i )
-                            {
-                                list[i]->applyAndIncrement();
-                            }
-                        }  
-
-                        for(DrawTexCoordList::iterator texItr=drawTexCoordList.begin();
-                            texItr!=drawTexCoordList.end();
-                            ++texItr)
-                        {
-                            (*(*texItr))(vindex);
-                        }
-                        if (drawTextCoord.valid()) (*drawTextCoord)(vindex);
-
-                        if( useVertexAttrib )
-                        {
-                            (*drawVertexAttribZero)(vindex);
-                        }
-                        else
-                        {
-                            drawVertex(vindex);
-                        }
+                        arrayDispatchers.dispatch(BIND_PER_VERTEX, vindex);
                     }
 
-                    glEnd();
+                    arrayDispatchers.End();
                     break;
                 }
                 default:
@@ -2074,6 +1264,11 @@ void Geometry::drawImplementation(RenderInfo& renderInfo) const
         }
     }
 
+    // unbind the VBO's if any are used.
+    state.unbindVertexBufferObject();
+    state.unbindElementBufferObject();
+
+    if (checkForGLErrors) state.checkGLErrors("end of Geometry::drawImplementation().");
 }
 
 class AttributeFunctorArrayVisitor : public ArrayVisitor
@@ -2122,7 +1317,16 @@ void Geometry::accept(AttributeFunctor& af)
 {
     AttributeFunctorArrayVisitor afav(af);
 
-    afav.applyArray(VERTICES,_vertexData.array.get());
+    if (_vertexData.array.valid())
+    {
+        afav.applyArray(VERTICES,_vertexData.array.get());
+    }
+    else if (_vertexAttribList.size()>0)
+    {
+        OSG_INFO<<"Geometry::accept(AttributeFunctor& af): Using vertex attribute instead"<<std::endl;
+        afav.applyArray(VERTICES,_vertexAttribList[0].array.get());
+    }
+
     afav.applyArray(NORMALS,_normalData.array.get());
     afav.applyArray(COLORS,_colorData.array.get());
     afav.applyArray(SECONDARY_COLORS,_secondaryColorData.array.get());
@@ -2186,7 +1390,16 @@ void Geometry::accept(ConstAttributeFunctor& af) const
 {
     ConstAttributeFunctorArrayVisitor afav(af);
     
-    afav.applyArray(VERTICES,_vertexData.array.get());
+    if (_vertexData.array.valid())
+    {
+        afav.applyArray(VERTICES,_vertexData.array.get());
+    }
+    else if (_vertexAttribList.size()>0)
+    {
+        OSG_INFO<<"Geometry::accept(ConstAttributeFunctor& af): Using vertex attribute instead"<<std::endl;
+        afav.applyArray(VERTICES,_vertexAttribList[0].array.get());
+    }
+
     afav.applyArray(NORMALS,_normalData.array.get());
     afav.applyArray(COLORS,_colorData.array.get());
     afav.applyArray(SECONDARY_COLORS,_secondaryColorData.array.get());
@@ -2205,32 +1418,42 @@ void Geometry::accept(ConstAttributeFunctor& af) const
 
 void Geometry::accept(PrimitiveFunctor& functor) const
 {
-    if (!_vertexData.array.valid() || _vertexData.array->getNumElements()==0) return;
+    const osg::Array* vertices = _vertexData.array.get();
+    const osg::IndexArray* indices = _vertexData.indices.get();
 
-    if (!_vertexData.indices.valid())
+    if (!vertices && _vertexAttribList.size()>0)
     {
-        switch(_vertexData.array->getType())
+        OSG_INFO<<"Using vertex attribute instead"<<std::endl;
+        vertices = _vertexAttribList[0].array.get();
+        indices = _vertexAttribList[0].indices.get();
+    }
+
+    if (!vertices || vertices->getNumElements()==0) return;
+
+    if (!indices)
+    {
+        switch(vertices->getType())
         {
         case(Array::Vec2ArrayType): 
-            functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec2*>(_vertexData.array->getDataPointer()));
+            functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec2*>(vertices->getDataPointer()));
             break;
         case(Array::Vec3ArrayType): 
-            functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec3*>(_vertexData.array->getDataPointer()));
+            functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec3*>(vertices->getDataPointer()));
             break;
         case(Array::Vec4ArrayType): 
-            functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec4*>(_vertexData.array->getDataPointer()));
+            functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec4*>(vertices->getDataPointer()));
             break;
         case(Array::Vec2dArrayType): 
-            functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec2d*>(_vertexData.array->getDataPointer()));
+            functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec2d*>(vertices->getDataPointer()));
             break;
         case(Array::Vec3dArrayType): 
-            functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec3d*>(_vertexData.array->getDataPointer()));
+            functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec3d*>(vertices->getDataPointer()));
             break;
         case(Array::Vec4dArrayType): 
-            functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec4d*>(_vertexData.array->getDataPointer()));
+            functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec4d*>(vertices->getDataPointer()));
             break;
         default:
-            notify(WARN)<<"Warning: Geometry::accept(PrimitiveFunctor&) cannot handle Vertex Array type"<<_vertexData.array->getType()<<std::endl;
+            OSG_WARN<<"Warning: Geometry::accept(PrimitiveFunctor&) cannot handle Vertex Array type"<<vertices->getType()<<std::endl;
             return;
         }
         
@@ -2249,33 +1472,32 @@ void Geometry::accept(PrimitiveFunctor& functor) const
         const Vec2d* vec2dArray = 0;
         const Vec3d* vec3dArray = 0;
         const Vec4d* vec4dArray = 0;
-        Array::Type type = _vertexData.array->getType();
+        Array::Type type = vertices->getType();
         switch(type)
         {
         case(Array::Vec2ArrayType): 
-            vec2Array = static_cast<const Vec2*>(_vertexData.array->getDataPointer());
+            vec2Array = static_cast<const Vec2*>(vertices->getDataPointer());
             break;
         case(Array::Vec3ArrayType): 
-            vec3Array = static_cast<const Vec3*>(_vertexData.array->getDataPointer());
+            vec3Array = static_cast<const Vec3*>(vertices->getDataPointer());
             break;
         case(Array::Vec4ArrayType): 
-            vec4Array = static_cast<const Vec4*>(_vertexData.array->getDataPointer());
+            vec4Array = static_cast<const Vec4*>(vertices->getDataPointer());
             break;
         case(Array::Vec2dArrayType): 
-            vec2dArray = static_cast<const Vec2d*>(_vertexData.array->getDataPointer());
+            vec2dArray = static_cast<const Vec2d*>(vertices->getDataPointer());
             break;
         case(Array::Vec3dArrayType): 
-            vec3dArray = static_cast<const Vec3d*>(_vertexData.array->getDataPointer());
+            vec3dArray = static_cast<const Vec3d*>(vertices->getDataPointer());
             break;
         case(Array::Vec4dArrayType): 
-            vec4dArray = static_cast<const Vec4d*>(_vertexData.array->getDataPointer());
+            vec4dArray = static_cast<const Vec4d*>(vertices->getDataPointer());
             break;
         default:
-            notify(WARN)<<"Warning: Geometry::accept(PrimitiveFunctor&) cannot handle Vertex Array type"<<_vertexData.array->getType()<<std::endl;
+            OSG_WARN<<"Warning: Geometry::accept(PrimitiveFunctor&) cannot handle Vertex Array type"<<vertices->getType()<<std::endl;
             return;
         }
 
-    
         for(PrimitiveSetList::const_iterator itr=_primitives.begin();
             itr!=_primitives.end();
             ++itr)
@@ -2319,7 +1541,7 @@ void Geometry::accept(PrimitiveFunctor& functor) const
                         }
 
                     }
-                    
+
                     functor.end();
                     break;
                 }
@@ -2362,7 +1584,7 @@ void Geometry::accept(PrimitiveFunctor& functor) const
                             }
                             ++vindex;
                         }
-                        
+
                         functor.end();
 
                     }
@@ -2495,30 +1717,40 @@ void Geometry::accept(PrimitiveFunctor& functor) const
 
 void Geometry::accept(PrimitiveIndexFunctor& functor) const
 {
-    if (!_vertexData.array.valid() || _vertexData.array->getNumElements()==0) return;
+    const osg::Array* vertices = _vertexData.array.get();
+    const osg::IndexArray* indices = _vertexData.indices.get();
 
-    switch(_vertexData.array->getType())
+    if (!vertices && _vertexAttribList.size()>0)
+    {
+        OSG_INFO<<"Geometry::accept(PrimitiveIndexFunctor& functor): Using vertex attribute instead"<<std::endl;
+        vertices = _vertexAttribList[0].array.get();
+        indices = _vertexAttribList[0].indices.get();
+    }
+
+    if (!vertices || vertices->getNumElements()==0) return;
+
+    switch(vertices->getType())
     {
     case(Array::Vec2ArrayType): 
-        functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec2*>(_vertexData.array->getDataPointer()));
+        functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec2*>(vertices->getDataPointer()));
         break;
     case(Array::Vec3ArrayType): 
-        functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec3*>(_vertexData.array->getDataPointer()));
+        functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec3*>(vertices->getDataPointer()));
         break;
     case(Array::Vec4ArrayType): 
-        functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec4*>(_vertexData.array->getDataPointer()));
+        functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec4*>(vertices->getDataPointer()));
         break;
     case(Array::Vec2dArrayType): 
-        functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec2d*>(_vertexData.array->getDataPointer()));
+        functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec2d*>(vertices->getDataPointer()));
         break;
     case(Array::Vec3dArrayType): 
-        functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec3d*>(_vertexData.array->getDataPointer()));
+        functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec3d*>(vertices->getDataPointer()));
         break;
     case(Array::Vec4dArrayType): 
-        functor.setVertexArray(_vertexData.array->getNumElements(),static_cast<const Vec4d*>(_vertexData.array->getDataPointer()));
+        functor.setVertexArray(vertices->getNumElements(),static_cast<const Vec4d*>(vertices->getDataPointer()));
         break;
     default:
-        notify(WARN)<<"Warning: Geometry::accept(PrimitiveIndexFunctor&) cannot handle Vertex Array type"<<_vertexData.array->getType()<<std::endl;
+        OSG_WARN<<"Warning: Geometry::accept(PrimitiveIndexFunctor&) cannot handle Vertex Array type"<<vertices->getType()<<std::endl;
         return;
     }
 
@@ -2654,15 +1886,15 @@ unsigned int _computeNumberOfPrimitives(const osg::Geometry& geom)
         unsigned int primLength;
         switch(mode)
         {
-            case(GL_POINTS):    primLength=1; osg::notify(osg::INFO)<<"prim=GL_POINTS"<<std::endl; break;
-            case(GL_LINES):     primLength=2; osg::notify(osg::INFO)<<"prim=GL_LINES"<<std::endl; break;
-            case(GL_TRIANGLES): primLength=3; osg::notify(osg::INFO)<<"prim=GL_TRIANGLES"<<std::endl; break;
-            case(GL_QUADS):     primLength=4; osg::notify(osg::INFO)<<"prim=GL_QUADS"<<std::endl; break;
-            default:            primLength=0; osg::notify(osg::INFO)<<"prim="<<std::hex<<mode<<std::dec<<std::endl; break; // compute later when =0.
+            case(GL_POINTS):    primLength=1; OSG_INFO<<"prim=GL_POINTS"<<std::endl; break;
+            case(GL_LINES):     primLength=2; OSG_INFO<<"prim=GL_LINES"<<std::endl; break;
+            case(GL_TRIANGLES): primLength=3; OSG_INFO<<"prim=GL_TRIANGLES"<<std::endl; break;
+            case(GL_QUADS):     primLength=4; OSG_INFO<<"prim=GL_QUADS"<<std::endl; break;
+            default:            primLength=0; OSG_INFO<<"prim="<<std::hex<<mode<<std::dec<<std::endl; break; // compute later when =0.
         }
 
         // draw primitives by the more flexible "slow" path,
-        // sending OpenGL glBegin/glVertex.../glEnd().
+        // sending OpenGL Begin/glVertex.../End().
         switch(primitiveset->getType())
         {
             case(PrimitiveSet::DrawArrayLengthsPrimitiveType):
@@ -2680,8 +1912,8 @@ unsigned int _computeNumberOfPrimitives(const osg::Geometry& geom)
             }
             default:
             {
-                if (primLength==0) { totalNumberOfPrimitives += 1; osg::notify(osg::INFO)<<"   totalNumberOfPrimitives="<<totalNumberOfPrimitives<<std::endl;}
-                else { totalNumberOfPrimitives += primitiveset->getNumIndices()/primLength; osg::notify(osg::INFO)<<"   primitiveset->getNumIndices()="<<primitiveset->getNumIndices()<<" totalNumberOfPrimitives="<<totalNumberOfPrimitives<<std::endl; }
+                if (primLength==0) { totalNumberOfPrimitives += 1; OSG_INFO<<"   totalNumberOfPrimitives="<<totalNumberOfPrimitives<<std::endl;}
+                else { totalNumberOfPrimitives += primitiveset->getNumIndices()/primLength; OSG_INFO<<"   primitiveset->getNumIndices()="<<primitiveset->getNumIndices()<<" totalNumberOfPrimitives="<<totalNumberOfPrimitives<<std::endl; }
 
             }
         }
@@ -3282,623 +2514,6 @@ Geometry* osg::createTexturedQuadGeometry(const Vec3& corner,const Vec3& widthVe
     geom->setNormalBinding(Geometry::BIND_OVERALL);
 
     geom->addPrimitiveSet(new DrawArrays(PrimitiveSet::QUADS,0,4));
-    
+
     return geom;
 }
-
-
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-
-// experimental templated rendering code, please ignore...
-// will move to osg::Geometry once complete.
-// Robert Osfield, August 2003.
-#if 0
-
-    struct DrawAttributeArrays 
-    {
-        virtual bool valid() const = 0;
-        virtual void set(osg::Geometry* geometry) = 0;
-        virtual unsigned int draw(unsigned int index, unsigned int count) const = 0;
-    };
-
-    struct V3
-    {
-        V3():_array(0) {}
-
-        bool valid() const { return _array!=0; }
-
-        void set(osg::Geometry* geometry)
-        {
-            _array = 0;
-            osg::Array* array = geometry->getVertexArray();
-            if (array && array->getType()==osg::Array::Vec3ArrayType)
-            {
-                osg::Vec3Array* vec3array = static_cast<osg::Vec3Array*>(array);
-                if (!vec3array->empty()) _array = &(vec3array->front());
-            }
-        }
-
-        inline void draw(unsigned int index) const
-        {
-            glVertex3fv(_array[index].ptr());
-        }
-
-        osg::Vec3* _array;
-    };
-
-    struct V3USI
-    {
-        V3USI():_array(0),_indices(0) {}
-
-        bool valid() const { return _array!=0 && _indices!=0; }
-
-        void set(osg::Geometry* geometry)
-        {
-            _array = 0;
-            osg::Array* array = geometry->getVertexArray();
-            if (array && array->getType()==osg::Array::Vec3ArrayType)
-            {
-                osg::Vec3Array* vec3array = static_cast<osg::Vec3Array*>(array);
-                if (!vec3array->empty()) _array = &(vec3array->front());
-            }
-
-            _indices = 0;
-            osg::IndexArray* indices = geometry->getVertexIndices();
-            if (indices && indices->getType()==osg::Array::UShortArrayType)
-            {
-                osg::UShortArray* ushort3array = static_cast<osg::UShortArray*>(array);
-                if (!ushort3array->empty()) _indices = &(ushort3array->front());
-            }
-        }
-
-        inline void draw(unsigned int index) const
-        {
-            glVertex3fv(_array[_indices[index]].ptr());
-        }
-
-        osg::Vec3*      _array;
-        unsigned short* _indices;
-    };
-
-    //////////////////////////////
-
-    struct N3
-    {
-        N3():_array(0) {}
-
-        bool valid() const { return _array!=0; }
-
-        void set(osg::Geometry* geometry)
-        {
-            _array = 0;
-            osg::Array* array = geometry->getVertexArray();
-            if (array && array->getType()==osg::Array::Vec3ArrayType)
-            {
-                osg::Vec3Array* vec3array = static_cast<osg::Vec3Array*>(array);
-                if (!vec3array->empty()) _array = &(vec3array->front());
-            }
-        }
-
-        inline void draw(unsigned int index) const
-        {
-            glNormal3fv(_array[index].ptr());
-        }
-
-        osg::Vec3* _array;
-    };
-
-    struct N3USI
-    {
-        N3USI():_array(0),_indices(0) {}
-
-        bool valid() const { return _array!=0 && _indices!=0; }
-
-        void set(osg::Geometry* geometry)
-        {
-            _array = 0;
-            osg::Array* array = geometry->getVertexArray();
-            if (array && array->getType()==osg::Array::Vec3ArrayType)
-            {
-                osg::Vec3Array* vec3array = static_cast<osg::Vec3Array*>(array);
-                if (!vec3array->empty()) _array = &(vec3array->front());
-            }
-
-            _indices = 0;
-            osg::IndexArray* indices = geometry->getVertexIndices();
-            if (indices && indices->getType()==osg::Array::UShortArrayType)
-            {
-                osg::UShortArray* ushortarray = static_cast<osg::UShortArray*>(array);
-                if (!ushortarray->empty()) _indices = &(ushortarray->front());
-            }
-        }
-
-        inline void draw(unsigned int index) const
-        {
-            glNormal3fv(_array[_indices[index]].ptr());
-        }
-
-        osg::Vec3*      _array;
-        unsigned short* _indices;
-    };
-
-    //////////////////////////////
-
-    struct C4
-    {
-        C4():_array(0) {}
-
-        bool valid() const { return _array!=0; }
-
-        void set(osg::Geometry* geometry)
-        {
-            _array = 0;
-            osg::Array* array = geometry->getColorArray();
-            if (array && array->getType()==osg::Array::Vec4ArrayType)
-            {
-                osg::Vec4Array* vec4array = static_cast<osg::Vec4Array*>(array);
-                if (!vec4array->empty()) _array = &(vec4array->front());
-            }
-        }
-
-        inline void draw(unsigned int index) const
-        {
-            glVertex3fv(_array[index].ptr());
-        }
-
-        osg::Vec4* _array;
-    };
-
-    struct C4USI
-    {
-        C4USI():_array(0),_indices(0) {}
-
-        bool valid() const { return _array!=0 && _indices!=0; }
-
-        void set(osg::Geometry* geometry)
-        {
-            _array = 0;
-            osg::Array* array = geometry->getColorArray();
-            if (array && array->getType()==osg::Array::Vec4ArrayType)
-            {
-                osg::Vec4Array* vec4array = static_cast<osg::Vec4Array*>(array);
-                if (!vec4array->empty()) _array = &(vec4array->front());
-            }
-
-            _indices = 0;
-            osg::IndexArray* indices = geometry->getColorIndices();
-            if (indices && indices->getType()==osg::Array::UShortArrayType)
-            {
-                osg::UShortArray* ushortarray = static_cast<osg::UShortArray*>(array);
-                if (!ushortarray->empty()) _indices = &(ushortarray->front());
-            }
-        }
-
-        inline void draw(unsigned int index) const
-        {
-            glColor4fv(_array[_indices[index]].ptr());
-        }
-
-        osg::Vec4*      _array;
-        unsigned short* _indices;
-    };
-
-    //////////////////////////////
-
-    struct T2
-    {
-        T2():_array(0) {}
-
-        bool valid() const { return _array!=0; }
-
-        void set(osg::Geometry* geometry)
-        {
-            _array = 0;
-            osg::Array* array = geometry->getTexCoordArray(0);
-            if (array && array->getType()==osg::Array::Vec2ArrayType)
-            {
-                osg::Vec2Array* vec2array = static_cast<osg::Vec2Array*>(array);
-                if (!vec2array->empty()) _array = &(vec2array->front());
-            }
-        }
-
-        inline void draw(unsigned int index) const
-        {
-            glTexCoord2fv(_array[index].ptr());
-        }
-
-        osg::Vec2* _array;
-    };
-
-    struct T2USI
-    {
-        T2USI():_array(0),_indices(0) {}
-
-        bool valid() const { return _array!=0 && _indices!=0; }
-
-        void set(osg::Geometry* geometry)
-        {
-            _array = 0;
-            osg::Array* array = geometry->getTexCoordArray(0);
-            if (array && array->getType()==osg::Array::Vec2ArrayType)
-            {
-                osg::Vec2Array* vec2array = static_cast<osg::Vec2Array*>(array);
-                if (!vec2array->empty()) _array = &(vec2array->front());
-            }
-
-            _indices = 0;
-            osg::IndexArray* indices = geometry->getTexCoordIndices(0);
-            if (indices && indices->getType()==osg::Array::UShortArrayType)
-            {
-                osg::UShortArray* ushortarray = static_cast<osg::UShortArray*>(array);
-                if (!ushortarray->empty()) _indices = &(ushortarray->front());
-            }
-        }
-
-        inline void draw(unsigned int index) const
-        {
-            glTexCoord2fv(_array[_indices[index]].ptr());
-        }
-
-        osg::Vec2*      _array;
-        unsigned short* _indices;
-    };
-
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    template < class T1 >
-    struct DrawAttributeArrays_T : public DrawAttributeArrays
-    {
-        DrawAttributeArrays_T(osg::Geometry* geometry)
-        {
-
-        }
-
-        virtual bool valid() const { return _t1.valid(); }
-
-        virtual void set(osg::Geometry* geometry)
-        {
-            _t1.set(geometry);
-        }
-
-        virtual unsigned int draw(unsigned int index, unsigned int count) const
-        {
-            for(unsigned int i=0;i<count;++i,++index)
-            {
-                _t1.draw(index);
-            }
-            return index;
-        }
-
-        T1 _t1;
-    };
-
-    template < class T1, class T2 >
-    struct DrawAttributeArrays_TT : public DrawAttributeArrays
-    {
-        DrawAttributeArrays_TT()
-        {
-        }
-
-        virtual bool valid() const { return _t1.valid() && _t2.valid(); }
-
-        virtual void set(osg::Geometry* geometry)
-        {
-            _t1.set(geometry);
-            _t2.set(geometry);
-        }
-
-        virtual unsigned int draw(unsigned int index, unsigned int count) const
-        {
-            for(unsigned int i=0;i<count;++i,++index)
-            {
-                _t1.draw(index);
-                _t2.draw(index);
-            }
-            return index;
-        }
-
-        T1 _t1;
-        T1 _t2;
-    };
-
-    template < class T1, class T2, class T3 >
-    struct DrawAttributeArrays_TTT : public DrawAttributeArrays
-    {
-        DrawAttributeArrays_TTT()
-        {
-        }
-
-        virtual bool valid() const { return _t1.valid() && _t2.valid() && _t3.valid(); }
-
-        virtual void set(osg::Geometry* geometry)
-        {
-            _t1.set(geometry);
-            _t2.set(geometry);
-            _t3.set(geometry);
-        }
-
-        virtual unsigned int draw(unsigned int index, unsigned int count) const
-        {
-            for(unsigned int i=0;i<count;++i,++index)
-            {
-                _t1.draw(index);
-                _t2.draw(index);
-                _t3.draw(index);
-            }
-            return index;
-        }
-
-        T1 _t1;
-        T2 _t2;
-        T3 _t3;
-    };
-
-    template < class T1, class T2, class T3, class T4 >
-    struct DrawAttributeArrays_TTTT : public DrawAttributeArrays
-    {
-        DrawAttributeArrays_TTTT()
-        {
-        }
-
-        virtual bool valid() const { return _t1.valid() && _t2.valid() && _t3.valid() && _t4.valid(); }
-
-        virtual void set(osg::Geometry* geometry)
-        {
-            _t1.set(geometry);
-            _t2.set(geometry);
-            _t3.set(geometry);
-            _t4.set(geometry);
-        }
-
-        virtual unsigned int draw(unsigned int index, unsigned int count) const
-        {
-            for(unsigned int i=0;i<count;++i,++index)
-            {
-                _t1.draw(index);
-                _t2.draw(index);
-                _t3.draw(index);
-                _t4.draw(index);
-            }
-            return index;
-        }
-
-        T1 _t1;
-        T2 _t2;
-        T3 _t3;
-        T4 _t4;
-    };
-
-    template < class T1, class T2 >
-    struct DrawAttributeArrays_TT_USI : public DrawAttributeArrays
-    {
-        DrawAttributeArrays_TT_USI()
-        {
-        }
-
-        virtual bool valid() const { return _t1.valid() && _t2.valid() && _indices!=0; }
-
-        virtual void set(osg::Geometry* geometry)
-        {
-            _t1.set(geometry);
-            _t2.set(geometry);
-
-            _indices = 0;
-            osg::IndexArray* indices = geometry->getVertexIndices();
-            if (indices && indices->getType()==osg::Array::UShortArrayType)
-            {
-                osg::UShortArray* ushort3array = static_cast<osg::UShortArray*>(array);
-                if (!ushort3array->empty()) _indices = &(ushort3array->front());
-            }
-        }
-
-        virtual unsigned int draw(unsigned int index, unsigned int count) const
-        {
-            for(unsigned int i=0;i<count;++i,++index)
-            {
-                unsigned int ivalue = _indices[index];
-                _t1.draw(ivalue);
-                _t2.draw(ivalue);
-            }
-            return index;
-        }
-
-        T1 _t1;
-        T2 _t2;
-    };
-
-    template < class T1, class T2, class T3 >
-    struct DrawAttributeArrays_TTT_USI : public DrawAttributeArrays
-    {
-        DrawAttributeArrays_TTT_USI()
-        {
-        }
-
-        virtual bool valid() const { return _t1.valid() && _t2.valid() && _t3.valid() && _indices!=0; }
-
-        virtual void set(osg::Geometry* geometry)
-        {
-            _t1.set(geometry);
-            _t2.set(geometry);
-            _t3.set(geometry);
-
-            _indices = 0;
-            osg::IndexArray* indices = geometry->getVertexIndices();
-            if (indices && indices->getType()==osg::Array::UShortArrayType)
-            {
-                osg::UShortArray* ushort3array = static_cast<osg::UShortArray*>(array);
-                if (!ushort3array->empty()) _indices = &(ushort3array->front());
-            }
-        }
-
-        virtual unsigned int draw(unsigned int index, unsigned int count) const
-        {
-            for(unsigned int i=0;i<count;++i,++index)
-            {
-                unsigned int ivalue = _indices[index];
-                _t1.draw(ivalue);
-                _t2.draw(ivalue);
-                _t3.draw(ivalue);
-            }
-            return index;
-        }
-
-        T1 _t1;
-        T2 _t2;
-        T3 _t3;
-    };
-
-    template < class T1, class T2, class T3, class T4 >
-    struct DrawAttributeArrays_TTTT_USI : public DrawAttributeArrays
-    {
-        DrawAttributeArrays_TTTT_USI()
-        {
-        }
-
-        virtual bool valid() const { return _t1.valid() && _t2.valid() && _t3.valid() && _t4.valid() && _indices!=0; }
-
-        virtual void set(osg::Geometry* geometry)
-        {
-            _t1.set(geometry);
-            _t2.set(geometry);
-            _t3.set(geometry);
-            _t4.set(geometry);
-
-            _indices = 0;
-            osg::IndexArray* indices = geometry->getVertexIndices();
-            if (indices && indices->getType()==osg::Array::UShortArrayType)
-            {
-                osg::UShortArray* ushort3array = static_cast<osg::UShortArray*>(array);
-                if (!ushort3array->empty()) _indices = &(ushort3array->front());
-            }
-        }
-
-        virtual unsigned int draw(unsigned int index, unsigned int count) const
-        {
-            for(unsigned int i=0;i<count;++i,++index)
-            {
-                unsigned int ivalue = _indices[index];
-                _t1.draw(ivalue);
-                _t2.draw(ivalue);
-                _t3.draw(ivalue);
-                _t4.draw(ivalue);
-            }
-            return index;
-        }
-
-        T1 _t1;
-        T2 _t2;
-        T3 _t3;
-        T4 _t4;
-    };
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-    // One attribute x 2
-
-    typedef DrawAttributeArrays_T<V3>                    DrawAttributeArrays_V3;
-    typedef DrawAttributeArrays_T<V3USI>                 DrawAttributeArrays_V3i;
-
-    // Two attributes x 15
-
-    typedef DrawAttributeArrays_TT<N3,V3>                DrawAttributeArrays_N3V3;
-    typedef DrawAttributeArrays_TT<N3USI,V3>             DrawAttributeArrays_N3iV3;
-    typedef DrawAttributeArrays_TT<N3,V3USI>             DrawAttributeArrays_N3V3i;
-    typedef DrawAttributeArrays_TT<N3USI,V3USI>          DrawAttributeArrays_N3iV3i;
-
-    typedef DrawAttributeArrays_TT_USI<N3,V3>            DrawAttributeArrays_N3V3_i;
-
-    typedef DrawAttributeArrays_TT<C4,V3>                DrawAttributeArrays_C4V3;
-    typedef DrawAttributeArrays_TT<C4USI,V3>             DrawAttributeArrays_C4iV3;
-    typedef DrawAttributeArrays_TT<C4,V3USI>             DrawAttributeArrays_C4V3i;
-    typedef DrawAttributeArrays_TT<C4USI,V3USI>          DrawAttributeArrays_C4iV3i;
-
-    typedef DrawAttributeArrays_TT_USI<C4,V3>            DrawAttributeArrays_C4V3_i;
-
-    typedef DrawAttributeArrays_TT<T2,V3>                DrawAttributeArrays_T2V3;
-    typedef DrawAttributeArrays_TT<T2USI,V3>             DrawAttributeArrays_T2iV3;
-    typedef DrawAttributeArrays_TT<T2,V3USI>             DrawAttributeArrays_T2V3i;
-    typedef DrawAttributeArrays_TT<T2USI,V3USI>          DrawAttributeArrays_T2iV3i;
-
-    typedef DrawAttributeArrays_TT_USI<T2,V3>            DrawAttributeArrays_T2V3_i;
-
-    // Three attributes x 27
-
-    typedef DrawAttributeArrays_TTT<C4,N3,V3>            DrawAttributeArrays_C4N3V3;
-    typedef DrawAttributeArrays_TTT<C4USI,N3,V3>         DrawAttributeArrays_C4iN3V3;
-    typedef DrawAttributeArrays_TTT<C4,N3USI,V3>         DrawAttributeArrays_C4N3iV3;
-    typedef DrawAttributeArrays_TTT<C4USI,N3USI,V3>      DrawAttributeArrays_C4iN3iV3;
-
-    typedef DrawAttributeArrays_TTT<C4,N3,V3USI>         DrawAttributeArrays_C4N3V3i;
-    typedef DrawAttributeArrays_TTT<C4USI,N3,V3USI>      DrawAttributeArrays_C4iN3V3i;
-    typedef DrawAttributeArrays_TTT<C4,N3USI,V3USI>      DrawAttributeArrays_C4N3iV3i;
-    typedef DrawAttributeArrays_TTT<C4USI,N3USI,V3USI>   DrawAttributeArrays_C4iN3iV3i;
-
-    typedef DrawAttributeArrays_TTT_USI<C4,N3,V3>        DrawAttributeArrays_C4N3V3_i;
-
-
-    typedef DrawAttributeArrays_TTT<T2,N3,V3>            DrawAttributeArrays_T2N3V3;
-    typedef DrawAttributeArrays_TTT<T2USI,N3,V3>         DrawAttributeArrays_T2iN3V3;
-    typedef DrawAttributeArrays_TTT<T2,N3USI,V3>         DrawAttributeArrays_T2iN3iV3;
-    typedef DrawAttributeArrays_TTT<T2USI,N3USI,V3>      DrawAttributeArrays_T2N3iV3;
-
-    typedef DrawAttributeArrays_TTT<T2,N3,V3USI>         DrawAttributeArrays_T2N3V3i;
-    typedef DrawAttributeArrays_TTT<T2USI,N3,V3USI>      DrawAttributeArrays_T2iN3V3i;
-    typedef DrawAttributeArrays_TTT<T2,N3USI,V3USI>      DrawAttributeArrays_T2iN3iV3i;
-    typedef DrawAttributeArrays_TTT<T2USI,N3USI,V3USI>   DrawAttributeArrays_T2N3iV3i;
-
-    typedef DrawAttributeArrays_TTT_USI<T2,N3,V3>        DrawAttributeArrays_T2N3V3_i;
-
-
-
-    typedef DrawAttributeArrays_TTT<T2,C4,V3>            DrawAttributeArrays_T2C4V3;
-    typedef DrawAttributeArrays_TTT<T2USI,C4,V3>         DrawAttributeArrays_T2iC4V3;
-    typedef DrawAttributeArrays_TTT<T2,C4USI,V3>         DrawAttributeArrays_T2C4iV3;
-    typedef DrawAttributeArrays_TTT<T2USI,C4USI,V3>      DrawAttributeArrays_T2iC4iV3;
-
-    typedef DrawAttributeArrays_TTT<T2,C4,V3USI>         DrawAttributeArrays_T2C4V3i;
-    typedef DrawAttributeArrays_TTT<T2USI,C4,V3USI>      DrawAttributeArrays_T2iC4V3i;
-    typedef DrawAttributeArrays_TTT<T2,C4USI,V3USI>      DrawAttributeArrays_T2C4iV3i;
-    typedef DrawAttributeArrays_TTT<T2USI,C4USI,V3USI>   DrawAttributeArrays_T2iC4iV3i;
-
-    typedef DrawAttributeArrays_TTT_USI<T2,C4,V3>        DrawAttributeArrays_T2C4V3_t;
-
-
-    // Four attributes x 17
-
-    typedef DrawAttributeArrays_TTTT<T2,C4,N3,V3>                DrawAttributeArrays_T2C4N3V3;
-    typedef DrawAttributeArrays_TTTT<T2USI,C4,N3,V3>             DrawAttributeArrays_T2iC4N3V3;
-    typedef DrawAttributeArrays_TTTT<T2,C4USI,N3,V3>             DrawAttributeArrays_T2C4iN3V3;
-    typedef DrawAttributeArrays_TTTT<T2USI,C4USI,N3,V3>          DrawAttributeArrays_T2iC4iN3V3;
-
-    typedef DrawAttributeArrays_TTTT<T2,C4,N3USI,V3>             DrawAttributeArrays_T2C4N3iV3;
-    typedef DrawAttributeArrays_TTTT<T2USI,C4,N3USI,V3>          DrawAttributeArrays_T2iC4N3iV3;
-    typedef DrawAttributeArrays_TTTT<T2,C4USI,N3USI,V3>           DrawAttributeArrays_T2C4iN3iV3;
-    typedef DrawAttributeArrays_TTTT<T2USI,C4USI,N3USI,V3>       DrawAttributeArrays_T2iC4iN3iV3;
-
-    typedef DrawAttributeArrays_TTTT<T2,C4,N3,V3USI>             DrawAttributeArrays_T2C4N3V3i;
-    typedef DrawAttributeArrays_TTTT<T2USI,C4,N3,V3USI>          DrawAttributeArrays_T2iC4N3V3i;
-    typedef DrawAttributeArrays_TTTT<T2,C4USI,N3,V3USI>          DrawAttributeArrays_T2C4iN3V3i;
-    typedef DrawAttributeArrays_TTTT<T2USI,C4USI,N3,V3USI>       DrawAttributeArrays_T2iC4iN3V3i;
-
-    typedef DrawAttributeArrays_TTTT<T2,C4,N3USI,V3USI>          DrawAttributeArrays_T2C4N3iV3i;
-    typedef DrawAttributeArrays_TTTT<T2USI,C4,N3USI,V3USI>       DrawAttributeArrays_T2iC4N3iV3i;
-    typedef DrawAttributeArrays_TTTT<T2,C4USI,N3USI,V3USI>       DrawAttributeArrays_T2C4iN3iV3i;
-    typedef DrawAttributeArrays_TTTT<T2USI,C4USI,N3USI,V3USI>    DrawAttributeArrays_T2iC4iN3iV3i;
-
-    typedef DrawAttributeArrays_TTTT_USI<T2,C4,N3,V3>            DrawAttributeArrays_T2C4N3V3_i;
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-#endif

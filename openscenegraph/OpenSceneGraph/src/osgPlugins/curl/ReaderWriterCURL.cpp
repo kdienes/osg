@@ -46,7 +46,7 @@ void EasyCurl::StreamObject::write(const char* ptr, size_t realsize)
     {
         if (!_foutOpened)
         {
-            osg::notify(osg::INFO)<<"Writing to cache: "<<_cacheFileName<<std::endl;
+            OSG_INFO<<"Writing to cache: "<<_cacheFileName<<std::endl;
             _fout.open(_cacheFileName.c_str(), std::ios::out | std::ios::binary);
             _foutOpened = true;
         }
@@ -56,6 +56,11 @@ void EasyCurl::StreamObject::write(const char* ptr, size_t realsize)
             _fout.write(ptr, realsize);
         }
     }
+}
+
+std::string EasyCurl::getResultMimeType(const StreamObject& sp) const
+{
+    return sp._resultMimeType;
 }
     
 size_t EasyCurl::StreamMemoryCallback(void *ptr, size_t size, size_t nmemb, void *data)
@@ -75,9 +80,11 @@ size_t EasyCurl::StreamMemoryCallback(void *ptr, size_t size, size_t nmemb, void
 //
 EasyCurl::EasyCurl()
 {
-    osg::notify(osg::INFO)<<"EasyCurl::EasyCurl()"<<std::endl;
+    OSG_INFO<<"EasyCurl::EasyCurl()"<<std::endl;
     
     _previousHttpAuthentication = 0;
+    _connectTimeout = 0; // no timeout by default.
+    _timeout = 0;
 
     _curl = curl_easy_init();
 
@@ -88,7 +95,7 @@ EasyCurl::EasyCurl()
 
 EasyCurl::~EasyCurl()
 {
-    osg::notify(osg::INFO)<<"EasyCurl::~EasyCurl()"<<std::endl;
+    OSG_INFO<<"EasyCurl::~EasyCurl()"<<std::endl;
 
     if (_curl) curl_easy_cleanup(_curl);
 
@@ -102,9 +109,18 @@ osgDB::ReaderWriter::ReadResult EasyCurl::read(const std::string& proxyAddress, 
             options->getAuthenticationMap() :
             osgDB::Registry::instance()->getAuthenticationMap();
 
+    // Set the timeout value here:
+    // Note that this has an effect only in a connection phase.
+    // WARNING: here we make the assumption that if someone starts using the timeouts settings
+    // he will not try to disable them afterwards (a value must be provided or the previous value is used).
+    if(_connectTimeout > 0)
+        curl_easy_setopt(_curl, CURLOPT_CONNECTTIMEOUT, _connectTimeout);
+    if(_timeout > 0)
+        curl_easy_setopt(_curl, CURLOPT_TIMEOUT, _timeout);
+
     if(!proxyAddress.empty())
     {
-        osg::notify(osg::INFO)<<"Setting proxy: "<<proxyAddress<<std::endl;
+        OSG_INFO<<"Setting proxy: "<<proxyAddress<<std::endl;
         curl_easy_setopt(_curl, CURLOPT_PROXY, proxyAddress.c_str()); //Sets proxy address and port on libcurl
     }
 
@@ -200,6 +216,15 @@ osgDB::ReaderWriter::ReadResult EasyCurl::read(const std::string& proxyAddress, 
         }
 #endif
 
+        // Store the mime-type, if any. (Note: CURL manages the buffer returned by
+        // this call.)
+        char* ctbuf = NULL;
+        if ( curl_easy_getinfo(_curl, CURLINFO_CONTENT_TYPE, &ctbuf) == 0 && ctbuf )
+        {
+            sp._resultMimeType = ctbuf;
+        }
+
+
         return osgDB::ReaderWriter::ReadResult::FILE_LOADED;
 
     }
@@ -207,9 +232,9 @@ osgDB::ReaderWriter::ReadResult EasyCurl::read(const std::string& proxyAddress, 
     {
 
 #if LIBCURL_VERSION_NUM >= 0x070c00
-         osg::notify(osg::NOTICE)<<"Error: libcurl read error, file="<<fileName<<" error = "<<curl_easy_strerror(res)<<std::endl;
+         OSG_NOTICE<<"Error: libcurl read error, file="<<fileName<<" error = "<<curl_easy_strerror(res)<<std::endl;
 #else
-         osg::notify(osg::NOTICE)<<"Error: libcurl read error, file="<<fileName<<" error no = "<<res<<std::endl;
+         OSG_NOTICE<<"Error: libcurl read error, file="<<fileName<<" error no = "<<res<<std::endl;
 #endif
         return osgDB::ReaderWriter::ReadResult::FILE_NOT_HANDLED;
     }
@@ -226,12 +251,14 @@ ReaderWriterCURL::ReaderWriterCURL()
     supportsExtension("curl","Psuedo file extension, used to select curl plugin.");
     supportsExtension("*","Passes all read files to other plugins to handle actual model loading.");
     supportsOption("OSG_CURL_PROXY","Specify the http proxy.");
-    supportsOption("OSG_CURL_PROXYPORT","Specify the http proxy oirt.");
+    supportsOption("OSG_CURL_PROXYPORT","Specify the http proxy port.");
+    supportsOption("OSG_CURL_CONNECTTIMEOUT","Specify the connection timeout duration in seconds [default = 0 = not set].");
+    supportsOption("OSG_CURL_TIMEOUT","Specify the timeout duration of the whole transfer in seconds [default = 0 = not set].");
 }
 
 ReaderWriterCURL::~ReaderWriterCURL()
 {
-    //osg::notify(osg::NOTICE)<<"ReaderWriterCURL::~ReaderWriterCURL()"<<std::endl;
+    //OSG_NOTICE<<"ReaderWriterCURL::~ReaderWriterCURL()"<<std::endl;
 }
 
 osgDB::ReaderWriter::ReadResult ReaderWriterCURL::readFile(ObjectType objectType, osgDB::ReaderWriter* rw, std::istream& fin, const osgDB::ReaderWriter::Options *options) const
@@ -250,27 +277,40 @@ osgDB::ReaderWriter::ReadResult ReaderWriterCURL::readFile(ObjectType objectType
 
 osgDB::ReaderWriter::ReadResult ReaderWriterCURL::readFile(ObjectType objectType, const std::string& fullFileName, const osgDB::ReaderWriter::Options *options) const
 {
+    std::string fileName(fullFileName);
+    std::string ext = osgDB::getFileExtension(fullFileName);
+    bool curl_ext = ext=="curl";
+    if (curl_ext)
+    {
+        fileName = osgDB::getNameLessExtension(fullFileName);
+        ext = osgDB::getFileExtension(fileName);
+    }
 
-
-    if (!osgDB::containsServerAddress(fullFileName)) 
+    if (!osgDB::containsServerAddress(fileName))
     {
         if (options && !options->getDatabasePathList().empty())
-        {        
+        {
             if (osgDB::containsServerAddress(options->getDatabasePathList().front()))
             {
-                std::string newFileName = options->getDatabasePathList().front() + "/" + fullFileName;
+                std::string newFileName = options->getDatabasePathList().front() + "/" + fileName;
 
                 return readFile(objectType, newFileName,options);
             }
         }
 
-        return ReadResult::FILE_NOT_HANDLED;
+        // if user has explictly specified curl then we don't about at this point,
+        // instead assume the curl can read it any way, if it doesn't explictly
+        // specify curl then we assume that the file is a local file and not appropriate
+        // for the curl plugin to load.
+        if (!curl_ext) return ReadResult::FILE_NOT_HANDLED;
     }
 
-    osg::notify(osg::INFO)<<"ReaderWriterCURL::readFile("<<fullFileName<<")"<<std::endl;
+    OSG_INFO<<"ReaderWriterCURL::readFile("<<fullFileName<<")"<<std::endl;
 
     std::string proxyAddress, optProxy, optProxyPort;
-
+    long connectTimeout = 0;
+    long timeout = 0;
+    
     if (options)
     {
         std::istringstream iss(options->getOptionString());
@@ -282,6 +322,10 @@ osgDB::ReaderWriter::ReadResult ReaderWriterCURL::readFile(ObjectType objectType
                 optProxy = opt.substr( index+1 );
             else if( opt.substr( 0, index ) == "OSG_CURL_PROXYPORT" )
                 optProxyPort = opt.substr( index+1 );
+            else if( opt.substr( 0, index ) == "OSG_CURL_CONNECTTIMEOUT" )
+                connectTimeout = atol(opt.substr( index+1 ).c_str()); // this will return 0 in case of improper format.
+            else if( opt.substr( 0, index ) == "OSG_CURL_TIMEOUT" )
+                timeout = atol(opt.substr( index+1 ).c_str()); // this will return 0 in case of improper format.
         }
 
         //Setting Proxy by OSG Options
@@ -294,23 +338,12 @@ osgDB::ReaderWriter::ReadResult ReaderWriterCURL::readFile(ObjectType objectType
         }
     }
 
-    std::string fileName;
-    std::string ext = osgDB::getFileExtension(fullFileName);
-    if (ext=="curl")
-    {
-        fileName = osgDB::getNameLessExtension(fullFileName);
-        ext = osgDB::getFileExtension(fileName);
-    }
-    else
-    {
-        fileName = fullFileName;
-    }
     
     bool uncompress = false;
     
     if (ext=="gz" || ext=="osgz" || ext=="ivez")
     {
-        osg::notify(osg::NOTICE)<<"Compressed file type "<<ext<<std::endl;
+        OSG_INFO<<"CURL: Compressed file type "<<ext<<std::endl;
         
         #ifndef USE_ZLIB
             // don't have zlib so can't compile compressed formats
@@ -321,8 +354,7 @@ osgDB::ReaderWriter::ReadResult ReaderWriterCURL::readFile(ObjectType objectType
         
         if (ext=="gz")
         {
-            ext = osgDB::getFileExtension(fileName);
-            fileName = osgDB::getNameLessExtension(fileName);
+            ext = osgDB::getFileExtension(osgDB::getNameLessExtension(fileName));
         } 
         else if (ext=="osgz")
         {
@@ -333,18 +365,10 @@ osgDB::ReaderWriter::ReadResult ReaderWriterCURL::readFile(ObjectType objectType
             ext = "ive";
         }
 
-        osg::notify(osg::NOTICE)<<"  assuming file type "<<ext<<std::endl;
+        OSG_INFO<<"CURL: assuming file type "<<ext<<std::endl;
     }
 
 
-    osgDB::ReaderWriter *reader = 
-        osgDB::Registry::instance()->getReaderWriterForExtension( ext );
-
-    if (!reader)
-    {
-        osg::notify(osg::NOTICE)<<"Error: No ReaderWriter for file "<<fileName<<std::endl;
-        return ReadResult::FILE_NOT_HANDLED;
-    }
 
     const char* proxyEnvAddress = getenv("OSG_CURL_PROXY");
     if (proxyEnvAddress) //Env Proxy Settings
@@ -361,19 +385,52 @@ osgDB::ReaderWriter::ReadResult ReaderWriterCURL::readFile(ObjectType objectType
 
     EasyCurl::StreamObject sp(&buffer, std::string());
 
+    // setup the timeouts:
+    getEasyCurl().setConnectionTimeout(connectTimeout);
+    getEasyCurl().setTimeout(timeout);
+
     ReadResult curlResult = getEasyCurl().read(proxyAddress, fileName, sp, options);
 
     if (curlResult.status()==ReadResult::FILE_LOADED)
     {
+        OSG_INFO<<"CURL: ReadResult::FILE_LOADED "<<std::endl;
+
+        // Try to find a reader by file extension. If this fails, we will fetch the file
+        // anyway and try to get a reader via mime-type.
+        osgDB::ReaderWriter *reader =
+            osgDB::Registry::instance()->getReaderWriterForExtension( ext );
+
+        // If we do not already have a ReaderWriter, try to find one based on the
+        // mime-type:
+        if ( !reader )
+        {
+            std::string mimeType = getEasyCurl().getResultMimeType(sp);
+            OSG_INFO << "CURL: Looking up extension for mime-type " << mimeType << std::endl;
+            if ( mimeType.length() > 0 )
+            {
+                reader = osgDB::Registry::instance()->getReaderWriterForMimeType(mimeType);
+            }
+        }
+
+        // If there is still no reader, fail.        
+        if ( !reader )
+        {
+            OSG_NOTICE<<"Error: No ReaderWriter for file "<<fileName<<std::endl;
+            return ReadResult::FILE_NOT_HANDLED;
+        }
 
         osg::ref_ptr<Options> local_opt = options ? 
             static_cast<Options*>(options->clone(osg::CopyOp::SHALLOW_COPY)) : 
             new Options;
 
         local_opt->getDatabasePathList().push_front(osgDB::getFilePath(fileName));
+        local_opt->setPluginStringData("STREAM_FILENAME",osgDB::getSimpleFileName(fileName));
+        local_opt->setPluginStringData("filename",fileName);
 
         if (uncompress)
         {
+            OSG_INFO<<"Curl:: plugin uncompressing "<<fileName<<std::endl;
+
             std::string uncompressed;
             if (!read(buffer, uncompressed))
             {
@@ -391,6 +448,7 @@ osgDB::ReaderWriter::ReadResult ReaderWriterCURL::readFile(ObjectType objectType
     }
     else
     {
+        OSG_INFO<<"CURL: not loading successfully "<<std::endl;
         return curlResult;
     }
 }
@@ -467,6 +525,22 @@ bool ReaderWriterCURL::read(std::istream& fin, std::string& destination) const
     return false;
 }
 #endif
+
+bool ReaderWriterCURL::fileExists(const std::string& filename, const osgDB::Options* options) const
+{
+    if (osgDB::containsServerAddress(filename))
+    {
+        OSG_NOTICE<<"Checking if file exists using curl plugin: "<<filename<<std::endl;
+
+        ReadResult result = readFile(OBJECT,filename,options);
+        return result.status()==osgDB::ReaderWriter::ReadResult::FILE_LOADED;
+    }
+    else
+    {
+        return ReaderWriter::fileExists(filename, options);
+    }
+}
+
 
 // now register with Registry to instantiate the above
 // reader/writer.

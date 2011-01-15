@@ -1,4 +1,4 @@
-/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2006 Robert Osfield 
+/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2006 Robert Osfield
  *
  * This library is open source and may be redistributed and/or modified under  
  * the terms of the OpenSceneGraph Public License (OSGPL) version 0.0 or 
@@ -13,7 +13,6 @@
 
 #include <osg/GLExtensions>
 #include <osg/TextureRectangle>
-#include <osg/ImageSequence>
 #include <osg/State>
 #include <osg/GLU>
 #include <osg/Notify>
@@ -77,7 +76,7 @@ TextureRectangle::~TextureRectangle()
 int TextureRectangle::compare(const StateAttribute& sa) const
 {
     // check the types are equal and then create the rhs variable
-    // used by the COMPARE_StateAttribute_Parameter macro's below.
+    // used by the COMPARE_StateAttribute_Parameter macros below.
     COMPARE_StateAttribute_Types(TextureRectangle,sa)
 
     if (_image!=rhs._image) // smart pointer comparison.
@@ -119,14 +118,14 @@ int TextureRectangle::compare(const StateAttribute& sa) const
     COMPARE_StateAttribute_Parameter(_textureHeight)
     COMPARE_StateAttribute_Parameter(_subloadCallback)
 
-    return 0; // passed all the above comparison macro's, must be equal.
+    return 0; // passed all the above comparison macros, must be equal.
 }
 
 void TextureRectangle::setImage(Image* image)
 {
     if (_image == image) return;
 
-    if (dynamic_cast<osg::ImageSequence*>(_image.get()))
+    if (_image.valid() && _image->requiresUpdateCall())
     {
         setUpdateCallback(0);
         setDataVariance(osg::Object::STATIC);
@@ -136,10 +135,10 @@ void TextureRectangle::setImage(Image* image)
     dirtyTextureObject();
 
     _image = image;
-    
-    if (dynamic_cast<osg::ImageSequence*>(_image.get()))
+
+    if (_image.valid() && _image->requiresUpdateCall())
     {
-        setUpdateCallback(new ImageSequence::UpdateCallback());
+        setUpdateCallback(new Image::UpdateCallback());
         setDataVariance(osg::Object::DYNAMIC);
     }
 }
@@ -147,13 +146,15 @@ void TextureRectangle::setImage(Image* image)
 
 void TextureRectangle::apply(State& state) const
 {
-    static bool s_rectangleSupported = isGLExtensionSupported(state.getContextID(),"GL_ARB_texture_rectangle")
-            || isGLExtensionSupported(state.getContextID(),"GL_EXT_texture_rectangle")
-            || isGLExtensionSupported(state.getContextID(),"GL_NV_texture_rectangle");
+    static bool s_rectangleSupported = 
+            OSG_GL3_FEATURES ||
+            isGLExtensionSupported(state.getContextID(),"GL_ARB_texture_rectangle") ||
+            isGLExtensionSupported(state.getContextID(),"GL_EXT_texture_rectangle") ||
+            isGLExtensionSupported(state.getContextID(),"GL_NV_texture_rectangle");
 
     if (!s_rectangleSupported)
     {
-        notify(WARN)<<"Warning: TextureRectangle::apply(..) failed, texture rectangle is not support by your OpenGL drivers."<<std::endl;
+        OSG_WARN<<"Warning: TextureRectangle::apply(..) failed, texture rectangle is not support by your OpenGL drivers."<<std::endl;
         return;
     }
 
@@ -161,17 +162,39 @@ void TextureRectangle::apply(State& state) const
     // current OpenGL context.
     const unsigned int contextID = state.getContextID();
 
+    Texture::TextureObjectManager* tom = Texture::getTextureObjectManager(contextID).get();
+    ElapsedTime elapsedTime(&(tom->getApplyTime()));
+    tom->getNumberApplied()++;
 
-    static OpenThreads::Mutex s_mutex;
 
     // get the texture object for the current contextID.
     TextureObject* textureObject = getTextureObject(contextID);
-    
-    
-    if (textureObject != 0)
-    {
 
+    if (textureObject)
+    {
+        if (_image.valid() && getModifiedCount(contextID) != _image->getModifiedCount())
+        {
+            // compute the internal texture format, this set the _internalFormat to an appropriate value.
+            computeInternalFormat();
+
+            GLsizei new_width, new_height, new_numMipmapLevels;
+
+            // compute the dimensions of the texture.
+            computeRequiredTextureDimensions(state, *_image, new_width, new_height, new_numMipmapLevels);
+
+            if (!textureObject->match(GL_TEXTURE_RECTANGLE, new_numMipmapLevels, _internalFormat, new_width, new_height, 1, _borderWidth))
+            {
+                Texture::releaseTextureObject(contextID, _textureObjectBuffer[contextID].get());
+                _textureObjectBuffer[contextID] = 0;
+                textureObject = 0;
+            }
+        }
+    }
+
+    if (textureObject)
+    {
         textureObject->bind();
+
         if (getTextureParameterDirty(state.getContextID()))
             applyTexParameters(GL_TEXTURE_RECTANGLE, state);
 
@@ -190,7 +213,7 @@ void TextureRectangle::apply(State& state) const
     else if (_subloadCallback.valid())
     {
         // we don't have a applyTexImage1D_subload yet so can't reuse.. so just generate a new texture object.        
-        _textureObjectBuffer[contextID] = textureObject = generateTextureObject(contextID,GL_TEXTURE_RECTANGLE);
+        _textureObjectBuffer[contextID] = textureObject = generateTextureObject(this, contextID,GL_TEXTURE_RECTANGLE);
 
         textureObject->bind();
 
@@ -209,33 +232,44 @@ void TextureRectangle::apply(State& state) const
     else if (_image.valid() && _image->data())
     {
 
-        OpenThreads::ScopedLock<OpenThreads::Mutex> lock(s_mutex);
 
-        // we don't have a applyTexImage1D_subload yet so can't reuse.. so just generate a new texture object.        
-        textureObject = generateTextureObject(contextID,GL_TEXTURE_RECTANGLE);
-        
+        // keep the image around at least till we go out of scope.
+        osg::ref_ptr<osg::Image> image = _image;
+
+        // compute the internal texture format, this set the _internalFormat to an appropriate value.
+        computeInternalFormat();
+
+        _textureWidth = image->s();
+        _textureHeight = image->t();
+
+        _textureObjectBuffer[contextID] = textureObject = generateTextureObject(
+                this, contextID,GL_TEXTURE_RECTANGLE,1,_internalFormat,_textureWidth,_textureHeight,1,0);
+
         textureObject->bind();
 
         applyTexParameters(GL_TEXTURE_RECTANGLE, state);
-     
-        applyTexImage_load(GL_TEXTURE_RECTANGLE, _image.get(), state, _textureWidth, _textureHeight);
 
-        textureObject->setAllocated(1,_internalFormat,_textureWidth,_textureHeight,1,0);
-        
-        _textureObjectBuffer[contextID] = textureObject;
-
-        if (_unrefImageDataAfterApply && areAllTextureObjectsLoaded() && _image->getDataVariance()==STATIC)
+        if (textureObject->isAllocated())
         {
-            TextureRectangle* non_const_this = const_cast<TextureRectangle*>(this);
-            non_const_this->_image = 0;
+            applyTexImage_subload(GL_TEXTURE_RECTANGLE, _image.get(), state, _textureWidth, _textureHeight, _internalFormat);
+        }
+        else
+        {
+            applyTexImage_load(GL_TEXTURE_RECTANGLE, _image.get(), state, _textureWidth, _textureHeight);
+            textureObject->setAllocated(true);
         }
 
-
+        // unref image data?
+        if (isSafeToUnrefImageData(state) && _image->getDataVariance()==STATIC)
+        {
+            TextureRectangle* non_const_this = const_cast<TextureRectangle*>(this);
+            non_const_this->_image = NULL;
+        }
     }
     else if ( (_textureWidth!=0) && (_textureHeight!=0) && (_internalFormat!=0) )
     {
         _textureObjectBuffer[contextID] = textureObject = generateTextureObject(
-                contextID,GL_TEXTURE_RECTANGLE,0,_internalFormat,_textureWidth,_textureHeight,1,0);
+                this, contextID,GL_TEXTURE_RECTANGLE,0,_internalFormat,_textureWidth,_textureHeight,1,0);
         
         textureObject->bind();
 
@@ -258,21 +292,6 @@ void TextureRectangle::apply(State& state) const
     {
         glBindTexture(GL_TEXTURE_RECTANGLE, 0);
     }
-}
-
-void TextureRectangle::applyTexParameters(GLenum target, State& state) const
-{
-    // get the contextID (user defined ID of 0 upwards) for the 
-    // current OpenGL context.
-    const unsigned int contextID = state.getContextID();
-
-    glTexParameteri( target, GL_TEXTURE_WRAP_S, _wrap_s );
-    glTexParameteri( target, GL_TEXTURE_WRAP_T, _wrap_t );
-
-    glTexParameteri( target, GL_TEXTURE_MIN_FILTER, _min_filter);
-    glTexParameteri( target, GL_TEXTURE_MAG_FILTER, _mag_filter);
-
-    getTextureParameterDirty(contextID) = false;
 }
 
 void TextureRectangle::applyTexImage_load(GLenum target, Image* image, State& state, GLsizei& inwidth, GLsizei& inheight) const
@@ -298,26 +317,22 @@ void TextureRectangle::applyTexImage_load(GLenum target, Image* image, State& st
     if (useClientStorage)
     {
         glPixelStorei(GL_UNPACK_CLIENT_STORAGE_APPLE,GL_TRUE);
-        glTexParameterf(target,GL_TEXTURE_PRIORITY,0.0f);
-        
-        #ifdef GL_TEXTURE_STORAGE_HINT_APPLE    
+
+        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
+            glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_PRIORITY,0.0f);
+        #endif
+
+        #ifdef GL_TEXTURE_STORAGE_HINT_APPLE
             glTexParameteri(target, GL_TEXTURE_STORAGE_HINT_APPLE , GL_STORAGE_CACHED_APPLE);
         #endif
     }
 
-    unsigned char* dataMinusOffset = 0;
-    unsigned char* dataPlusOffset = 0;
-
-    const PixelBufferObject* pbo = image->getPixelBufferObject();
-    if (pbo && pbo->isPBOSupported(contextID))
+    const unsigned char* dataPtr = image->data();
+    GLBufferObject* pbo = image->getOrCreateGLBufferObject(contextID);
+    if (pbo)
     {
         state.bindPixelBufferObject(pbo);
-        dataMinusOffset = image->data();
-        dataPlusOffset = reinterpret_cast<unsigned char*>(pbo->offset());
-    }
-    else
-    {
-        pbo = 0;
+        dataPtr = reinterpret_cast<unsigned char*>(pbo->getOffset(image->getBufferIndex()));
     }
 
     if(isCompressedInternalFormat(_internalFormat) && extensions->isCompressedTexImage2DSupported())
@@ -325,7 +340,7 @@ void TextureRectangle::applyTexImage_load(GLenum target, Image* image, State& st
         extensions->glCompressedTexImage2D(target, 0, _internalFormat, 
           image->s(), image->t(), 0,
           image->getImageSizeInBytes(), 
-          image->data() - dataMinusOffset + dataPlusOffset);                
+          dataPtr);
     }
     else
     {
@@ -333,7 +348,7 @@ void TextureRectangle::applyTexImage_load(GLenum target, Image* image, State& st
           image->s(), image->t(), 0,
           (GLenum)image->getPixelFormat(),
           (GLenum)image->getDataType(),
-          image->data() - dataMinusOffset + dataPlusOffset );
+          dataPtr );
     }
     
 
@@ -380,26 +395,17 @@ void TextureRectangle::applyTexImage_subload(GLenum target, Image* image, State&
 
 #ifdef DO_TIMING
     osg::Timer_t start_tick = osg::Timer::instance()->tick();
-    osg::notify(osg::NOTICE)<<"glTexSubImage2D pixelFormat = "<<std::hex<<image->getPixelFormat()<<std::dec<<std::endl;
+    OSG_NOTICE<<"TextureRectangle::apply pixelFormat = "<<std::hex<<image->getPixelFormat()<<std::dec<<std::endl;
 #endif
-    unsigned char* dataMinusOffset = 0;
-    unsigned char* dataPlusOffset = 0;
-
-    const PixelBufferObject* pbo = image->getPixelBufferObject();
-    if (pbo && pbo->isPBOSupported(contextID))
+    const unsigned char* dataPtr = image->data();
+    GLBufferObject* pbo = image->getOrCreateGLBufferObject(contextID);
+    if (pbo)
     {
         state.bindPixelBufferObject(pbo);
-        dataMinusOffset = image->data();
-        dataPlusOffset = reinterpret_cast<unsigned char*>(pbo->offset()); // -dataMinusOffset+dataPlusOffset
-
+        dataPtr = reinterpret_cast<unsigned char*>(pbo->getOffset(image->getBufferIndex()));
 #ifdef DO_TIMING
-        osg::notify(osg::NOTICE)<<"after PBO "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
+        OSG_NOTICE<<"after PBO "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
 #endif
-
-    }
-    else
-    {
-        pbo = 0;
     }
     
 
@@ -410,7 +416,7 @@ void TextureRectangle::applyTexImage_subload(GLenum target, Image* image, State&
           image->s(), image->t(),
           (GLenum)image->getPixelFormat(),
           (GLenum)image->getDataType(),
-          image->data() - dataMinusOffset + dataPlusOffset);                
+          dataPtr);
     }
     else
     {
@@ -419,7 +425,7 @@ void TextureRectangle::applyTexImage_subload(GLenum target, Image* image, State&
           image->s(), image->t(),
           (GLenum)image->getPixelFormat(),
           (GLenum)image->getDataType(),
-          image->data() - dataMinusOffset + dataPlusOffset  );
+          dataPtr);
     }
 
     if (pbo)
@@ -428,9 +434,8 @@ void TextureRectangle::applyTexImage_subload(GLenum target, Image* image, State&
     }
 
 #ifdef DO_TIMING
-    osg::notify(osg::NOTICE)<<"glTexSubImage2D "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
+    OSG_NOTICE<<"glTexSubImage2D "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
 #endif
-    
 }
 
 void TextureRectangle::computeInternalFormat() const
@@ -475,8 +480,7 @@ void TextureRectangle::copyTexImage2D(State& state, int x, int y, int width, int
 
     // switch off mip-mapping.
     //
-    _textureObjectBuffer[contextID] = textureObject =
-    generateTextureObject(contextID,GL_TEXTURE_RECTANGLE);
+    _textureObjectBuffer[contextID] = textureObject = generateTextureObject(this, contextID,GL_TEXTURE_RECTANGLE);
 
     textureObject->bind();
     
@@ -495,7 +499,7 @@ void TextureRectangle::copyTexImage2D(State& state, int x, int y, int width, int
         if (!hardwareMipMapOn)
         {
             // have to swtich off mip mapping
-            notify(NOTICE)<<"Warning: Texture2D::copyTexImage2D(,,,,) switch of mip mapping as hardware support not available."<<std::endl;
+            OSG_NOTICE<<"Warning: Texture2D::copyTexImage2D(,,,,) switch of mip mapping as hardware support not available."<<std::endl;
             _min_filter = LINEAR;
         }
     }
@@ -546,7 +550,7 @@ void TextureRectangle::copyTexSubImage2D(State& state, int xoffset, int yoffset,
             if (!hardwareMipMapOn)
             {
                 // have to swtich off mip mapping
-                notify(NOTICE)<<"Warning: Texture2D::copyTexImage2D(,,,,) switch of mip mapping as hardware support not available."<<std::endl;
+                OSG_NOTICE<<"Warning: Texture2D::copyTexImage2D(,,,,) switch of mip mapping as hardware support not available."<<std::endl;
                 _min_filter = LINEAR;
             }
         }
@@ -571,6 +575,6 @@ void TextureRectangle::copyTexSubImage2D(State& state, int xoffset, int yoffset,
 
 void TextureRectangle::allocateMipmap(State&) const
 {
-    osg::notify(osg::NOTICE)<<"Warning: TextureRectangle::allocateMipmap(State&) called eroneously, GL_TEXTURE_RECTANGLE does not support mipmapping."<<std::endl;
+    OSG_NOTICE<<"Warning: TextureRectangle::allocateMipmap(State&) called eroneously, GL_TEXTURE_RECTANGLE does not support mipmapping."<<std::endl;
 }
 

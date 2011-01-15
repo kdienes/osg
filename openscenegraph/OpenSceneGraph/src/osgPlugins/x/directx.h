@@ -1,7 +1,7 @@
 // -*-c++-*-
 
 /*
- * $Id: directx.h 5224 2006-07-04 09:13:15Z robert $
+ * $Id: directx.h 10272 2009-05-26 11:00:26Z robert $
  *
  * Loader for DirectX .x files.
  * Copyright (c)2002 Ulrich Hertlein <u.hertlein@sandbox.de>
@@ -50,12 +50,12 @@ namespace DX {
         }
 
         /**
-         * Load model from file
+         * Load model from stream.
          * Discards old data.
          * @param filename Filename.
          * @return false if the model could not be loaded, else true.
          */
-        bool load(const char* filename);
+        bool load(std::istream& fin);
 
         /**
          * Generate per-vertex normals for the entire model.
@@ -83,7 +83,7 @@ namespace DX {
         Material * findMaterial(const std::string & name);
 
         /// Parse section until '}'; recurse as needed.
-        void parseSection(std::ifstream& fin);
+        void parseSection(std::istream& fin);
 
     private:
         // dgm - keep list of materials global to the file
@@ -94,9 +94,6 @@ namespace DX {
 
         /// Clear object.
         void clear();
-
-        /// Parse frame.
-        void parseFrame(std::ifstream& fin);
     };
 } // namespace
 

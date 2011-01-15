@@ -10,6 +10,8 @@
 
 namespace osgFFmpeg {
 
+class FFmpegParameters;
+
 class FormatContextPtr
 {
     public:
@@ -25,6 +27,8 @@ class FormatContextPtr
         }
         
         T* get() { return _ptr; }
+
+        operator bool() const { return _ptr != 0; }
 
         T * operator-> () const // never throws
         {
@@ -42,7 +46,7 @@ class FormatContextPtr
         {
             if (_ptr) 
             {
-                osg::notify(osg::NOTICE)<<"Calling av_close_input_file("<<_ptr<<")"<<std::endl;
+                OSG_NOTICE<<"Calling av_close_input_file("<<_ptr<<")"<<std::endl;
                 av_close_input_file(_ptr);
             }
             _ptr = 0;
@@ -63,7 +67,7 @@ public:
     FFmpegDecoder();
     ~FFmpegDecoder();
 
-    bool open(const std::string & filename);
+    bool open(const std::string & filename, FFmpegParameters* parameters);
     void close(bool waitForThreadToExit);
 
     bool readNextPacket();
@@ -74,6 +78,7 @@ public:
     void loop(bool loop);
     bool loop() const;
 
+    double creation_time() const;
     double duration() const;
     double reference();
 
@@ -144,6 +149,11 @@ inline bool FFmpegDecoder::loop() const
     return m_loop;
 }
 
+inline double FFmpegDecoder::creation_time() const
+{
+   if(m_format_context) return m_format_context->timestamp;
+   else return HUGE_VAL;
+}
 
 inline double FFmpegDecoder::duration() const
 {

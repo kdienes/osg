@@ -12,7 +12,6 @@
 */
 #include <osg/GLExtensions>
 #include <osg/GL>
-#include <osg/GLU>
 #include <osg/Notify>
 #include <osg/Math>
 #include <osg/buffered_value>
@@ -27,7 +26,29 @@
 #include <set>
 
 #if defined(WIN32)
-#include <windows.h>
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif // WIN32_LEAN_AND_MEAN
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif // NOMINMAX
+    #include <windows.h>
+#elif defined(__APPLE__)
+    // The NS*Symbol* stuff found in <mach-o/dyld.h> is deprecated.
+    // Since 10.3 (Panther) OS X has provided the dlopen/dlsym/dlclose
+    // family of functions under <dlfcn.h>. Since 10.4 (Tiger), Apple claimed
+    // the dlfcn family was significantly faster than the NS*Symbol* family.
+    // Since 'deprecated' needs to be taken very seriously with the
+    // coming of 10.5 (Leopard), it makes sense to use the dlfcn family when possible.
+    #include <AvailabilityMacros.h>
+    #if !defined(MAC_OS_X_VERSION_10_3) || (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_3)
+        #define USE_APPLE_LEGACY_NSSYMBOL
+        #include <mach-o/dyld.h>
+    #else
+        #include <dlfcn.h>
+    #endif
+#else
+    #include <dlfcn.h>
 #endif
 
 typedef std::set<std::string>  ExtensionSet;
@@ -38,9 +59,6 @@ static osg::buffered_value<int> s_glInitializedList;
 static osg::buffered_object<ExtensionSet> s_gluExtensionSetList;
 static osg::buffered_object<std::string> s_gluRendererList;
 static osg::buffered_value<int> s_gluInitializedList;
-
-static const char* envVar = getenv("OSG_GL_EXTENSION_DISABLE");
-static std::string s_GLExtensionDisableString(envVar?envVar:"Nothing defined");
 
 float osg::getGLVersionNumber()
 {
@@ -93,30 +111,69 @@ bool osg::isGLExtensionOrVersionSupported(unsigned int contextID, const char *ex
             rendererString = renderer ? (const char*)renderer : "";
 
             // get the extension list from OpenGL.
-            const char* extensions = (const char*)glGetString(GL_EXTENSIONS);
-            if (extensions==NULL) return false;
-
-            // insert the ' ' delimiated extensions words into the extensionSet.
-            const char *startOfWord = extensions;
-            const char *endOfWord;
-            while ((endOfWord = strchr(startOfWord,' '))!=NULL)
+            GLint numExt = 0;
+            #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
+            if( osg::getGLVersionNumber() >= 3.0 )
             {
-                extensionSet.insert(std::string(startOfWord,endOfWord));
-                startOfWord = endOfWord+1;
-            }
-            if (*startOfWord!=0) extensionSet.insert(std::string(startOfWord));
+                // OpenGL 3.0 adds the concept of indexed strings and
+                // deprecates calls to glGetString( GL_EXTENSIONS ), which
+                // will now generate GL_INVALID_ENUM.
 
-    #if defined(WIN32)
+                // Get extensions using new indexed string interface.
+
+                typedef const GLubyte * GL_APIENTRY PFNGLGETSTRINGIPROC( GLenum, GLuint );
+                PFNGLGETSTRINGIPROC* glGetStringi = 0;
+                setGLExtensionFuncPtr( glGetStringi, "glGetStringi");
+
+                if( glGetStringi != NULL )
+                {
+                    #  ifndef GL_NUM_EXTENSIONS
+                    #    define GL_NUM_EXTENSIONS 0x821D
+                    #  endif
+                    glGetIntegerv( GL_NUM_EXTENSIONS, &numExt );
+                    int idx;
+                    for( idx=0; idx<numExt; idx++ )
+                    {
+                        extensionSet.insert( std::string( (char*)( glGetStringi( GL_EXTENSIONS, idx ) ) ) );
+                    }
+                }
+                else
+                {
+                    OSG_WARN << "isGLExtensionOrVersionSupported: Can't obtain glGetStringi function pointer." << std::endl;
+                }
+            }
+            #endif
+
+            // No extensions found so far, so try with glGetString
+            if (numExt == 0)
+            {
+                // Get extensions using GL1/2 interface.
+
+                const char* extensions = (const char*)glGetString(GL_EXTENSIONS);
+                if (extensions==NULL) return false;
+
+                // insert the ' ' delimiated extensions words into the extensionSet.
+                const char *startOfWord = extensions;
+                const char *endOfWord;
+                while ((endOfWord = strchr(startOfWord,' '))!=NULL)
+                {
+                    extensionSet.insert(std::string(startOfWord,endOfWord));
+                    startOfWord = endOfWord+1;
+                }
+                if (*startOfWord!=0) extensionSet.insert(std::string(startOfWord));
+            }
+
+    #if defined(WIN32) && (defined(OSG_GL1_AVAILABLE) || defined(OSG_GL2_AVAILABLE) || defined(OSG_GL3_AVAILABLE))
 
             // add WGL extensions to the list
 
             typedef const char* WINAPI WGLGETEXTENSIONSSTRINGARB(HDC);
-            WGLGETEXTENSIONSSTRINGARB* wglGetExtensionsStringARB = 
-                (WGLGETEXTENSIONSSTRINGARB*)getGLExtensionFuncPtr("wglGetExtensionsStringARB");
+            WGLGETEXTENSIONSSTRINGARB* wglGetExtensionsStringARB = 0;
+            setGLExtensionFuncPtr(wglGetExtensionsStringARB, "wglGetExtensionsStringARB");
 
             typedef const char* WINAPI WGLGETEXTENSIONSSTRINGEXT();
-            WGLGETEXTENSIONSSTRINGEXT* wglGetExtensionsStringEXT = 
-                (WGLGETEXTENSIONSSTRINGEXT*)getGLExtensionFuncPtr("wglGetExtensionsStringEXT");
+            WGLGETEXTENSIONSSTRINGEXT* wglGetExtensionsStringEXT = 0;
+            setGLExtensionFuncPtr(wglGetExtensionsStringEXT, "wglGetExtensionsStringEXT");
 
             const char* wglextensions = 0;
 
@@ -144,12 +201,12 @@ bool osg::isGLExtensionOrVersionSupported(unsigned int contextID, const char *ex
 
     #endif
 
-            osg::notify(INFO)<<"OpenGL extensions supported by installed OpenGL drivers are:"<<std::endl;
+            OSG_NOTIFY(INFO)<<"OpenGL extensions supported by installed OpenGL drivers are:"<<std::endl;
             for(ExtensionSet::iterator itr=extensionSet.begin();
                 itr!=extensionSet.end();
                 ++itr)
             {
-                osg::notify(INFO)<<"    "<<*itr<<std::endl;
+                OSG_NOTIFY(INFO)<<"    "<<*itr<<std::endl;
             }
 
         }
@@ -216,10 +273,19 @@ bool osg::isGLExtensionOrVersionSupported(unsigned int contextID, const char *ex
 
     if (result)
     {
-        if (!extensionDisabled) osg::notify(INFO)<<"OpenGL extension '"<<extension<<"' is supported."<<std::endl;
-        else osg::notify(INFO)<<"OpenGL extension '"<<extension<<"' is supported by OpenGL\ndriver but has been disabled by osg::getGLExtensionDisableString()."<<std::endl;
+        if (!extensionDisabled)
+        {
+            OSG_NOTIFY(INFO)<<"OpenGL extension '"<<extension<<"' is supported."<<std::endl;
+        }
+        else
+        {
+            OSG_NOTIFY(INFO)<<"OpenGL extension '"<<extension<<"' is supported by OpenGL\ndriver but has been disabled by osg::getGLExtensionDisableString()."<<std::endl;
+        }
     }
-    else osg::notify(INFO)<<"OpenGL extension '"<<extension<<"' is not supported."<<std::endl;
+    else
+    {
+        OSG_NOTIFY(INFO)<<"OpenGL extension '"<<extension<<"' is not supported."<<std::endl;
+    }
 
 
     return result && !extensionDisabled;
@@ -232,146 +298,104 @@ void osg::setGLExtensionDisableString(const std::string& disableString)
 
 std::string& osg::getGLExtensionDisableString()
 {
+    static const char* envVar = getenv("OSG_GL_EXTENSION_DISABLE");
+    static std::string s_GLExtensionDisableString(envVar?envVar:"Nothing defined");
+
     return s_GLExtensionDisableString;
 }
 
 
-bool osg::isGLUExtensionSupported(unsigned int contextID, const char *extension)
-{
-    ExtensionSet& extensionSet = s_gluExtensionSetList[contextID];
-    std::string& rendererString = s_gluRendererList[contextID];
+#ifdef OSG_GL_LIBRARY_STATIC
 
-    // if not already set up, initialize all the per graphic context values.
-    if (!s_gluInitializedList[contextID])
+    #include "GLStaticLibrary.h"
+
+    void* osg::getGLExtensionFuncPtr(const char *funcName)
     {
-        s_gluInitializedList[contextID] = 1;
-    
-        // set up the renderer
-        const GLubyte* renderer = glGetString(GL_RENDERER);
-        rendererString = renderer ? (const char*)renderer : "";
-
-        // get the extension list from OpenGL.
-        const char* extensions = (const char*)gluGetString(GLU_EXTENSIONS);
-        if (extensions==NULL) return false;
-
-        // insert the ' ' delimiated extensions words into the extensionSet.
-        const char *startOfWord = extensions;
-        const char *endOfWord;
-        while ((endOfWord = strchr(startOfWord,' '))!=NULL)
-        {
-            extensionSet.insert(std::string(startOfWord,endOfWord));
-            startOfWord = endOfWord+1;
-        }
-        if (*startOfWord!=0) extensionSet.insert(std::string(startOfWord));
-        
-        osg::notify(INFO)<<"OpenGL extensions supported by installed OpenGL drivers are:"<<std::endl;
-        for(ExtensionSet::iterator itr=extensionSet.begin();
-            itr!=extensionSet.end();
-            ++itr)
-        {
-            osg::notify(INFO)<<"    "<<*itr<<std::endl;
-        }
-            
+        return GLStaticLibrary::getProcAddress(funcName);
     }
 
-    // true if extension found in extensionSet.
-    bool result = extensionSet.find(extension)!=extensionSet.end();
-
-    if (result) osg::notify(INFO)<<"OpenGL utility library extension '"<<extension<<"' is supported."<<std::endl;
-    else osg::notify(INFO)<<"OpenGL utility library extension '"<<extension<<"' is not supported."<<std::endl;
-
-    return result;
-}
-
-#if defined(WIN32)
-    #define WIN32_LEAN_AND_MEAN
-    #ifndef NOMINMAX
-        #define NOMINMAX
-    #endif // NOMINMAX
-    #include <windows.h>
-#elif defined(__APPLE__)
-    // The NS*Symbol* stuff found in <mach-o/dyld.h> is deprecated.
-    // Since 10.3 (Panther) OS X has provided the dlopen/dlsym/dlclose
-    // family of functions under <dlfcn.h>. Since 10.4 (Tiger), Apple claimed
-    // the dlfcn family was significantly faster than the NS*Symbol* family.
-    // Since 'deprecated' needs to be taken very seriously with the 
-    // coming of 10.5 (Leopard), it makes sense to use the dlfcn family when possible.
-    #include <AvailabilityMacros.h>
-    #if !defined(MAC_OS_X_VERSION_10_3) || (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_3)
-        #define USE_APPLE_LEGACY_NSSYMBOL
-        #include <mach-o/dyld.h>
-    #else
-        #include <dlfcn.h>
-    #endif
 #else
-    #include <dlfcn.h>
-#endif
 
+    void* osg::getGLExtensionFuncPtr(const char *funcName)
+    {
+        // OSG_NOTICE<<"osg::getGLExtensionFuncPtr("<<funcName<<")"<<std::endl;
 
-void* osg::getGLExtensionFuncPtr(const char *funcName)
-{
-#if defined(WIN32)
+    #if defined(WIN32)
 
-    return (void*)wglGetProcAddress(funcName);
+        #if defined(OSG_GLES2_AVAILABLE)
+            static HMODULE hmodule = GetModuleHandle(TEXT("libGLESv2.dll"));
+            return convertPointerType<void*, PROC>(GetProcAddress(hmodule, funcName));
+        #elif defined(OSG_GLES1_AVAILABLE)
+            static HMODULE hmodule = GetModuleHandleA(TEXT("libgles_cm.dll"));
+            return convertPointerType<void*, PROC>(GetProcAddress(hmodule, funcName));
+        #else
+            return convertPointerType<void*, PROC>(wglGetProcAddress(funcName));
+        #endif
 
-#elif defined(__APPLE__)
+    #elif defined(__APPLE__)
 
-    #if defined(USE_APPLE_LEGACY_NSSYMBOL)
-        std::string temp( "_" );
-        temp += funcName;    // Mac OS X prepends an underscore on function names
-        if ( NSIsSymbolNameDefined( temp.c_str() ) )
-        {
-            NSSymbol symbol = NSLookupAndBindSymbol( temp.c_str() );
-            return NSAddressOfSymbol( symbol );
-        } else
-            return NULL;
-    #else
-        // I am uncertain of the correct and ideal usage of dlsym here.
-        // On the surface, it would seem that the FreeBSD implementation 
-        // would be the ideal one to copy, but ELF and Mach-o are different
-        // and Apple's man page says the following about using RTLD_DEFAULT: 
-        // "This can be a costly search and should be avoided."
-        // The documentation mentions nothing about passing in 0 so I must
-        // assume the behavior is undefined.
-        // So I could try copying the Sun method which I think all this 
-        // actually originated from.
+        #if defined(USE_APPLE_LEGACY_NSSYMBOL)
+            std::string temp( "_" );
+            temp += funcName;    // Mac OS X prepends an underscore on function names
+            if ( NSIsSymbolNameDefined( temp.c_str() ) )
+            {
+                NSSymbol symbol = NSLookupAndBindSymbol( temp.c_str() );
+                return NSAddressOfSymbol( symbol );
+            } else
+                return NULL;
+        #else
+            // I am uncertain of the correct and ideal usage of dlsym here.
+            // On the surface, it would seem that the FreeBSD implementation
+            // would be the ideal one to copy, but ELF and Mach-o are different
+            // and Apple's man page says the following about using RTLD_DEFAULT:
+            // "This can be a costly search and should be avoided."
+            // The documentation mentions nothing about passing in 0 so I must
+            // assume the behavior is undefined.
+            // So I could try copying the Sun method which I think all this
+            // actually originated from.
 
-        // return dlsym( RTLD_DEFAULT, funcName );
+            // return dlsym( RTLD_DEFAULT, funcName );
+            static void *handle = dlopen((const char *)0L, RTLD_LAZY);
+            return dlsym(handle, funcName);
+        #endif
+
+    #elif defined (__sun)
+
         static void *handle = dlopen((const char *)0L, RTLD_LAZY);
         return dlsym(handle, funcName);
-    #endif
 
-#elif defined (__sun) 
+    #elif defined (__sgi)
 
-     static void *handle = dlopen((const char *)0L, RTLD_LAZY);
-     return dlsym(handle, funcName);
-    
-#elif defined (__sgi)
+        static void *handle = dlopen((const char *)0L, RTLD_LAZY);
+        return dlsym(handle, funcName);
 
-     static void *handle = dlopen((const char *)0L, RTLD_LAZY);
-     return dlsym(handle, funcName);
+    #elif defined (__FreeBSD__)
 
-#elif defined (__FreeBSD__)
+        return dlsym( RTLD_DEFAULT, funcName );
 
-    return dlsym( RTLD_DEFAULT, funcName );
+    #elif defined (__linux__)
 
-#elif defined (__linux__)
+        typedef void (*__GLXextFuncPtr)(void);
+        typedef __GLXextFuncPtr (*GetProcAddressARBProc)(const char*);
 
-    typedef void (*__GLXextFuncPtr)(void);
-    typedef __GLXextFuncPtr (*GetProcAddressARBProc)(const char*);
-    static GetProcAddressARBProc s_glXGetProcAddressARB = convertPointerType<GetProcAddressARBProc, void*>(dlsym(0, "glXGetProcAddressARB"));
-    if (s_glXGetProcAddressARB)
-    {
-        return convertPointerType<void*, __GLXextFuncPtr>((s_glXGetProcAddressARB)(funcName));
-    }
-    else
-    {
+        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
+        static GetProcAddressARBProc s_glXGetProcAddressARB = convertPointerType<GetProcAddressARBProc, void*>(dlsym(0, "glXGetProcAddressARB"));
+        if (s_glXGetProcAddressARB)
+        {
+            return convertPointerType<void*, __GLXextFuncPtr>((s_glXGetProcAddressARB)(funcName));
+        }
+        #endif
+
         return dlsym(0, funcName);
+
+    #elif defined (__QNX__)
+
+        return dlsym(RTLD_DEFAULT, funcName);
+
+    #else // all other unixes
+
+        return dlsym(0, funcName);
+
+    #endif
     }
-
-#else // all other unixes
-
-    return dlsym(0, funcName);
-
 #endif
-}

@@ -13,6 +13,7 @@
 
 
 #include <osgText/TextBase>
+#include <osgText/Font>
 
 #include <osg/Math>
 #include <osg/GL>
@@ -24,17 +25,15 @@
 
 #include <osgDB/ReadFile>
 
-#include "DefaultFont.h"
-
 using namespace osg;
 using namespace osgText;
 
 //#define TREES_CODE_FOR_MAKING_SPACES_EDITABLE
 
 TextBase::TextBase():
+    _color(1.0f,1.0f,1.0f,1.0f),
     _fontSize(32,32),
     _characterHeight(32),
-    _characterAspectRatio(1.0f),
     _characterSizeMode(OBJECT_COORDS),
     _maximumWidth(0.0f),
     _maximumHeight(0.0f),
@@ -44,19 +43,23 @@ TextBase::TextBase():
     _autoRotateToScreen(false),
     _layout(LEFT_TO_RIGHT),
     _drawMode(TEXT),
+    _textBBMargin(0.0f),
+    _textBBColor(0.0, 0.0, 0.0, 0.5),
     _kerningType(KERNING_DEFAULT),
     _lineCount(0)
 {
-    setStateSet(DefaultFont::instance()->getStateSet());
+    setStateSet(Font::getDefaultFont()->getStateSet());
     setUseDisplayList(false);
     setSupportsDisplayList(false);
 }
 
 TextBase::TextBase(const TextBase& textBase,const osg::CopyOp& copyop):
     osg::Drawable(textBase,copyop),
+    _color(textBase._color),
+    _font(textBase._font),
+    _style(textBase._style),
     _fontSize(textBase._fontSize),
     _characterHeight(textBase._characterHeight),
-    _characterAspectRatio(textBase._characterAspectRatio),
     _characterSizeMode(textBase._characterSizeMode),
     _maximumWidth(textBase._maximumWidth),
     _maximumHeight(textBase._maximumHeight),
@@ -69,6 +72,8 @@ TextBase::TextBase(const TextBase& textBase,const osg::CopyOp& copyop):
     _autoRotateToScreen(textBase._autoRotateToScreen),
     _layout(textBase._layout),
     _drawMode(textBase._drawMode),
+    _textBBMargin(textBase._textBBMargin),
+    _textBBColor(textBase._textBBColor),
     _kerningType(textBase._kerningType),
     _lineCount(textBase._lineCount)
 {
@@ -78,17 +83,53 @@ TextBase::~TextBase()
 {
 }
 
+void TextBase::setColor(const osg::Vec4& color)
+{
+    _color = color;
+}
+
+
+void TextBase::setFont(osg::ref_ptr<Font> font)
+{
+    if (_font==font) return;
+
+    osg::StateSet* previousFontStateSet = _font.valid() ? _font->getStateSet() : Font::getDefaultFont()->getStateSet();
+    osg::StateSet* newFontStateSet = font.valid() ? font->getStateSet() : Font::getDefaultFont()->getStateSet();
+
+    if (getStateSet() == previousFontStateSet)
+    {
+        setStateSet( newFontStateSet );
+    }
+
+    _font = font;
+
+    computeGlyphRepresentation();
+}
+
+void TextBase::setFont(const std::string& fontfile)
+{
+    setFont(readRefFontFile(fontfile));
+}
+
 void TextBase::setFontResolution(unsigned int width, unsigned int height)
 {
     _fontSize = FontResolution(width,height);
     computeGlyphRepresentation();
 }
 
-void TextBase::setCharacterSize(float height,float aspectRatio)
+void TextBase::setCharacterSize(float height)
 {
     _characterHeight = height;
-    _characterAspectRatio = aspectRatio;
     computeGlyphRepresentation();
+}
+
+void TextBase::setCharacterSize(float height, float aspectRatio)
+{
+    if (getCharacterAspectRatio()!=aspectRatio)
+    {
+        getOrCreateStyle()->setWidthRatio(aspectRatio);
+    }
+    setCharacterSize(height);
 }
 
 void TextBase::setMaximumWidth(float maximumWidth)
@@ -222,6 +263,16 @@ void TextBase::setDrawMode(unsigned int mode)
     if (_drawMode==mode) return;
 
     _drawMode=mode;
+}
+
+
+void TextBase::setBoundingBoxMargin(float margin)
+{
+    if (_textBBMargin == margin)
+        return;
+
+    _textBBMargin = margin;
+    computeGlyphRepresentation();
 }
 
 

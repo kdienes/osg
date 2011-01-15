@@ -1,4 +1,4 @@
-INCLUDE_DIRECTORIES(${FBX_ROOT}/include)
+INCLUDE_DIRECTORIES(${FBX_INCLUDE_DIR})
 
 SET(TARGET_SRC
     fbxRAnimation.cpp
@@ -7,19 +7,17 @@ SET(TARGET_SRC
     fbxRMesh.cpp
     fbxRNode.cpp
     ReaderWriterFBX.cpp
+    WriterCompareTriangle.cpp
     WriterNodeVisitor.cpp
     fbxMaterialToOsgStateSet.cpp
 )
 
 SET(TARGET_H 
-    fbxRAnimation.h
-    fbxRCamera.h
-    fbxRLight.h
-    fbxRMesh.h
-    fbxRNode.h
-    ReaderWriterFBX.h
-    WriterNodeVisitor.h
     fbxMaterialToOsgStateSet.h
+    fbxReader.h
+    ReaderWriterFBX.h
+    WriterCompareTriangle.h
+    WriterNodeVisitor.h
 )
 
 ADD_DEFINITIONS(-DKFBX_PLUGIN -DKFBX_FBXSDK -DKFBX_NODLL)

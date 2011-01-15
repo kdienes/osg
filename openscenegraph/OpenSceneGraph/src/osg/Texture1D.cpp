@@ -12,11 +12,10 @@
 */
 #include <osg/GLExtensions>
 #include <osg/Texture1D>
-#include <osg/ImageSequence>
 #include <osg/State>
 #include <osg/GLU>
 
-typedef void (APIENTRY * MyCompressedTexImage1DArbProc) (GLenum target, GLint level, GLenum internalformat, GLsizei width, GLint border, GLsizei imageSize, const GLvoid *data);
+typedef void (GL_APIENTRY * MyCompressedTexImage1DArbProc) (GLenum target, GLint level, GLenum internalformat, GLsizei width, GLint border, GLsizei imageSize, const GLvoid *data);
 
 using namespace osg;
 
@@ -49,7 +48,7 @@ Texture1D::~Texture1D()
 int Texture1D::compare(const StateAttribute& sa) const
 {
     // check the types are equal and then create the rhs variable
-    // used by the COMPARE_StateAttribute_Parameter macro's below.
+    // used by the COMPARE_StateAttribute_Parameter macros below.
     COMPARE_StateAttribute_Types(Texture1D,sa)
 
     if (_image!=rhs._image) // smart pointer comparison.
@@ -90,14 +89,14 @@ int Texture1D::compare(const StateAttribute& sa) const
     COMPARE_StateAttribute_Parameter(_textureWidth)
     COMPARE_StateAttribute_Parameter(_subloadCallback)
 
-    return 0; // passed all the above comparison macro's, must be equal.
+    return 0; // passed all the above comparison macros, must be equal.
 }
 
 void Texture1D::setImage(Image* image)
 {
     if (_image == image) return;
 
-    if (dynamic_cast<osg::ImageSequence*>(_image.get()))
+    if (_image.valid() && _image->requiresUpdateCall())
     {
         setUpdateCallback(0);
         setDataVariance(osg::Object::STATIC);
@@ -109,9 +108,9 @@ void Texture1D::setImage(Image* image)
     _image = image;
     _modifiedCount.setAllElementsTo(0);
     
-    if (dynamic_cast<osg::ImageSequence*>(_image.get()))
+    if (_image.valid() && _image->requiresUpdateCall())
     {
-        setUpdateCallback(new ImageSequence::UpdateCallback());
+        setUpdateCallback(new Image::UpdateCallback());
         setDataVariance(osg::Object::DYNAMIC);
     }
 }
@@ -119,15 +118,38 @@ void Texture1D::setImage(Image* image)
 
 void Texture1D::apply(State& state) const
 {
-
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
     // get the contextID (user defined ID of 0 upwards) for the 
     // current OpenGL context.
     const unsigned int contextID = state.getContextID();
 
+    Texture::TextureObjectManager* tom = Texture::getTextureObjectManager(contextID).get();
+    ElapsedTime elapsedTime(&(tom->getApplyTime()));
+    tom->getNumberApplied()++;
+
     // get the texture object for the current contextID.
     TextureObject* textureObject = getTextureObject(contextID);
 
-    if (textureObject != 0)
+    if (textureObject)
+    {
+        if (_image.valid() && getModifiedCount(contextID) != _image->getModifiedCount())
+        {
+            // compute the internal texture format, this set the _internalFormat to an appropriate value.
+            computeInternalFormat();
+
+            GLsizei new_width = _image->s();
+            GLsizei new_numMipmapLevels = _numMipmapLevels;
+
+            if (!textureObject->match(GL_TEXTURE_1D, new_numMipmapLevels, _internalFormat, new_width, 1, 1, _borderWidth))
+            {
+                Texture::releaseTextureObject(contextID, _textureObjectBuffer[contextID].get());
+                _textureObjectBuffer[contextID] = 0;
+                textureObject = 0;
+            }
+        }
+    }
+
+    if (textureObject)
     {
         textureObject->bind();
 
@@ -150,7 +172,7 @@ void Texture1D::apply(State& state) const
     {
 
         // we don't have a applyTexImage1D_subload yet so can't reuse.. so just generate a new texture object.        
-        _textureObjectBuffer[contextID] = textureObject = generateTextureObject(contextID,GL_TEXTURE_1D);
+        _textureObjectBuffer[contextID] = textureObject = generateTextureObject(this, contextID, GL_TEXTURE_1D);
 
         textureObject->bind();
 
@@ -171,7 +193,7 @@ void Texture1D::apply(State& state) const
     {
 
         // we don't have a applyTexImage1D_subload yet so can't reuse.. so just generate a new texture object.        
-        textureObject = generateTextureObject(contextID,GL_TEXTURE_1D);
+        textureObject = generateTextureObject(this, contextID,GL_TEXTURE_1D);
 
         textureObject->bind();
 
@@ -186,17 +208,18 @@ void Texture1D::apply(State& state) const
     
         _textureObjectBuffer[contextID] = textureObject;
     
-        if (_unrefImageDataAfterApply && areAllTextureObjectsLoaded() && _image->getDataVariance()==STATIC)
+        // unref image data?
+        if (isSafeToUnrefImageData(state) && _image->getDataVariance()==STATIC)
         {
             Texture1D* non_const_this = const_cast<Texture1D*>(this);
-            non_const_this->_image = 0;
+            non_const_this->_image = NULL;
         }
         
     }
     else if ( (_textureWidth!=0) && (_internalFormat!=0) )
     {
         _textureObjectBuffer[contextID] = textureObject = generateTextureObject(
-                contextID,GL_TEXTURE_1D,_numMipmapLevels,_internalFormat,_textureWidth,1,1,0);
+                this,contextID,GL_TEXTURE_1D,_numMipmapLevels,_internalFormat,_textureWidth,1,1,0);
         
         textureObject->bind();
 
@@ -225,6 +248,9 @@ void Texture1D::apply(State& state) const
     {
         generateMipmap(state);
     }
+#else
+    OSG_NOTICE<<"Warning: Texture1D::apply(State& state) not supported."<<std::endl;
+#endif
 }
 
 void Texture1D::computeInternalFormat() const
@@ -235,6 +261,7 @@ void Texture1D::computeInternalFormat() const
 
 void Texture1D::applyTexImage1D(GLenum target, Image* image, State& state, GLsizei& inwidth, GLsizei& numMipmapLevels) const
 {
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
     // if we don't have a valid image we can't create a texture!
     if (!image || !image->data())
         return;
@@ -340,10 +367,14 @@ void Texture1D::applyTexImage1D(GLenum target, Image* image, State& state, GLsiz
     }
 
     inwidth = image->s();
+#else
+    OSG_NOTICE<<"Warning: Texture1D::applyTexImage1D(State& state) not supported."<<std::endl;
+#endif
 }
 
 void Texture1D::copyTexImage1D(State& state, int x, int y, int width)
 {
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
     const unsigned int contextID = state.getContextID();
 
     // get the texture object for the current contextID.
@@ -378,7 +409,7 @@ void Texture1D::copyTexImage1D(State& state, int x, int y, int width)
     _min_filter = LINEAR;
     _mag_filter = LINEAR;
 
-    _textureObjectBuffer[contextID] = textureObject = generateTextureObject(contextID,GL_TEXTURE_1D);
+    _textureObjectBuffer[contextID] = textureObject = generateTextureObject(this, contextID,GL_TEXTURE_1D);
 
     textureObject->bind();
 
@@ -393,10 +424,14 @@ void Texture1D::copyTexImage1D(State& state, int x, int y, int width)
 
     // inform state that this texture is the current one bound.
     state.haveAppliedTextureAttribute(state.getActiveTextureUnit(), this);
+#else
+    OSG_NOTICE<<"Warning: Texture1D::copyTexImage1D(..) not supported."<<std::endl;
+#endif
 }
 
 void Texture1D::copyTexSubImage1D(State& state, int xoffset, int x, int y, int width)
 {
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
     const unsigned int contextID = state.getContextID();
 
     // get the texture object for the current contextID.
@@ -421,10 +456,14 @@ void Texture1D::copyTexSubImage1D(State& state, int xoffset, int x, int y, int w
         // create it upfront - simply call copyTexImage1D.
         copyTexImage1D(state,x,y,width);
     }
+#else
+    OSG_NOTICE<<"Warning: Texture1D::copyTexSubImage1D(..) not supported."<<std::endl;
+#endif
 }
 
 void Texture1D::allocateMipmap(State& state) const
 {
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
     const unsigned int contextID = state.getContextID();
 
     // get the texture object for the current contextID.
@@ -458,4 +497,7 @@ void Texture1D::allocateMipmap(State& state) const
         // inform state that this texture is the current one bound.
         state.haveAppliedTextureAttribute(state.getActiveTextureUnit(), this);        
     }
+#else
+    OSG_NOTICE<<"Warning: Texture1D::allocateMipmap(..) not supported."<<std::endl;
+#endif
 }

@@ -21,7 +21,7 @@ osgParticle::ModularEmitter::ModularEmitter(const ModularEmitter& copy, const os
 {
 }
 
-void osgParticle::ModularEmitter::emit(double dt) 
+void osgParticle::ModularEmitter::emitParticles(double dt)
 {
     ConnectedParticleSystem* cps = dynamic_cast<ConnectedParticleSystem*>(getParticleSystem());
 
@@ -80,7 +80,7 @@ void osgParticle::ModularEmitter::emit(double dt)
             }
             else
             {
-                osg::notify(osg::NOTICE)<<"run out of particle"<<std::endl;
+                OSG_NOTICE<<"run out of particle"<<std::endl;
             }
         }
     }

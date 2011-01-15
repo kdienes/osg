@@ -27,8 +27,16 @@
 
 #include <osg/GLU>
 
+#include <iterator>
+
 using namespace osg;
 using namespace osgUtil;
+
+#if defined(OSG_GLES1_AVAILABLE) || defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
+    // define under GLES to keep the main SceneView.cpp clean.
+    #define GL_BACK_LEFT        0x0402
+    #define GL_BACK_RIGHT       0x0403
+#endif
 
 static const GLubyte patternVertEven[] = {
     0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
@@ -138,8 +146,7 @@ SceneView::SceneView(DisplaySettings* ds)
     
     _initCalled = false;
 
-    
-    setDrawBufferValue(GL_BACK);
+    _camera->setDrawBuffer(GL_BACK);
 
     _requiresFlush = true;
     
@@ -204,22 +211,26 @@ void SceneView::setDefaults(unsigned int options)
 
     if ((options & HEADLIGHT) || (options & SKY_LIGHT))
     {
-        _lightingMode=(options&HEADLIGHT) ? HEADLIGHT : SKY_LIGHT;
-        _light = new osg::Light;
-        _light->setLightNum(0);
-        _light->setAmbient(Vec4(0.00f,0.0f,0.00f,1.0f));
-        _light->setDiffuse(Vec4(0.8f,0.8f,0.8f,1.0f));
-        _light->setSpecular(Vec4(1.0f,1.0f,1.0f,1.0f));
+        #if defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
+            _lightingMode=(options&HEADLIGHT) ? HEADLIGHT : SKY_LIGHT;
+            _light = new osg::Light;
+            _light->setLightNum(0);
+            _light->setAmbient(Vec4(0.00f,0.0f,0.00f,1.0f));
+            _light->setDiffuse(Vec4(0.8f,0.8f,0.8f,1.0f));
+            _light->setSpecular(Vec4(1.0f,1.0f,1.0f,1.0f));
 
-        _globalStateSet->setAssociatedModes(_light.get(),osg::StateAttribute::ON);
 
-        osg::LightModel* lightmodel = new osg::LightModel;
-        lightmodel->setAmbientIntensity(osg::Vec4(0.1f,0.1f,0.1f,1.0f));
-        _globalStateSet->setAttributeAndModes(lightmodel, osg::StateAttribute::ON);
+            _globalStateSet->setAssociatedModes(_light.get(),osg::StateAttribute::ON);
 
-        // enable lighting by default.
-        _globalStateSet->setMode(GL_LIGHTING, osg::StateAttribute::ON);
-
+            // enable lighting by default.
+            _globalStateSet->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+        #endif
+        
+        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
+            osg::LightModel* lightmodel = new osg::LightModel;
+            lightmodel->setAmbientIntensity(osg::Vec4(0.1f,0.1f,0.1f,1.0f));
+            _globalStateSet->setAttributeAndModes(lightmodel, osg::StateAttribute::ON);
+        #endif
     }
     else
     {
@@ -261,11 +272,13 @@ void SceneView::setDefaults(unsigned int options)
 
     _globalStateSet->setGlobalDefaults();
 
-    // set up an texture environment by default to speed up blending operations.
-     osg::TexEnv* texenv = new osg::TexEnv;
-     texenv->setMode(osg::TexEnv::MODULATE);
-     _globalStateSet->setTextureAttributeAndModes(0,texenv, osg::StateAttribute::ON);
-
+    #if defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
+        // set up an texture environment by default to speed up blending operations.
+         osg::TexEnv* texenv = new osg::TexEnv;
+         texenv->setMode(osg::TexEnv::MODULATE);
+         _globalStateSet->setTextureAttributeAndModes(0,texenv, osg::StateAttribute::ON);
+    #endif
+         
     _camera->setClearColor(osg::Vec4(0.2f, 0.2f, 0.4f, 1.0f));
 }
 
@@ -277,7 +290,7 @@ void SceneView::setCamera(osg::Camera* camera, bool assumeOwnershipOfCamera)
     }
     else
     {
-        osg::notify(osg::NOTICE)<<"Warning: attempt to assign a NULL camera to SceneView not permitted."<<std::endl;
+        OSG_NOTICE<<"Warning: attempt to assign a NULL camera to SceneView not permitted."<<std::endl;
     }
     
     if (assumeOwnershipOfCamera)
@@ -663,12 +676,14 @@ void SceneView::setLightingMode(LightingMode mode)
 
     if (_lightingMode!=NO_SCENEVIEW_LIGHT)
     {
-        // add GL_LIGHTING mode
-        _globalStateSet->setMode(GL_LIGHTING, osg::StateAttribute::ON);
-        if (_light.valid()) 
-        {
-            _globalStateSet->setAssociatedModes(_light.get(), osg::StateAttribute::ON);
-        }
+        #if defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
+            // add GL_LIGHTING mode
+            _globalStateSet->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+            if (_light.valid()) 
+            {
+                _globalStateSet->setAssociatedModes(_light.get(), osg::StateAttribute::ON);
+            }
+        #endif
     }
 }
 
@@ -716,7 +731,7 @@ void SceneView::cull()
 
     if (!_renderInfo.getState())
     {
-        osg::notify(osg::INFO) << "Warning: no valid osgUtil::SceneView::_state attached, creating a default state automatically."<< std::endl;
+        OSG_INFO << "Warning: no valid osgUtil::SceneView::_state attached, creating a default state automatically."<< std::endl;
 
         // note the constructor for osg::State will set ContextID to 0 which will be fine to single context graphics
         // applications which is ok for most apps, but not multiple context/pipe applications.
@@ -739,17 +754,17 @@ void SceneView::cull()
 
     if (!_cullVisitor)
     {
-        osg::notify(osg::INFO) << "Warning: no valid osgUtil::SceneView:: attached, creating a default CullVisitor automatically."<< std::endl;
+        OSG_INFO << "Warning: no valid osgUtil::SceneView:: attached, creating a default CullVisitor automatically."<< std::endl;
         _cullVisitor = CullVisitor::create();
     }
     if (!_stateGraph)
     {
-        osg::notify(osg::INFO) << "Warning: no valid osgUtil::SceneView:: attached, creating a global default StateGraph automatically."<< std::endl;
+        OSG_INFO << "Warning: no valid osgUtil::SceneView:: attached, creating a global default StateGraph automatically."<< std::endl;
         _stateGraph = new StateGraph;
     }
     if (!_renderStage)
     {
-        osg::notify(osg::INFO) << "Warning: no valid osgUtil::SceneView::_renderStage attached, creating a default RenderStage automatically."<< std::endl;
+        OSG_INFO << "Warning: no valid osgUtil::SceneView::_renderStage attached, creating a default RenderStage automatically."<< std::endl;
         _renderStage = new RenderStage;
     }
 
@@ -835,7 +850,8 @@ void SceneView::cull()
         }
     }
     
-    
+
+
 }
 
 bool SceneView::cullStage(const osg::Matrixd& projection,const osg::Matrixd& modelview,osgUtil::CullVisitor* cullVisitor, osgUtil::StateGraph* rendergraph, osgUtil::RenderStage* renderStage, osg::Viewport *viewport)
@@ -845,7 +861,6 @@ bool SceneView::cullStage(const osg::Matrixd& projection,const osg::Matrixd& mod
 
     osg::ref_ptr<RefMatrix> proj = new osg::RefMatrix(projection);
     osg::ref_ptr<RefMatrix> mv = new osg::RefMatrix(modelview);
-
 
     // collect any occluder in the view frustum.
     if (_camera->containsOccluderNodes())
@@ -872,10 +887,7 @@ bool SceneView::cullStage(const osg::Matrixd& projection,const osg::Matrixd& mod
         _collectOccludersVisitor->pushModelViewMatrix(mv.get(),osg::Transform::ABSOLUTE_RF);
 
         // traverse the scene graph to search for occluder in there new positions.
-        for(unsigned int i=0; i< _camera->getNumChildren(); ++i)
-        {
-            _camera->getChild(i)->accept(*_collectOccludersVisitor);
-        }
+        _collectOccludersVisitor->traverse(*_camera);
 
         _collectOccludersVisitor->popModelViewMatrix();
         _collectOccludersVisitor->popProjectionMatrix();
@@ -885,7 +897,7 @@ bool SceneView::cullStage(const osg::Matrixd& projection,const osg::Matrixd& mod
         _collectOccludersVisitor->removeOccludedOccluders();
         
         
-        osg::notify(osg::DEBUG_INFO) << "finished searching for occluder - found "<<_collectOccludersVisitor->getCollectedOccluderSet().size()<<std::endl;
+        OSG_DEBUG << "finished searching for occluder - found "<<_collectOccludersVisitor->getCollectedOccluderSet().size()<<std::endl;
            
         cullVisitor->getOccluderList().clear();
         std::copy(_collectOccludersVisitor->getCollectedOccluderSet().begin(),_collectOccludersVisitor->getCollectedOccluderSet().end(), std::back_insert_iterator<CullStack::OccluderList>(cullVisitor->getOccluderList()));
@@ -920,6 +932,7 @@ bool SceneView::cullStage(const osg::Matrixd& projection,const osg::Matrixd& mod
     // achieves a certain amount of frame cohereancy of memory allocation.
     rendergraph->clean();
 
+    renderStage->setInitialViewMatrix(mv.get());
     renderStage->setViewport(viewport);
     renderStage->setClearColor(_camera->getClearColor());
     renderStage->setClearDepth(_camera->getClearDepth());
@@ -931,42 +944,47 @@ bool SceneView::cullStage(const osg::Matrixd& projection,const osg::Matrixd& mod
     renderStage->setCamera(_camera.get());
 #endif
 
-    switch(_lightingMode)
-    {
-    case(HEADLIGHT):
-        if (_light.valid()) renderStage->addPositionedAttribute(NULL,_light.get());
-        else osg::notify(osg::WARN)<<"Warning: no osg::Light attached to ogUtil::SceneView to provide head light.*/"<<std::endl;
-        break;
-    case(SKY_LIGHT):
-        if (_light.valid()) renderStage->addPositionedAttribute(mv.get(),_light.get());
-        else osg::notify(osg::WARN)<<"Warning: no osg::Light attached to ogUtil::SceneView to provide sky light.*/"<<std::endl;
-        break;
-    default:
-        break;
-    }            
-
+    #if defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
+        switch(_lightingMode)
+        {
+        case(HEADLIGHT):
+            if (_light.valid()) renderStage->addPositionedAttribute(NULL,_light.get());
+            else OSG_WARN<<"Warning: no osg::Light attached to ogUtil::SceneView to provide head light.*/"<<std::endl;
+            break;
+        case(SKY_LIGHT):
+            if (_light.valid()) renderStage->addPositionedAttribute(mv.get(),_light.get());
+            else OSG_WARN<<"Warning: no osg::Light attached to ogUtil::SceneView to provide sky light.*/"<<std::endl;
+            break;
+        default:
+            break;
+        }            
+    #endif
+    
     if (_globalStateSet.valid()) cullVisitor->pushStateSet(_globalStateSet.get());
+    if (_secondaryStateSet.valid()) cullVisitor->pushStateSet(_secondaryStateSet.get());
     if (_localStateSet.valid()) cullVisitor->pushStateSet(_localStateSet.get());
 
 
     cullVisitor->pushViewport(viewport);
     cullVisitor->pushProjectionMatrix(proj.get());
     cullVisitor->pushModelViewMatrix(mv.get(),osg::Transform::ABSOLUTE_RF);
-    
 
-    // traverse the scene graph to generate the rendergraph.
-    for(unsigned int childNo=0;
-        childNo<_camera->getNumChildren();
-        ++childNo)
+    // traverse the scene graph to generate the rendergraph.    
+    // If the camera has a cullCallback execute the callback which has the  
+    // requirement that it must traverse the camera's children.
     {
-        _camera->getChild(childNo)->accept(*cullVisitor);
+       osg::NodeCallback* callback = _camera->getCullCallback();
+       if (callback) (*callback)(_camera.get(), cullVisitor);
+       else cullVisitor->traverse(*_camera);
     }
+
 
     cullVisitor->popModelViewMatrix();
     cullVisitor->popProjectionMatrix();
     cullVisitor->popViewport();
 
     if (_localStateSet.valid()) cullVisitor->popStateSet();
+    if (_secondaryStateSet.valid()) cullVisitor->popStateSet();
     if (_globalStateSet.valid()) cullVisitor->popStateSet();
     
 
@@ -1023,6 +1041,12 @@ void SceneView::draw()
     osg::State* state = _renderInfo.getState();
     state->initializeExtensionProcs();
 
+    osg::Texture::TextureObjectManager* tom = osg::Texture::getTextureObjectManager(state->getContextID()).get();
+    tom->newFrame(state->getFrameStamp());
+
+    osg::GLBufferObjectManager* bom = osg::GLBufferObjectManager::getGLBufferObjectManager(state->getContextID()).get();
+    bom->newFrame(state->getFrameStamp());
+
     if (!_initCalled) init();
 
     // note, to support multi-pipe systems the deletion of OpenGL display list
@@ -1038,8 +1062,6 @@ void SceneView::draw()
 
     // assume the the draw which is about to happen could generate GL objects that need flushing in the next frame.
     _requiresFlush = true;
-
-    state->setInitialViewMatrix(new osg::RefMatrix(getViewMatrix()));
 
     RenderLeaf* previous = NULL;
     if (_displaySettings.valid() && _displaySettings->getStereo()) 
@@ -1082,14 +1104,28 @@ void SceneView::draw()
             break;
         case(osg::DisplaySettings::ANAGLYPHIC):
             {
-                if( getDrawBufferValue() !=  GL_NONE)
+                if( 0 == ( _camera->getInheritanceMask() & DRAW_BUFFER ) )
                 {
-                    _renderStageLeft->setDrawBuffer(getDrawBufferValue());
-                    _renderStageLeft->setReadBuffer(getDrawBufferValue());
+                    _renderStageLeft->setDrawBuffer(_camera->getDrawBuffer());
+                    _renderStageLeft->setReadBuffer(_camera->getDrawBuffer());
 
-                    _renderStageRight->setDrawBuffer(getDrawBufferValue());
-                    _renderStageRight->setReadBuffer(getDrawBufferValue());
+                    _renderStageRight->setDrawBuffer(_camera->getDrawBuffer());
+                    _renderStageRight->setReadBuffer(_camera->getDrawBuffer());
                 }
+
+                // ensure that all color planes are active.
+                osg::ColorMask* cmask = static_cast<osg::ColorMask*>(_localStateSet->getAttribute(osg::StateAttribute::COLORMASK));
+                if (cmask)
+                {
+                    cmask->setMask(true,true,true,true);
+                }
+                else
+                {
+                    cmask = new osg::ColorMask(true,true,true,true);
+                    _localStateSet->setAttribute(cmask);
+                }
+                _renderStageLeft->setColorMask(cmask);
+                _renderStageRight->setColorMask(cmask);
                 
                 _localStateSet->setAttribute(getViewport());
 
@@ -1142,13 +1178,13 @@ void SceneView::draw()
             break;
         case(osg::DisplaySettings::HORIZONTAL_SPLIT):
             {
-                if( getDrawBufferValue() !=  GL_NONE)
+                if( 0 == ( _camera->getInheritanceMask() & DRAW_BUFFER) )
                 {
-                    _renderStageLeft->setDrawBuffer(getDrawBufferValue());
-                    _renderStageLeft->setReadBuffer(getDrawBufferValue());
+                    _renderStageLeft->setDrawBuffer(_camera->getDrawBuffer());
+                    _renderStageLeft->setReadBuffer(_camera->getDrawBuffer());
 
-                    _renderStageRight->setDrawBuffer(getDrawBufferValue());
-                    _renderStageRight->setReadBuffer(getDrawBufferValue());
+                    _renderStageRight->setDrawBuffer(_camera->getDrawBuffer());
+                    _renderStageRight->setReadBuffer(_camera->getDrawBuffer());
                 }
 
                 // ensure that all color planes are active.
@@ -1191,13 +1227,13 @@ void SceneView::draw()
             break;
         case(osg::DisplaySettings::VERTICAL_SPLIT):
             {
-                if( getDrawBufferValue() !=  GL_NONE)
+                if( 0 == ( _camera->getInheritanceMask() & DRAW_BUFFER) )
                 {
-                    _renderStageLeft->setDrawBuffer(getDrawBufferValue());
-                    _renderStageLeft->setReadBuffer(getDrawBufferValue());
+                    _renderStageLeft->setDrawBuffer(_camera->getDrawBuffer());
+                    _renderStageLeft->setReadBuffer(_camera->getDrawBuffer());
 
-                    _renderStageRight->setDrawBuffer(getDrawBufferValue());
-                    _renderStageRight->setReadBuffer(getDrawBufferValue());
+                    _renderStageRight->setDrawBuffer(_camera->getDrawBuffer());
+                    _renderStageRight->setReadBuffer(_camera->getDrawBuffer());
                 }
 
                 // ensure that all color planes are active.
@@ -1241,10 +1277,10 @@ void SceneView::draw()
         case(osg::DisplaySettings::RIGHT_EYE):
         case(osg::DisplaySettings::LEFT_EYE):
             {
-                if( getDrawBufferValue() !=  GL_NONE)
+                if( 0 == ( _camera->getInheritanceMask() & DRAW_BUFFER) )
                 {
-                    _renderStage->setDrawBuffer(getDrawBufferValue());
-                    _renderStage->setReadBuffer(getDrawBufferValue());
+                    _renderStage->setDrawBuffer(_camera->getDrawBuffer());
+                    _renderStage->setReadBuffer(_camera->getDrawBuffer());
                 }
 
                 // ensure that all color planes are active.
@@ -1267,168 +1303,17 @@ void SceneView::draw()
             }
             break;
         case(osg::DisplaySettings::VERTICAL_INTERLACE):
-            {
-                if( getDrawBufferValue() !=  GL_NONE)
-                {
-                    _renderStageLeft->setDrawBuffer(getDrawBufferValue());
-                    _renderStageLeft->setReadBuffer(getDrawBufferValue());
-                    _renderStageRight->setDrawBuffer(getDrawBufferValue());
-                    _renderStageRight->setReadBuffer(getDrawBufferValue());
-                }
-                _localStateSet->setAttribute(getViewport());
-
-                // ensure that all color planes are active.
-                osg::ColorMask* cmask = static_cast<osg::ColorMask*>(_localStateSet->getAttribute(osg::StateAttribute::COLORMASK));
-                if (cmask)
-                {
-                    cmask->setMask(true,true,true,true);
-                }
-                else
-                {
-                    cmask = new osg::ColorMask(true,true,true,true);
-                    _localStateSet->setAttribute(cmask);
-                }
-                _renderStageLeft->setColorMask(cmask);
-                _renderStageRight->setColorMask(cmask);
-
-                _renderStageLeft->drawPreRenderStages(_renderInfo,previous);
-                _renderStageRight->drawPreRenderStages(_renderInfo,previous);
-
-                glEnable(GL_STENCIL_TEST);
-
-                if(_redrawInterlacedStereoStencilMask ||
-                   _interlacedStereoStencilWidth != getViewport()->width() ||
-                  _interlacedStereoStencilHeight != getViewport()->height() )
-                {
-                    getViewport()->apply(*state);
-                    glMatrixMode(GL_PROJECTION);
-                    glLoadIdentity();
-                    glOrtho(getViewport()->x(), getViewport()->width(), getViewport()->y(), getViewport()->height(), -1.0, 1.0);
-                    glMatrixMode(GL_MODELVIEW);
-                    glLoadIdentity();    
-                    getState()->applyMode(GL_LIGHTING,false);
-                    getState()->applyMode(GL_DEPTH_TEST,false);
-                    glStencilMask(~0u);
-                    glClear(GL_STENCIL_BUFFER_BIT);
-                    glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE);
-                    glStencilFunc(GL_ALWAYS, 1, ~0u);
-                    glPolygonStipple(patternVertEven);
-                    getState()->applyMode(GL_POLYGON_STIPPLE,true);
-                    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-                    
-                    glRecti(static_cast<GLint>(getViewport()->x()),
-                            static_cast<GLint>(getViewport()->y()),
-                            static_cast<GLint>(getViewport()->width()),
-                            static_cast<GLint>(getViewport()->height()) );
-                            
-                    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-                    getState()->applyMode(GL_POLYGON_STIPPLE,false);
-                    getState()->applyMode(GL_LIGHTING,true);
-                    getState()->applyMode(GL_DEPTH_TEST,true);
-                    
-                    _redrawInterlacedStereoStencilMask = false;
-                    _interlacedStereoStencilWidth = static_cast<int>(getViewport()->width());
-                    _interlacedStereoStencilHeight = static_cast<int>(getViewport()->height());
-                }
-
-                _renderStageLeft->setClearMask(_renderStageLeft->getClearMask() & ~(GL_STENCIL_BUFFER_BIT));
-                _renderStageRight->setClearMask(_renderStageRight->getClearMask() & ~(GL_STENCIL_BUFFER_BIT|GL_COLOR_BUFFER_BIT));
-
-                glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-                glStencilFunc(GL_EQUAL, 0, ~0u);    
-                _renderStageLeft->draw(_renderInfo,previous);
-                
-                glStencilFunc(GL_NOTEQUAL, 0, ~0u);
-                _renderStageRight->draw(_renderInfo,previous);
-                glDisable(GL_STENCIL_TEST);
-            }
-            break;
         case(osg::DisplaySettings::HORIZONTAL_INTERLACE):
-            {
-         if( getDrawBufferValue() !=  GL_NONE)
-         {
-           _renderStageLeft->setDrawBuffer(getDrawBufferValue());
-           _renderStageLeft->setReadBuffer(getDrawBufferValue());
-           _renderStageRight->setDrawBuffer(getDrawBufferValue());
-           _renderStageRight->setReadBuffer(getDrawBufferValue());
-         }
-                _localStateSet->setAttribute(getViewport());
-
-                // ensure that all color planes are active.
-                osg::ColorMask* cmask = static_cast<osg::ColorMask*>(_localStateSet->getAttribute(osg::StateAttribute::COLORMASK));
-                if (cmask)
-                {
-                    cmask->setMask(true,true,true,true);
-                }
-                else
-                {
-                    cmask = new osg::ColorMask(true,true,true,true);
-                    _localStateSet->setAttribute(cmask);
-                }
-                _renderStageLeft->setColorMask(cmask);
-                _renderStageRight->setColorMask(cmask);
-
-                _renderStageLeft->drawPreRenderStages(_renderInfo,previous);
-                _renderStageRight->drawPreRenderStages(_renderInfo,previous);
-
-                glEnable(GL_STENCIL_TEST);
-
-                if(_redrawInterlacedStereoStencilMask ||
-                   _interlacedStereoStencilWidth != getViewport()->width() ||
-                  _interlacedStereoStencilHeight != getViewport()->height() )
-                {
-                    getViewport()->apply(*state);
-                    glMatrixMode(GL_PROJECTION);
-                    glLoadIdentity();
-                    glOrtho(getViewport()->x(), getViewport()->width(), getViewport()->y(), getViewport()->height(), -1.0, 1.0);
-                    glMatrixMode(GL_MODELVIEW);
-                    glLoadIdentity();
-                    getState()->applyMode(GL_LIGHTING,false);
-                    getState()->applyMode(GL_DEPTH_TEST,false);
-                    glStencilMask(~0u);
-                    glClear(GL_STENCIL_BUFFER_BIT);
-                    glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE);
-                    glStencilFunc(GL_ALWAYS, 1, ~0u);
-                    glPolygonStipple(patternHorzEven);
-                    getState()->applyMode(GL_POLYGON_STIPPLE,true);
-                    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-
-                    glRecti(static_cast<GLint>(getViewport()->x()),
-                            static_cast<GLint>(getViewport()->y()),
-                            static_cast<GLint>(getViewport()->width()),
-                            static_cast<GLint>(getViewport()->height()) );
-                            
-                    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-                    getState()->applyMode(GL_POLYGON_STIPPLE,false);
-                    getState()->applyMode(GL_LIGHTING,true);
-                    getState()->applyMode(GL_DEPTH_TEST,true);
-                    
-                    _redrawInterlacedStereoStencilMask = false;
-                    _interlacedStereoStencilWidth = static_cast<int>(getViewport()->width());
-                    _interlacedStereoStencilHeight = static_cast<int>(getViewport()->height());
-                }
-
-                _renderStageLeft->setClearMask(_renderStageLeft->getClearMask() & ~(GL_STENCIL_BUFFER_BIT));
-                _renderStageRight->setClearMask(_renderStageRight->getClearMask() & ~(GL_STENCIL_BUFFER_BIT|GL_COLOR_BUFFER_BIT));
-
-                glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-                glStencilFunc(GL_EQUAL, 0, ~0u);    
-                _renderStageLeft->draw(_renderInfo,previous);
-                
-                glStencilFunc(GL_NOTEQUAL, 0, ~0u);
-                _renderStageRight->draw(_renderInfo,previous);
-                glDisable(GL_STENCIL_TEST);
-            }
-            break;
         case(osg::DisplaySettings::CHECKERBOARD):
             {
-         if( getDrawBufferValue() !=  GL_NONE)
-         {
-           _renderStageLeft->setDrawBuffer(getDrawBufferValue());
-           _renderStageLeft->setReadBuffer(getDrawBufferValue());
-           _renderStageRight->setDrawBuffer(getDrawBufferValue());
-           _renderStageRight->setReadBuffer(getDrawBufferValue());
-         }
+            #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
+                if( 0 == ( _camera->getInheritanceMask() & DRAW_BUFFER) )
+                {
+                    _renderStageLeft->setDrawBuffer(_camera->getDrawBuffer());
+                    _renderStageLeft->setReadBuffer(_camera->getDrawBuffer());
+                    _renderStageRight->setDrawBuffer(_camera->getDrawBuffer());
+                    _renderStageRight->setReadBuffer(_camera->getDrawBuffer());
+                }
                 _localStateSet->setAttribute(getViewport());
 
                 // ensure that all color planes are active.
@@ -1454,31 +1339,42 @@ void SceneView::draw()
                    _interlacedStereoStencilWidth != getViewport()->width() ||
                   _interlacedStereoStencilHeight != getViewport()->height() )
                 {
-                    getViewport()->apply(*state);
+                    state->applyProjectionMatrix(0);
                     glMatrixMode(GL_PROJECTION);
                     glLoadIdentity();
-                    glOrtho(getViewport()->x(), getViewport()->width(), getViewport()->y(), getViewport()->height(), -1.0, 1.0);
+                    glOrtho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
                     glMatrixMode(GL_MODELVIEW);
-                    glLoadIdentity();
-                    glDisable(GL_LIGHTING);
-                    glDisable(GL_DEPTH_TEST);
+                    glLoadIdentity();    
+                    
+                    getViewport()->apply(*state);
+                    getState()->applyMode(GL_LIGHTING,false);
+                    getState()->applyMode(GL_DEPTH_TEST,false);
                     glStencilMask(~0u);
+                    glScissor( static_cast<GLint>(getViewport()->x()),  static_cast<GLint>(getViewport()->y()),  static_cast<GLsizei>(getViewport()->width()),  static_cast<GLsizei>(getViewport()->height()) );
+                    glEnable( GL_SCISSOR_TEST );
                     glClear(GL_STENCIL_BUFFER_BIT);
+                    glDisable( GL_SCISSOR_TEST );
                     glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE);
                     glStencilFunc(GL_ALWAYS, 1, ~0u);
-                    glPolygonStipple(patternCheckerboard);
-                    glEnable(GL_POLYGON_STIPPLE);
+                    if(_displaySettings->getStereoMode() == osg::DisplaySettings::VERTICAL_INTERLACE)
+                    {
+                        glPolygonStipple(patternVertEven);
+                    }
+                    else if(_displaySettings->getStereoMode() == osg::DisplaySettings::HORIZONTAL_INTERLACE)
+                    {
+                        glPolygonStipple(patternHorzEven);
+                    }
+                    else
+                    {
+                        glPolygonStipple(patternCheckerboard);
+                    }
+                    getState()->applyMode(GL_POLYGON_STIPPLE,true);
                     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-
-                    glRecti(static_cast<GLint>(getViewport()->x()),
-                            static_cast<GLint>(getViewport()->y()),
-                            static_cast<GLint>(getViewport()->width()),
-                            static_cast<GLint>(getViewport()->height()) );
-                            
+                    glRecti(0, 0, 1, 1);   
                     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-                    glDisable(GL_POLYGON_STIPPLE);
-                    glEnable(GL_LIGHTING);
-                    glEnable(GL_DEPTH_TEST);
+                    getState()->applyMode(GL_POLYGON_STIPPLE,false);
+                    getState()->applyMode(GL_LIGHTING,true);
+                    getState()->applyMode(GL_DEPTH_TEST,true);
                     
                     _redrawInterlacedStereoStencilMask = false;
                     _interlacedStereoStencilWidth = static_cast<int>(getViewport()->width());
@@ -1495,11 +1391,14 @@ void SceneView::draw()
                 glStencilFunc(GL_NOTEQUAL, 0, ~0u);
                 _renderStageRight->draw(_renderInfo,previous);
                 glDisable(GL_STENCIL_TEST);
+            #else
+                OSG_NOTICE<<"Warning: SceneView::draw() - VERTICAL_INTERLACE, HORIZONTAL_INTERLACE, and CHECKERBOARD stereo not supported."<<std::endl;
+            #endif
             }
             break;
         default:
             {
-                osg::notify(osg::NOTICE)<<"Warning: stereo mode not implemented yet."<< std::endl;
+                OSG_NOTICE<<"Warning: stereo mode not implemented yet."<< std::endl;
             }
             break;
         }
@@ -1508,13 +1407,13 @@ void SceneView::draw()
     {
 
         // Need to restore draw buffer when toggling Stereo off.
-        if( _camera->getDrawBuffer() !=  GL_NONE)
+        if( 0 == ( _camera->getInheritanceMask() & DRAW_BUFFER ) )
         {
             _renderStage->setDrawBuffer(_camera->getDrawBuffer());
             _renderStage->setReadBuffer(_camera->getDrawBuffer());
         }
 
-        if( _camera->getReadBuffer() !=  GL_NONE)
+        if( 0 == ( _camera->getInheritanceMask() & READ_BUFFER ) )
         {
             _renderStage->setReadBuffer(_camera->getReadBuffer());
         }
@@ -1561,7 +1460,13 @@ void SceneView::draw()
         }
     }
 
-    // osg::notify(osg::NOTICE)<<"SceneView  draw() DynamicObjectCount"<<getState()->getDynamicObjectCount()<<std::endl;
+// #define REPORT_TEXTURE_MANAGER_STATS
+#ifdef REPORT_TEXTURE_MANAGER_STATS
+    tom->reportStats();
+    bom->reportStats();
+#endif
+
+    // OSG_NOTICE<<"SceneView  draw() DynamicObjectCount"<<getState()->getDynamicObjectCount()<<std::endl;
 
 }
 
@@ -1614,7 +1519,7 @@ const osg::Matrix SceneView::computeMVPW() const
     if (getViewport())
         matrix.postMult(getViewport()->computeWindowMatrix());
     else
-        osg::notify(osg::WARN)<<"osg::Matrix SceneView::computeMVPW() - error no viewport attached to SceneView, coords will be computed inccorectly."<<std::endl;
+        OSG_WARN<<"osg::Matrix SceneView::computeMVPW() - error no viewport attached to SceneView, coords will be computed inccorectly."<<std::endl;
 
     return matrix;
 }
@@ -1712,6 +1617,7 @@ bool SceneView::getStats(Statistics& stats)
         case(osg::DisplaySettings::VERTICAL_SPLIT):
         case(osg::DisplaySettings::VERTICAL_INTERLACE):
         case(osg::DisplaySettings::HORIZONTAL_INTERLACE):
+        case(osg::DisplaySettings::CHECKERBOARD):
         {
             bool resultLeft = _renderStageLeft->getStats(stats);
             bool resultRight = _renderStageRight->getStats(stats);
@@ -1727,4 +1633,18 @@ bool SceneView::getStats(Statistics& stats)
     {
         return _renderStage->getStats(stats);
     }
+}
+
+void SceneView::collateReferencesToDependentCameras()
+{
+    if (_renderStage.valid()) _renderStage->collateReferencesToDependentCameras();
+    if (_renderStageLeft.valid()) _renderStageLeft->collateReferencesToDependentCameras();
+    if (_renderStageRight.valid()) _renderStageRight->collateReferencesToDependentCameras();
+}
+
+void SceneView::clearReferencesToDependentCameras()
+{
+    if (_renderStage.valid()) _renderStage->clearReferencesToDependentCameras();
+    if (_renderStageLeft.valid()) _renderStageLeft->clearReferencesToDependentCameras();
+    if (_renderStageRight.valid()) _renderStageRight->clearReferencesToDependentCameras();
 }

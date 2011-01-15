@@ -1,6 +1,7 @@
 
 #include "FFmpegImageStream.hpp"
 #include "FFmpegAudioStream.hpp"
+#include "FFmpegParameters.hpp"
 
 #include <OpenThreads/ScopedLock>
 #include <osg/Notify>
@@ -39,11 +40,11 @@ FFmpegImageStream::FFmpegImageStream(const FFmpegImageStream & image, const osg:
 
 FFmpegImageStream::~FFmpegImageStream()
 {
-    osg::notify(osg::INFO)<<"Destructing FFmpegImageStream..."<<std::endl;
+    OSG_INFO<<"Destructing FFmpegImageStream..."<<std::endl;
 
     quit(true);
     
-    osg::notify(osg::INFO)<<"Have done quit"<<std::endl;
+    OSG_INFO<<"Have done quit"<<std::endl;
 
     // release athe audio streams to make sure that the decoder doesn't retain any external
     // refences.
@@ -55,16 +56,16 @@ FFmpegImageStream::~FFmpegImageStream()
 
     delete m_commands;
 
-    osg::notify(osg::INFO)<<"Destructed FFMpegImageStream."<<std::endl;
+    OSG_INFO<<"Destructed FFMpegImageStream."<<std::endl;
 }
 
 
 
-bool FFmpegImageStream::open(const std::string & filename)
+bool FFmpegImageStream::open(const std::string & filename, FFmpegParameters* parameters)
 {
     setFileName(filename);
 
-    if (! m_decoder->open(filename))
+    if (! m_decoder->open(filename, parameters))
         return false;
 
     setImage(
@@ -75,7 +76,7 @@ bool FFmpegImageStream::open(const std::string & filename)
 
     setPixelAspectRatio(m_decoder->video_decoder().pixelAspectRatio());
 
-    osg::notify(osg::NOTICE)<<"ffmpeg::open("<<filename<<") size("<<s()<<", "<<t()<<") aspect ratio "<<m_decoder->video_decoder().pixelAspectRatio()<<std::endl;
+    OSG_NOTICE<<"ffmpeg::open("<<filename<<") size("<<s()<<", "<<t()<<") aspect ratio "<<m_decoder->video_decoder().pixelAspectRatio()<<std::endl;
 
 #if 1
     // swscale is reported errors and then crashing when rescaling video of size less than 10 by 10.
@@ -87,7 +88,7 @@ bool FFmpegImageStream::open(const std::string & filename)
 
     if (m_decoder->audio_decoder().validContext())
     {
-        osg::notify(osg::NOTICE)<<"Attaching FFmpegAudioStream"<<std::endl;
+        OSG_NOTICE<<"Attaching FFmpegAudioStream"<<std::endl;
 
         getAudioStreams().push_back(new FFmpegAudioStream(m_decoder.get()));
     }
@@ -162,6 +163,11 @@ float FFmpegImageStream::getVolume() const
     return m_decoder->audio_decoder().getVolume();
 }
 
+double FFmpegImageStream::getCreationTime() const
+{
+    return m_decoder->creation_time();
+}
+
 double FFmpegImageStream::getLength() const
 { 
     return m_decoder->duration(); 
@@ -218,15 +224,15 @@ void FFmpegImageStream::run()
 
     catch (const std::exception & error)
     {
-        osg::notify(osg::WARN) << "FFmpegImageStream::run : " << error.what() << std::endl;
+        OSG_WARN << "FFmpegImageStream::run : " << error.what() << std::endl;
     }
 
     catch (...)
     {
-        osg::notify(osg::WARN) << "FFmpegImageStream::run : unhandled exception" << std::endl;
+        OSG_WARN << "FFmpegImageStream::run : unhandled exception" << std::endl;
     }
     
-    osg::notify(osg::NOTICE)<<"Finished FFmpegImageStream::run()"<<std::endl;
+    OSG_NOTICE<<"Finished FFmpegImageStream::run()"<<std::endl;
 }
 
 

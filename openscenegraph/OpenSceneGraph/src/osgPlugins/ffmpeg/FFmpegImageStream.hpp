@@ -2,19 +2,21 @@
 #ifndef HEADER_GUARD_OSGFFMPEG_FFMPEG_IMAGE_STREAM_H
 #define HEADER_GUARD_OSGFFMPEG_FFMPEG_IMAGE_STREAM_H
 
+#include "FFmpegDecoder.hpp"
+#include "MessageQueue.hpp"
+
 #include <osg/ImageStream>
 
 #include <OpenThreads/Condition>
 #include <OpenThreads/Thread>
-
-#include "FFmpegDecoder.hpp"
-#include "MessageQueue.hpp"
 
 namespace osgFFmpeg
 {
 
     template <class T>
     class MessageQueue;
+    
+    class FFmpegParameters;
 
     class FFmpegImageStream : public osg::ImageStream, public OpenThreads::Thread
     {
@@ -25,7 +27,7 @@ namespace osgFFmpeg
 
         META_Object(osgFFmpeg, FFmpegImageStream);
 
-        bool open(const std::string & filename);
+        bool open(const std::string & filename, FFmpegParameters* parameters);
 
         virtual void play();
         virtual void pause();
@@ -36,6 +38,7 @@ namespace osgFFmpeg
         virtual void setVolume(float volume);
         virtual float getVolume() const;
 
+        virtual double getCreationTime() const;
         virtual double getLength() const;
         virtual double getReferenceTime () const; 
         virtual double getFrameRate() const;

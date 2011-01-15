@@ -3,6 +3,7 @@
 #include <osg/Notify>
 #include <osg/Geode>
 #include <osg/GL>
+#include <osg/FrameBufferObject>
 
 #include <osgDB/Registry>
 #include <osgDB/FileUtils>
@@ -263,7 +264,7 @@ checkcmap(int n, uint16* r, uint16* g, uint16* b)
 static void
 invert_row(unsigned char *ptr, unsigned char *data, int n, int invert, uint16 bitspersample)
 {
-    // osg::notify(osg::NOTICE)<<"invert_row "<<invert<<std::endl;
+    // OSG_NOTICE<<"invert_row "<<invert<<std::endl;
     if (bitspersample == 8)
     {
         while (n--)
@@ -301,7 +302,7 @@ static void
 remap_row(unsigned char *ptr, unsigned char *data, int n,
 unsigned short *rmap, unsigned short *gmap, unsigned short *bmap)
 {
-    // osg::notify(osg::NOTICE)<<"remap row"<<std::endl;
+    // OSG_NOTICE<<"remap row"<<std::endl;
     unsigned int ix;
     while (n--)
     {
@@ -316,7 +317,7 @@ static void interleave_row(unsigned char *ptr,
                            unsigned char *red, unsigned char *green, unsigned char *blue,
                            int n, int numSamples, uint16 bitspersample)
 {
-    // osg::notify(osg::NOTICE)<<"Interleave row RGB"<<std::endl;
+    // OSG_NOTICE<<"Interleave row RGB"<<std::endl;
     if (bitspersample == 8)
     {
         while (n--)
@@ -363,7 +364,7 @@ static void interleave_row(unsigned char *ptr,
                            unsigned char *red, unsigned char *green, unsigned char *blue, unsigned char *alpha,
                            int n, int numSamples, uint16 bitspersample)
 {
-    // osg::notify(osg::NOTICE)<<"Interleave row RGBA"<<std::endl;
+    // OSG_NOTICE<<"Interleave row RGBA"<<std::endl;
     if (bitspersample == 8)
     {
         while (n--)
@@ -475,7 +476,7 @@ simage_tiff_load(std::istream& fin,
             photometric != PHOTOMETRIC_MINISWHITE &&
             photometric != PHOTOMETRIC_MINISBLACK)
         {
-            osg::notify(osg::NOTICE) << "Photometric type "<<photometric<<" not handled; can only handle Grayscale, RGB and Palette images" << std::endl;
+            OSG_NOTICE << "Photometric type "<<photometric<<" not handled; can only handle Grayscale, RGB and Palette images" << std::endl;
             TIFFClose(in);
             tifferror = ERR_UNSUPPORTED;
             return NULL;
@@ -495,7 +496,7 @@ simage_tiff_load(std::istream& fin,
             samplesperpixel != 3 &&
             samplesperpixel != 4)
         {
-            osg::notify(osg::DEBUG_INFO) << "Bad samples/pixel" << std::endl;
+            OSG_DEBUG << "Bad samples/pixel" << std::endl;
             tifferror = ERR_UNSUPPORTED;
             TIFFClose(in);
             return NULL;
@@ -512,7 +513,7 @@ simage_tiff_load(std::istream& fin,
     {
          if (bitspersample != 8 && bitspersample != 16 && bitspersample != 32)
         {
-            osg::notify(osg::NOTICE) << "can only handle 8, 16 and 32 bit samples" << std::endl;
+            OSG_NOTICE << "can only handle 8, 16 and 32 bit samples" << std::endl;
             TIFFClose(in);
             tifferror = ERR_UNSUPPORTED;
             return NULL;
@@ -536,7 +537,7 @@ simage_tiff_load(std::istream& fin,
 
         
     TIFFGetField(in, TIFFTAG_DATATYPE, &dataType);
-    osg::notify(osg::INFO)<<"TIFFTAG_DATATYPE="<<dataType<<std::endl;
+    OSG_INFO<<"TIFFTAG_DATATYPE="<<dataType<<std::endl;
 
 
     /*
@@ -557,9 +558,9 @@ simage_tiff_load(std::istream& fin,
     int bytespersample = bitspersample / 8;
     int bytesperpixel = bytespersample * samplesperpixel;
     
-    osg::notify(osg::INFO)<<"format="<<format<<std::endl;
-    osg::notify(osg::INFO)<<"bytespersample="<<bytespersample<<std::endl;
-    osg::notify(osg::INFO)<<"bytesperpixel="<<bytesperpixel<<std::endl;
+    OSG_INFO<<"format="<<format<<std::endl;
+    OSG_INFO<<"bytespersample="<<bytespersample<<std::endl;
+    OSG_INFO<<"bytesperpixel="<<bytesperpixel<<std::endl;
     
     buffer = new unsigned char [w*h*format];
 
@@ -725,7 +726,7 @@ class ReaderWriterTIFF : public osgDB::ReaderWriter
             {
                 char err_msg[256];
                 simage_tiff_error( err_msg, sizeof(err_msg)); 
-                osg::notify(osg::WARN) << err_msg << std::endl;
+                OSG_WARN << err_msg << std::endl;
                 return ReadResult::FILE_NOT_HANDLED;
             }
 
@@ -783,6 +784,7 @@ class ReaderWriterTIFF : public osgDB::ReaderWriter
             }
 
             switch(img.getPixelFormat()) {
+                case GL_DEPTH_COMPONENT:
                 case GL_LUMINANCE:
                 case GL_ALPHA:
                     photometric = PHOTOMETRIC_MINISBLACK;
@@ -866,7 +868,7 @@ class ReaderWriterTIFF : public osgDB::ReaderWriter
             std::string fileName = osgDB::findDataFile( file, options );
             if (fileName.empty()) return ReadResult::FILE_NOT_FOUND;
 
-            std::ifstream istream(fileName.c_str(), std::ios::in | std::ios::binary);
+            osgDB::ifstream istream(fileName.c_str(), std::ios::in | std::ios::binary);
             if(!istream) return ReadResult::FILE_NOT_HANDLED;
             ReadResult rr = readTIFStream(istream);
             if(rr.validImage()) rr.getImage()->setFileName(file);
@@ -884,7 +886,7 @@ class ReaderWriterTIFF : public osgDB::ReaderWriter
             std::string ext = osgDB::getFileExtension(fileName);
             if (!acceptsExtension(ext)) return WriteResult::FILE_NOT_HANDLED;
 
-            std::ofstream fout(fileName.c_str(), std::ios::out | std::ios::binary);
+            osgDB::ofstream fout(fileName.c_str(), std::ios::out | std::ios::binary);
             if(!fout) return WriteResult::ERROR_IN_WRITING_FILE;
 
             return writeImage(img,fout,options);

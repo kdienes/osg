@@ -32,7 +32,8 @@ void Text::write(DataOutputStream* out){
         ((ive::Drawable*)(obj))->write(out);
     }
     else
-        throw Exception("Text::write(): Could not cast this osgText::Text to an osg::Drawable.");
+        out_THROW_EXCEPTION("Text::write(): Could not cast this osgText::Text to an osg::Drawable.");
+    
     // Write Text's properties.
     if( getFont() )
     {
@@ -74,6 +75,12 @@ void Text::write(DataOutputStream* out){
     out->writeVec3(getPosition());
     out->writeVec4(getColor());
     out->writeUInt(getDrawMode());
+
+    if ( out->getVersion() >= VERSION_0041 )
+    {
+        out->writeFloat(getBoundingBoxMargin());
+        out->writeVec4(getBoundingBoxColor());
+    }
 
     if ( out->getVersion() >= VERSION_0028 )
     {
@@ -148,7 +155,7 @@ void Text::read(DataInputStream* in){
             ((ive::Drawable*)(obj))->read(in);
         }
         else
-            throw Exception("Text::read(): Could not cast this osgText::Text to an osg::Drawable.");
+            in_THROW_EXCEPTION("Text::read(): Could not cast this osgText::Text to an osg::Drawable.");
         // Read Text's properties
 
     unsigned int width, height;
@@ -188,6 +195,12 @@ void Text::read(DataInputStream* in){
     setPosition(in->readVec3());
     setColor(in->readVec4());
     setDrawMode(in->readUInt());
+
+    if ( in->getVersion() >= VERSION_0041 )
+    {
+        setBoundingBoxMargin(in->readFloat());
+        setBoundingBoxColor(in->readVec4());
+    }
 
     if ( in->getVersion() >= VERSION_0028 )
     {
@@ -241,6 +254,6 @@ void Text::read(DataInputStream* in){
 
     }
     else{
-        throw Exception("Text::read(): Expected Text identification.");
+        in_THROW_EXCEPTION("Text::read(): Expected Text identification.");
     }
 }

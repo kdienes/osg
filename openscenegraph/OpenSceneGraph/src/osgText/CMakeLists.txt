@@ -1,9 +1,9 @@
 
-IF   (DYNAMIC_OPENSCENEGRAPH)
+IF(DYNAMIC_OPENSCENEGRAPH)
     ADD_DEFINITIONS(-DOSGTEXT_LIBRARY)
-ELSE (DYNAMIC_OPENSCENEGRAPH)
+ELSE()
     ADD_DEFINITIONS(-DOSG_LIBRARY_STATIC)
-ENDIF(DYNAMIC_OPENSCENEGRAPH)
+ENDIF()
 
 SET(LIB_NAME osgText)
 SET(HEADER_PATH ${OpenSceneGraph_SOURCE_DIR}/include/${LIB_NAME})
@@ -11,12 +11,14 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/Export
     ${HEADER_PATH}/Font
     ${HEADER_PATH}/Font3D
+    ${HEADER_PATH}/FadeText
+    ${HEADER_PATH}/Glyph
     ${HEADER_PATH}/KerningType
     ${HEADER_PATH}/String
+    ${HEADER_PATH}/Style
     ${HEADER_PATH}/TextBase
     ${HEADER_PATH}/Text
     ${HEADER_PATH}/Text3D
-    ${HEADER_PATH}/FadeText
     ${HEADER_PATH}/Version
 )
 
@@ -26,19 +28,24 @@ ADD_LIBRARY(${LIB_NAME}
     ${LIB_PUBLIC_HEADERS}
     DefaultFont.cpp
     DefaultFont.h
+    GlyphGeometry.h
+    GlyphGeometry.cpp
     Font.cpp
-    Font3D.cpp
-    String.cpp
     FadeText.cpp
+    Glyph.cpp
+    String.cpp
+    Style.cpp
     TextBase.cpp
     Text.cpp
     Text3D.cpp
     Version.cpp
+    ${OPENSCENEGRAPH_VERSIONINFO_RC}
 )
 
 LINK_INTERNAL(${LIB_NAME}     
     osgDB
     osg
+    osgUtil
     OpenThreads
 )
 LINK_CORELIB_DEFAULT(${LIB_NAME})

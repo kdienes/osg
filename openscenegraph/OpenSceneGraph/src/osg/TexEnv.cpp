@@ -13,6 +13,7 @@
 #include <osg/GLExtensions>
 #include <osg/TexEnv>
 #include <osg/State>
+#include <osg/Notify>
 
 using namespace osg;
 
@@ -29,6 +30,7 @@ TexEnv::~TexEnv()
 
 void TexEnv::apply(State& state) const
 {
+#ifdef OSG_GL_FIXED_FUNCTION_AVAILABLE
     if (_mode==ADD)
     {
         static bool isTexEnvAddSupported = isGLExtensionSupported(state.getContextID(),"GL_ARB_texture_env_add");
@@ -45,4 +47,7 @@ void TexEnv::apply(State& state) const
             glTexEnvfv( GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, _color.ptr());
         }
     }
+#else
+    OSG_NOTICE<<"Warning: TexEnv::apply(State&) - not supported."<<std::endl;
+#endif
 }

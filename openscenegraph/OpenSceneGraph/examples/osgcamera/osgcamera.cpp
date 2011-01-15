@@ -16,8 +16,6 @@
 *  THE SOFTWARE.
 */
 
-#if 1
-
 #include <osgDB/ReadFile>
 #include <osgDB/WriteFile>
 #include <osgViewer/Viewer>
@@ -175,6 +173,26 @@ void multipleWindowMultipleCameras(osgViewer::Viewer& viewer, bool multipleScree
     }
 }
 
+class EnableVBOVisitor : public osg::NodeVisitor
+{
+public:
+    EnableVBOVisitor():
+        osg::NodeVisitor(osg::NodeVisitor::TRAVERSE_ALL_CHILDREN) {}
+
+    void apply(osg::Geode& geode)
+    {
+        for(unsigned int i=0; i<geode.getNumDrawables();++i)
+        {
+            osg::Geometry* geom = geode.getDrawable(i)->asGeometry();
+            if (geom)
+            {
+                osg::notify(osg::NOTICE)<<"Enabling VBO"<<std::endl;
+                geom->setUseVertexBufferObjects(true);
+            }
+        }
+    }
+};
+
 int main( int argc, char **argv )
 {
     // use an ArgumentParser object to manage the program arguments.
@@ -184,6 +202,64 @@ int main( int argc, char **argv )
     {
         std::cout << argv[0] <<": requires filename argument." << std::endl;
         return 1;
+    }
+
+    unsigned int numRepeats = 2;
+    if (arguments.read("--repeat",numRepeats) || arguments.read("-r",numRepeats) || arguments.read("--repeat") || arguments.read("-r"))
+    {
+
+        bool sharedModel = arguments.read("--shared");
+        bool enableVBO = arguments.read("--vbo");
+
+        osg::ref_ptr<osg::Node> model;
+        if (sharedModel)
+        {
+            model = osgDB::readNodeFiles(arguments);
+            if (!model) return 0;
+
+            if (enableVBO)
+            {
+                EnableVBOVisitor enableVBOs;
+                model->accept(enableVBOs);
+            }
+        }
+
+        osgViewer::Viewer::ThreadingModel threadingModel = osgViewer::Viewer::AutomaticSelection;
+        while (arguments.read("-s")) { threadingModel = osgViewer::Viewer::SingleThreaded; }
+        while (arguments.read("-g")) { threadingModel = osgViewer::Viewer::CullDrawThreadPerContext; }
+        while (arguments.read("-d")) { threadingModel = osgViewer::Viewer::DrawThreadPerContext; }
+        while (arguments.read("-c")) { threadingModel = osgViewer::Viewer::CullThreadPerCameraDrawThreadPerContext; }
+
+        for(unsigned int i=0; i<numRepeats; ++i)
+        {
+            osg::notify(osg::NOTICE)<<"+++++++++++++ New viewer ++++++++++++"<<std::endl;
+
+            {
+                osgViewer::Viewer viewer;
+
+                viewer.setThreadingModel(threadingModel);
+
+                if (sharedModel) viewer.setSceneData(model.get());
+                else
+                {
+                    osg::ref_ptr<osg::Node> node = osgDB::readNodeFiles(arguments);
+                    if (!node) return 0;
+
+                    if (enableVBO)
+                    {
+                        EnableVBOVisitor enableVBOs;
+                        node->accept(enableVBOs);
+                    }
+
+                    viewer.setSceneData(node.get());
+                }
+
+                viewer.run();
+            }
+
+            osg::notify(osg::NOTICE)<<"------------ Viewer ended ----------"<<std::endl<<std::endl;
+        }
+        return 0;
     }
 
 
@@ -277,26 +353,3 @@ int main( int argc, char **argv )
 
     return 0;
 }
-#else
-
-#include <osgViewer/Viewer>
-#include <osgDB/ReadFile>
-#include <osgDB/WriteFile>
-
-int main( int, char **)
-{
-    osg::ref_ptr<osg::Node> model = osgDB::readNodeFile("cow.osg");
-
-    for(unsigned int i=0; i<5; ++i)
-    {
-        osg::notify(osg::NOTICE)<<"New frame *******************************"<<std::endl;
-
-        osgViewer::Viewer viewer;
-        viewer.setSceneData(model.get());
-        viewer.run();
-        osg::notify(osg::NOTICE)<<std::endl<<std::endl;
-    }
-    return 0;
-}
-
-#endif

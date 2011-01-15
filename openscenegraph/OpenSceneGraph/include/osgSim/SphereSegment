@@ -194,34 +194,34 @@ public:
     @param dm   Bitmask specifying which parts of the sphere segment should be drawn.
     @see DrawMask
     */
-    void setDrawMask(DrawMask dm);
+    void setDrawMask(int dm);
 
     /** Get the DrawMask */
-    DrawMask getDrawMask() const { return _drawMask; }
+    int getDrawMask() const { return _drawMask; }
 
     /** Set the color of the surface. */
     void setSurfaceColor(const osg::Vec4& c);
 
     /** Get the color of the surface. */
-    osg::Vec4 getSurfaceColor() const { return _surfaceColor; }
+    const osg::Vec4& getSurfaceColor() const { return _surfaceColor; }
 
     /** Set the color of the spokes. */
     void setSpokeColor(const osg::Vec4& c);
 
     /** Get the color of the spokes. */
-    osg::Vec4 getSpokeColor() const { return _spokeColor; }
+    const osg::Vec4& getSpokeColor() const { return _spokeColor; }
 
     /** Set the color of the edge line. */
     void setEdgeLineColor(const osg::Vec4& c);
 
     /** Get the color of the edge line. */
-    osg::Vec4 getEdgeLineColor() const { return _edgeLineColor; }
+    const osg::Vec4& getEdgeLineColor() const { return _edgeLineColor; }
 
     /** Set the color of the planes. */
     void setSideColor(const osg::Vec4& c);
 
     /** Get the color of the planes. */
-    osg::Vec4 getSideColor() const { return _planeColor; }
+    const osg::Vec4& getSideColor() const { return _planeColor; }
 
     /** Set color of all components. */
     void setAllColors(const osg::Vec4& c);
@@ -305,11 +305,11 @@ private:
     int _density;
 
     // Draw details
-    DrawMask _drawMask;
-    osg::Vec4 _surfaceColor;
-    osg::Vec4 _spokeColor;
-    osg::Vec4 _edgeLineColor;
-    osg::Vec4 _planeColor;
+    int         _drawMask;
+    osg::Vec4   _surfaceColor;
+    osg::Vec4   _spokeColor;
+    osg::Vec4   _edgeLineColor;
+    osg::Vec4   _planeColor;
 };
 
 }

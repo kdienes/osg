@@ -14,6 +14,7 @@
 #include <osgShadow/ShadowTechnique>
 #include <osgShadow/ShadowedScene>
 #include <osg/Notify>
+#include <osg/io_utils>
 
 using namespace osgShadow;
 
@@ -49,26 +50,26 @@ ShadowTechnique::~ShadowTechnique()
 
 void ShadowTechnique::init()
 {
-    osg::notify(osg::NOTICE)<<className()<<"::init() not implemened yet"<<std::endl;
+    OSG_NOTICE<<className()<<"::init() not implemened yet"<<std::endl;
     
     _dirty = false;
 }
 
 void ShadowTechnique::update(osg::NodeVisitor& nv)
 {
-    osg::notify(osg::NOTICE)<<className()<<"::update(osg::NodeVisitor&) not implemened yet."<<std::endl;
+    OSG_NOTICE<<className()<<"::update(osg::NodeVisitor&) not implemened yet."<<std::endl;
      _shadowedScene->osg::Group::traverse(nv);
 }
 
 void ShadowTechnique::cull(osgUtil::CullVisitor& cv)
 {
-    osg::notify(osg::NOTICE)<<className()<<"::cull(osgUtl::CullVisitor&) not implemened yet."<<std::endl;
+    OSG_NOTICE<<className()<<"::cull(osgUtl::CullVisitor&) not implemened yet."<<std::endl;
     _shadowedScene->osg::Group::traverse(cv);
 }
 
 void ShadowTechnique::cleanSceneGraph()
 {
-    osg::notify(osg::NOTICE)<<className()<<"::cleanSceneGraph()) not implemened yet."<<std::endl;
+    OSG_NOTICE<<className()<<"::cleanSceneGraph()) not implemened yet."<<std::endl;
 }
 
 void ShadowTechnique::traverse(osg::NodeVisitor& nv)
@@ -91,4 +92,16 @@ void ShadowTechnique::traverse(osg::NodeVisitor& nv)
     {
         _shadowedScene->osg::Group::traverse(nv);
     }
+}
+
+osg::Vec3 ShadowTechnique::computeOrthogonalVector(const osg::Vec3& direction) const
+{
+    float length = direction.length();
+    osg::Vec3 orthogonalVector = direction ^ osg::Vec3(0.0f, 1.0f, 0.0f);
+    if (orthogonalVector.normalize()<length*0.5f)
+    {
+        orthogonalVector = direction ^ osg::Vec3(0.0f, 0.0f, 1.0f);
+        orthogonalVector.normalize();
+    }
+    return orthogonalVector;
 }

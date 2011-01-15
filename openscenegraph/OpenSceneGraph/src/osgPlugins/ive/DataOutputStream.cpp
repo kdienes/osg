@@ -36,6 +36,7 @@
 #include "LineStipple.h"
 #include "Texture1D.h"
 #include "Texture2D.h"
+#include "Texture2DArray.h"
 #include "Texture3D.h"
 #include "TextureCubeMap.h"
 #include "TextureRectangle.h"
@@ -59,6 +60,7 @@
 #include "Multisample.h"
 #include "Fog.h"
 #include "Light.h"
+#include "PolygonStipple.h"
 
 #include "Group.h"
 #include "MatrixTransform.h"
@@ -102,6 +104,7 @@
 
 #include "Text.h"
 
+#include "Terrain.h"
 #include "TerrainTile.h"
 #include "Locator.h"
 #include "ImageLayer.h"
@@ -109,10 +112,22 @@
 #include "CompositeLayer.h"
 #include "SwitchLayer.h"
 
+#include "Volume.h"
+#include "VolumeTile.h"
+#include "VolumeImageLayer.h"
+#include "VolumeCompositeLayer.h"
+#include "VolumeLocator.h"
+#include "VolumeCompositeProperty.h"
+#include "VolumeSwitchProperty.h"
+#include "VolumeScalarProperty.h"
+#include "VolumeTransferFunctionProperty.h"
+
 #include <osg/Notify>
 #include <osg/io_utils>
 #include <osgDB/FileUtils>
+#include <osgDB/FileNameUtils>
 #include <osgDB/fstream>
+#include <osgDB/WriteFile>
 
 #include <stdlib.h>
 #include <sstream>
@@ -131,9 +146,22 @@ DataOutputStream::DataOutputStream(std::ostream * ostream, const osgDB::ReaderWr
     _useOriginalExternalReferences = true;
     _maximumErrorToSizeRatio       = 0.001;
 
+    _outputTextureFiles = false;
+    _textureFileNameNumber = 0;
+
     _options = options;
 
     _compressionLevel = 0;
+
+    if (options) _filename = options->getPluginStringData("filename");
+
+    if (_filename.empty())
+    {
+        // initialize _filename to a unique identifier in case a real filename is not supplied
+        std::ostringstream filenameBuilder;
+        filenameBuilder << "file" << ostream; // use address of ostream to formulate unique filename
+        _filename = filenameBuilder.str();
+    }
 
     if (_options.get())
     {
@@ -146,19 +174,22 @@ DataOutputStream::DataOutputStream(std::ostream * ostream, const osgDB::ReaderWr
         } else if(optionsString.find("compressImageData")!=std::string::npos) {
             setIncludeImageMode(IMAGE_COMPRESS_DATA);
         }
-        osg::notify(osg::DEBUG_INFO) << "ive::DataOutpouStream.setIncludeImageMode()=" << getIncludeImageMode() << std::endl;
+        OSG_DEBUG << "ive::DataOutputStream.setIncludeImageMode()=" << getIncludeImageMode() << std::endl;
 
         setIncludeExternalReferences(optionsString.find("inlineExternalReferencesInIVEFile")!=std::string::npos);
-        osg::notify(osg::DEBUG_INFO) << "ive::DataOutpouStream.setIncludeExternalReferences()=" << getIncludeExternalReferences() << std::endl;
+        OSG_DEBUG << "ive::DataOutputStream.setIncludeExternalReferences()=" << getIncludeExternalReferences() << std::endl;
 
         setWriteExternalReferenceFiles(optionsString.find("noWriteExternalReferenceFiles")==std::string::npos);
-        osg::notify(osg::DEBUG_INFO) << "ive::DataOutpouStream.setWriteExternalReferenceFiles()=" << getWriteExternalReferenceFiles() << std::endl;
+        OSG_DEBUG << "ive::DataOutputStream.setWriteExternalReferenceFiles()=" << getWriteExternalReferenceFiles() << std::endl;
 
         setUseOriginalExternalReferences(optionsString.find("useOriginalExternalReferences")!=std::string::npos);
-        osg::notify(osg::DEBUG_INFO) << "ive::DataOutpouStream.setUseOriginalExternalReferences()=" << getUseOriginalExternalReferences() << std::endl;
+        OSG_DEBUG << "ive::DataOutputStream.setUseOriginalExternalReferences()=" << getUseOriginalExternalReferences() << std::endl;
+
+        setOutputTextureFiles(optionsString.find("OutputTextureFiles")!=std::string::npos);
+        OSG_DEBUG << "ive::DataOutputStream.setOutputTextureFiles()=" << getOutputTextureFiles() << std::endl;
 
         _compressionLevel =  (optionsString.find("compressed")!=std::string::npos) ? 1 : 0;
-        osg::notify(osg::DEBUG_INFO) << "ive::DataOutpouStream._compressionLevel=" << _compressionLevel << std::endl;
+        OSG_DEBUG << "ive::DataOutputStream._compressionLevel=" << _compressionLevel << std::endl;
 
         std::string::size_type terrainErrorPos = optionsString.find("TerrainMaximumErrorToSizeRatio=");
         if (terrainErrorPos!=std::string::npos)
@@ -174,11 +205,11 @@ DataOutputStream::DataOutputStream(std::ostream * ostream, const osgDB::ReaderWr
                 std::string numberString = optionsString.substr(endOfToken+1, numOfCharInNumber);
                 _maximumErrorToSizeRatio = osg::asciiToDouble(numberString.c_str());
                 
-                osg::notify(osg::DEBUG_INFO)<<"TerrainMaximumErrorToSizeRatio = "<<_maximumErrorToSizeRatio<<std::endl;
+                OSG_DEBUG<<"TerrainMaximumErrorToSizeRatio = "<<_maximumErrorToSizeRatio<<std::endl;
             }
             else
             {
-                osg::notify(osg::DEBUG_INFO)<<"Error no value to TerrainMaximumErrorToSizeRatio assigned"<<std::endl;
+                OSG_DEBUG<<"Error no value to TerrainMaximumErrorToSizeRatio assigned"<<std::endl;
             }
         }
     }
@@ -186,7 +217,7 @@ DataOutputStream::DataOutputStream(std::ostream * ostream, const osgDB::ReaderWr
     #ifndef USE_ZLIB
     if (_compressionLevel>0)
     {
-        osg::notify(osg::NOTICE) << "Compression not supported in this .ive version." << std::endl;
+        OSG_NOTICE << "Compression not supported in this .ive version." << std::endl;
         _compressionLevel = 0;
     }
     #endif
@@ -194,7 +225,10 @@ DataOutputStream::DataOutputStream(std::ostream * ostream, const osgDB::ReaderWr
     _output_ostream = _ostream = ostream;
 
     if(!_ostream)
-        throw Exception("DataOutputStream::DataOutputStream(): null pointer exception in argument.");
+    {
+        throwException("DataOutputStream::DataOutputStream(): null pointer exception in argument.");
+        return;
+    }
 
     writeUInt(ENDIAN_TYPE) ;
     writeUInt(getVersion());
@@ -264,7 +298,7 @@ bool DataOutputStream::compress(std::ostream& fout, const std::string& source) c
 
         if (ret == Z_STREAM_ERROR)
         {
-            osg::notify(osg::NOTICE)<<"Z_STREAM_ERROR"<<std::endl;
+            OSG_NOTICE<<"Z_STREAM_ERROR"<<std::endl;
             return false;
         }
 
@@ -478,7 +512,7 @@ void DataOutputStream::writeBinding(osg::Geometry::AttributeBinding b){
         case osg::Geometry::BIND_PER_PRIMITIVE:        writeChar((char) 2); break;
         case osg::Geometry::BIND_PER_PRIMITIVE_SET:    writeChar((char) 3); break;
         case osg::Geometry::BIND_PER_VERTEX:        writeChar((char) 4); break;
-        default: throw Exception("Unknown binding in DataOutputStream::writeBinding()");
+        default: throwException("Unknown binding in DataOutputStream::writeBinding()");
     }
 
     if (_verboseOutput) std::cout<<"read/writeBinding() ["<<b<<"]"<<std::endl;
@@ -558,7 +592,7 @@ void DataOutputStream::writeArray(const osg::Array* a){
              writeChar((char)17);
              writeVec4dArray(static_cast<const osg::Vec4dArray*>(a));
              break;
-        default: throw Exception("Unknown array type in DataOutputStream::writeArray()");
+        default: throwException("Unknown array type in DataOutputStream::writeArray()");
     }
 }
 
@@ -634,7 +668,7 @@ void DataOutputStream::writePackedFloatArray(const osg::FloatArray* a, float max
     
     if (minValue==maxValue)
     {
-        osg::notify(osg::DEBUG_INFO)<<"Writing out "<<size<<" same values "<<minValue<<std::endl;
+        OSG_DEBUG<<"Writing out "<<size<<" same values "<<minValue<<std::endl;
 
         writeBool(true);
         writeFloat(minValue);
@@ -673,14 +707,14 @@ void DataOutputStream::writePackedFloatArray(const osg::FloatArray* a, float max
             if (error_short>max_error_short) max_error_short = error_short;
         }
 
-        osg::notify(osg::DEBUG_INFO)<<"maxError "<<maxError<<std::endl;
-        osg::notify(osg::DEBUG_INFO)<<"Values to write "<<size<<" max_error_byte = "<<max_error_byte<<" max_error_short="<<max_error_short<<std::endl;
+        OSG_DEBUG<<"maxError "<<maxError<<std::endl;
+        OSG_DEBUG<<"Values to write "<<size<<" max_error_byte = "<<max_error_byte<<" max_error_short="<<max_error_short<<std::endl;
 
 
         if (max_error_byte < maxError) packingSize = 1;
         else if (max_error_short < maxError) packingSize = 2;
 
-        osg::notify(osg::DEBUG_INFO)<<"packingSize "<<packingSize<<std::endl;
+        OSG_DEBUG<<"packingSize "<<packingSize<<std::endl;
 
     }
 
@@ -1029,6 +1063,10 @@ void DataOutputStream::writeStateAttribute(const osg::StateAttribute* attribute)
         else if(dynamic_cast<const osg::Texture3D*>(attribute)){
             ((ive::Texture3D*)(attribute))->write(this);
         }
+        // This is a Texture2DArray
+        else if(dynamic_cast<const osg::Texture2DArray*>(attribute)){
+            ((ive::Texture2DArray*)(attribute))->write(this);
+        }
         // This is a TextureCubeMap
         else if(dynamic_cast<const osg::TextureCubeMap*>(attribute)){
             ((ive::TextureCubeMap*)(attribute))->write(this);
@@ -1089,10 +1127,14 @@ void DataOutputStream::writeStateAttribute(const osg::StateAttribute* attribute)
         else if(dynamic_cast<const osg::Light*>(attribute)){
             ((ive::Light*)(attribute))->write(this);
         }
+        // This is a PolygonStipple
+        else if(dynamic_cast<const osg::PolygonStipple*>(attribute)){
+            ((ive::PolygonStipple*)(attribute))->write(this);
+        }
 
         else{
             std::string className = attribute->className();
-            throw Exception(std::string("StateSet::write(): Unknown StateAttribute: ").append(className));
+            throwException(std::string("StateSet::write(): Unknown StateAttribute: ").append(className));
         }
         if (_verboseOutput) std::cout<<"read/writeStateAttribute() ["<<id<<"]"<<std::endl;
     }
@@ -1185,7 +1227,7 @@ void DataOutputStream::writeDrawable(const osg::Drawable* drawable)
             ((ive::Text*)(drawable))->write(this);
         else
         {
-            throw Exception("Unknown drawable in DataOutputStream::writeDrawable()");
+            throwException("Unknown drawable in DataOutputStream::writeDrawable()");
         }
         if (_verboseOutput) std::cout<<"read/writeDrawable() ["<<id<<"]"<<std::endl;
     }
@@ -1226,7 +1268,7 @@ void DataOutputStream::writeShape(const osg::Shape* shape)
             ((ive::HeightField*)(shape))->write(this);
         else
         {
-            throw Exception("Unknown shape in DataOutputStream::writeShape()");
+            throwException("Unknown shape in DataOutputStream::writeShape()");
         }
         if (_verboseOutput) std::cout<<"read/writeShape() ["<<id<<"]"<<std::endl;
     }
@@ -1297,9 +1339,6 @@ void DataOutputStream::writeNode(const osg::Node* node)
         else if(dynamic_cast<const osg::Switch*>(node)){
             ((ive::Switch*)(node))->write(this);
         }
-        else if(dynamic_cast<const osg::CoordinateSystemNode*>(node)){
-            ((ive::CoordinateSystemNode*)(node))->write(this);
-        }
         else if(dynamic_cast<const osgSim::MultiSwitch*>(node)){
             ((ive::MultiSwitch*)(node))->write(this);
         }
@@ -1342,9 +1381,25 @@ void DataOutputStream::writeNode(const osg::Node* node)
         else if(dynamic_cast<const osgTerrain::TerrainTile*>(node)){
             ((ive::TerrainTile*)(node))->write(this);
         }
+        else if(dynamic_cast<const osgTerrain::Terrain*>(node)){
+            ((ive::Terrain*)(node))->write(this);
+        }
+        else if(dynamic_cast<const osgVolume::Volume*>(node)){
+            ((ive::Volume*)(node))->write(this);
+        }
+
+        else if(dynamic_cast<const osg::CoordinateSystemNode*>(node)){
+            ((ive::CoordinateSystemNode*)(node))->write(this);
+        }
+
+        else if(dynamic_cast<const osgVolume::VolumeTile*>(node)){
+            ((ive::VolumeTile*)(node))->write(this);
+        }
+
         else if(dynamic_cast<const osg::Group*>(node)){
             ((ive::Group*)(node))->write(this);
         }
+
         else if(dynamic_cast<const osg::Billboard*>(node)){
             ((ive::Billboard*)(node))->write(this);
         }
@@ -1355,7 +1410,7 @@ void DataOutputStream::writeNode(const osg::Node* node)
             ((ive::LightPointNode*)(node))->write(this);
         }
         else
-            throw Exception("Unknown node in Group::write()");
+            throwException("Unknown node in Group::write()");
 
         if (_verboseOutput) std::cout<<"read/writeNode() ["<<id<<"]"<<std::endl;
     }
@@ -1413,14 +1468,28 @@ void DataOutputStream::writeImage(IncludeImageMode mode, osg::Image *image)
                 ((ive::Image*)image)->write(this);
             break;
         case IMAGE_REFERENCE_FILE:
-            // Only include image name in stream
-            if (image && !(image->getFileName().empty())){
-                writeString(image->getFileName());
+        {
+            if (image)
+            {
+                // Only include image name in stream
+                std::string fileName = image->getFileName();
+                // Export an image, if requested
+                if (getOutputTextureFiles())
+                {
+                    if (fileName.empty())
+                    { // synthesize a new faux filename
+                        fileName = getTextureFileNameForOutput();
+                    }
+                    osgDB::writeImageFile(*image, fileName);
+                }
+                writeString(fileName);
             }
-            else{
+            else
+            {
                 writeString("");
             }
             break;
+        }
         case IMAGE_INCLUDE_FILE:
             // Include image file in stream
             if(image && !(image->getFileName().empty())) {
@@ -1505,7 +1574,7 @@ void DataOutputStream::writeImage(IncludeImageMode mode, osg::Image *image)
             writeInt(0);
             break;
         default:
-            throw Exception("DataOutputStream::writeImage(): Invalid IncludeImageMode value.");
+            throwException("DataOutputStream::writeImage(): Invalid IncludeImageMode value.");
             break;
     }
 }
@@ -1568,7 +1637,7 @@ void DataOutputStream::writeLayer(const osgTerrain::Layer* layer)
         }
         else
         {
-            throw Exception("Unknown layer in DataOutputStream::writeLayer()");
+            throwException("Unknown layer in DataOutputStream::writeLayer()");
         }
         if (_verboseOutput) std::cout<<"read/writeLayer() ["<<id<<"]"<<std::endl;
     }
@@ -1606,6 +1675,163 @@ void DataOutputStream::writeLocator(const osgTerrain::Locator* locator)
         ((ive::Locator*)(locator))->write(this);
 
         if (_verboseOutput) std::cout<<"read/writeLocator() ["<<id<<"]"<<std::endl;
+
+    }
+}
+
+void DataOutputStream::writeVolumeLayer(const osgVolume::Layer* layer)
+{
+    if (layer==0)
+    {
+        writeInt(-1);
+        return;
+    }
+
+    VolumeLayerMap::iterator itr = _volumeLayerMap.find(layer);
+    if (itr!=_volumeLayerMap.end())
+    {
+        // Id already exists so just write ID.
+        writeInt(itr->second);
+
+        if (_verboseOutput) std::cout<<"read/writeLayer() ["<<itr->second<<"]"<<std::endl;
+    }
+    else
+    {
+        // id doesn't exist so create a new ID and
+        // register the stateset.
+
+        int id = _volumeLayerMap.size();
+        _volumeLayerMap[layer] = id;
+
+        // write the id.
+        writeInt(id);
+
+        if (dynamic_cast<const osgVolume::ImageLayer*>(layer))
+        {
+            ((ive::VolumeImageLayer*)(layer))->write(this);
+        }
+        else if (dynamic_cast<const osgVolume::CompositeLayer*>(layer))
+        {
+            ((ive::VolumeCompositeLayer*)(layer))->write(this);
+        }
+        else
+        {
+            throwException("Unknown layer in DataOutputStream::writeLayer()");
+        }
+        if (_verboseOutput) std::cout<<"read/writeLayer() ["<<id<<"]"<<std::endl;
+    }
+}
+
+
+void DataOutputStream::writeVolumeLocator(const osgVolume::Locator* locator)
+{
+    if (locator==0)
+    {
+        writeInt(-1);
+        return;
+    }
+
+    VolumeLocatorMap::iterator itr = _volumeLocatorMap.find(locator);
+    if (itr!=_volumeLocatorMap.end())
+    {
+        // Id already exists so just write ID.
+        writeInt(itr->second);
+
+        if (_verboseOutput) std::cout<<"read/writeVolumeLocator() ["<<itr->second<<"]"<<std::endl;
+    }
+    else
+    {
+        // id doesn't exist so create a new ID and
+        // register the locator.
+
+        int id = _volumeLocatorMap.size();
+        _volumeLocatorMap[locator] = id;
+
+        // write the id.
+        writeInt(id);
+
+        // write the locator.
+        ((ive::VolumeLocator*)(locator))->write(this);
+
+        if (_verboseOutput) std::cout<<"read/writeVolumeLocator() ["<<id<<"]"<<std::endl;
+
+    }
+}
+
+void DataOutputStream::writeVolumeProperty(const osgVolume::Property* property)
+{
+    if (property==0)
+    {
+        writeInt(-1);
+        return;
+    }
+
+    VolumePropertyMap::iterator itr = _volumePropertyMap.find(property);
+    if (itr!=_volumePropertyMap.end())
+    {
+        // Id already exists so just write ID.
+        writeInt(itr->second);
+
+        if (_verboseOutput) std::cout<<"read/writeVolumeLocator() ["<<itr->second<<"]"<<std::endl;
+    }
+    else
+    {
+        // id doesn't exist so create a new ID and
+        // register the locator.
+
+        int id = _volumePropertyMap.size();
+        _volumePropertyMap[property] = id;
+
+        // write the id.
+        writeInt(id);
+
+        // write the propery
+         if (dynamic_cast<const osgVolume::SwitchProperty*>(property))
+        {
+            ((ive::VolumeSwitchProperty*)(property))->write(this);
+        }
+        else if (dynamic_cast<const osgVolume::CompositeProperty*>(property))
+        {
+            ((ive::VolumeCompositeProperty*)(property))->write(this);
+        }
+        else if (dynamic_cast<const osgVolume::TransferFunctionProperty*>(property))
+        {
+            ((ive::VolumeTransferFunctionProperty*)(property))->write(this);
+        }
+        else if (dynamic_cast<const osgVolume::MaximumIntensityProjectionProperty*>(property))
+        {
+            writeInt(IVEVOLUMEMAXIMUMINTENSITYPROPERTY);
+        }
+        else if (dynamic_cast<const osgVolume::LightingProperty*>(property))
+        {
+            writeInt(IVEVOLUMELIGHTINGPROPERTY);
+        }
+        else if (dynamic_cast<const osgVolume::IsoSurfaceProperty*>(property))
+        {
+            writeInt(IVEVOLUMEISOSURFACEPROPERTY);
+            ((ive::VolumeScalarProperty*)(property))->write(this);
+        }
+        else if (dynamic_cast<const osgVolume::AlphaFuncProperty*>(property))
+        {
+            writeInt(IVEVOLUMEALPHAFUNCPROPERTY);
+            ((ive::VolumeScalarProperty*)(property))->write(this);
+        }
+        else if (dynamic_cast<const osgVolume::SampleDensityProperty*>(property))
+        {
+            writeInt(IVEVOLUMESAMPLEDENSITYPROPERTY);
+            ((ive::VolumeScalarProperty*)(property))->write(this);
+        }
+        else if (dynamic_cast<const osgVolume::TransparencyProperty*>(property))
+        {
+            writeInt(IVEVOLUMETRANSPARENCYPROPERTY);
+            ((ive::VolumeScalarProperty*)(property))->write(this);
+        }
+        else
+        {
+            throwException("Unknown layer in DataOutputStream::writVolumeProperty()");
+        }
+
+        if (_verboseOutput) std::cout<<"read/writeVolumeProperty() ["<<id<<"]"<<std::endl;
 
     }
 }
@@ -1654,4 +1880,34 @@ void DataOutputStream::writeObject(const osg::Object* object)
 
     // fallback, osg::Object type not supported, so can't write out
     writeInt(-1);
+}
+
+std::string DataOutputStream::getTextureFileNameForOutput()
+{
+    std::string fileName = osgDB::getNameLessExtension(_filename);
+    if (_textureFileNameNumber>0)
+    {
+        std::ostringstream o;
+        o << '_' << _textureFileNameNumber;
+        fileName += o.str();
+    }
+    
+    fileName += ".dds";
+    ++_textureFileNameNumber;
+    
+    return fileName;
+}
+
+
+
+void DataOutputStream::setExternalFileWritten(const std::string& filename, bool hasBeenWritten)
+{
+    _externalFileWritten[filename] = hasBeenWritten;
+}
+
+bool DataOutputStream::getExternalFileWritten(const std::string& filename) const
+{
+    ExternalFileWrittenMap::const_iterator itr = _externalFileWritten.find(filename);
+    if (itr != _externalFileWritten.end()) return itr->second;
+    return false;
 }

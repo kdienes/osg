@@ -91,7 +91,7 @@ void Tessellator::endTessellation()
         if (_errorCode!=0)
         {
            const GLubyte *estring = gluErrorString((GLenum)_errorCode);
-           osg::notify(osg::WARN)<<"Tessellation Error: "<<estring<< std::endl;
+           OSG_WARN<<"Tessellation Error: "<<estring<< std::endl;
         }
     }
 }
@@ -425,7 +425,7 @@ void Tessellator::addContour(osg::PrimitiveSet* primitive, osg::Vec3Array* verti
             break;
         }
     default:
-        osg::notify(osg::NOTICE)<<"Tessellator::addContour(primitive, vertices) : Primitive type "<<primitive->getType()<<" not handled"<<std::endl;
+        OSG_NOTICE<<"Tessellator::addContour(primitive, vertices) : Primitive type "<<primitive->getType()<<" not handled"<<std::endl;
         break;
     }
     
@@ -505,8 +505,8 @@ void Tessellator::handleNewVertices(osg::Geometry& geom,VertexPtrToIndexMap &ver
                 
                 // assign the rest of the attributes.
                 for(ArrayList::iterator aItr=arrays.begin();
-                aItr!=arrays.end();
-                ++aItr)
+                    aItr!=arrays.end();
+                    ++aItr)
                 {
                     (*aItr)->accept(inv);
                 }
@@ -769,7 +769,7 @@ void Tessellator::collectTessellation(osg::Geometry &geom, unsigned int original
                           }
                       }
                   }
-                  //        osg::notify(osg::WARN)<<"Add: "<< iprim << std::endl; 
+                  //        OSG_WARN<<"Add: "<< iprim << std::endl; 
               }
               iprim++; // GWM Sep 2002 count which normal we should use
         }

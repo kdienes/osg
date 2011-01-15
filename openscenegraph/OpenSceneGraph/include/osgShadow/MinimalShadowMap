@@ -43,16 +43,16 @@ class OSGSHADOW_EXPORT MinimalShadowMap : public StandardShadowMap
         void setModellingSpaceToWorldTransform( const osg::Matrix & modellingSpaceToWorld )
             { _modellingSpaceToWorld = modellingSpaceToWorld; }
 
-        const osg::Matrix & getModellingSpaceToWorldTransform( void )
+        const osg::Matrix & getModellingSpaceToWorldTransform( void ) const
             { return _modellingSpaceToWorld; }
 
-        float getMaxFarPlane( )
+        float getMaxFarPlane( ) const
             { return _maxFarPlane; }
 
         void setMaxFarPlane( float maxFarPlane )
             { _maxFarPlane = maxFarPlane; }
 
-        float getMinLightMargin( )
+        float getMinLightMargin( ) const
             { return _minLightMargin; }
 
         void setMinLightMargin( float minLightMargin )
@@ -70,7 +70,7 @@ class OSGSHADOW_EXPORT MinimalShadowMap : public StandardShadowMap
                     { _shadowReceivingCoarseBoundAccuracy = accuracy; }
 
         ShadowReceivingCoarseBoundAccuracy 
-                getShadowReceivingCoarseBoundAccuracy()            
+                getShadowReceivingCoarseBoundAccuracy() const
                     { return _shadowReceivingCoarseBoundAccuracy; }
 
     protected:
@@ -95,13 +95,14 @@ class OSGSHADOW_EXPORT MinimalShadowMap : public StandardShadowMap
         osg::Matrix                        _modellingSpaceToWorld;
         float                              _maxFarPlane;
         float                              _minLightMargin; 
-        ShadowReceivingCoarseBoundAccuracy _shadowReceivingCoarseBoundAccuracy;
+        ShadowReceivingCoarseBoundAccuracy _shadowReceivingCoarseBoundAccuracy;        
 
         struct OSGSHADOW_EXPORT ViewData: public BaseClass::ViewData
         {
             osg::Matrix                      *_modellingSpaceToWorldPtr;
             float                            *_maxFarPlanePtr;
             float                            *_minLightMarginPtr;
+            int                               _frameShadowCastingCameraPasses;
 
             ConvexPolyhedron                 _sceneReceivingShadowPolytope;
             std::vector< osg::Vec3d >        _sceneReceivingShadowPolytopePoints;
@@ -113,6 +114,13 @@ class OSGSHADOW_EXPORT MinimalShadowMap : public StandardShadowMap
             virtual osg::BoundingBox computeShadowReceivingCoarseBounds( );
 
             virtual void cullShadowReceivingScene( );
+
+            virtual void aimShadowCastingCamera( 
+                const osg::BoundingSphere &bounds,
+                const osg::Light *light,
+                const osg::Vec4 &worldLightPos,
+                const osg::Vec3 &worldLightDir,
+                const osg::Vec3 &worldLightUp = osg::Vec3(0,1,0) );
 
             virtual void aimShadowCastingCamera( const osg::Light *light,
                 const osg::Vec4 &worldLightPos,

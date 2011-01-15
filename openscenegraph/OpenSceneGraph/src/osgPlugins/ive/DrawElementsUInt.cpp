@@ -29,12 +29,12 @@ void DrawElementsUInt::write(DataOutputStream* out){
         ((ive::PrimitiveSet*)(prim))->write(out);
     }
     else
-        throw Exception("DrawElementsUInt::write(): Could not cast this osg::DrawElementsUInt to an osg::PrimitiveSet.");
+        out_THROW_EXCEPTION("DrawElementsUInt::write(): Could not cast this osg::DrawElementsUInt to an osg::PrimitiveSet.");
     // Write DrawElementsUInt's properties.
 
     // Write array length and its elements.
     out->writeInt(size());
-    out->writeCharArray((const char*)&front(), size() * INTSIZE);
+    if (size()!=0) out->writeCharArray((const char*)&front(), size() * INTSIZE);
 }
 
 void DrawElementsUInt::read(DataInputStream* in)
@@ -50,12 +50,12 @@ void DrawElementsUInt::read(DataInputStream* in)
             ((ive::PrimitiveSet*)(prim))->read(in);
         }
         else
-            throw Exception("DrawElementsUInt::read(): Could not cast this osg::DrawElementsUInt to an osg::PrimitiveSet.");
+            in_THROW_EXCEPTION("DrawElementsUInt::read(): Could not cast this osg::DrawElementsUInt to an osg::PrimitiveSet.");
 
         // Read array length and its elements.
         int size = in->readInt();
         resize(size);
-        in->readCharArray((char*)&front(), size * INTSIZE);
+        if (size!=0) in->readCharArray((char*)&front(), size * INTSIZE);
 
         if (in->_byteswap)
         {
@@ -66,6 +66,6 @@ void DrawElementsUInt::read(DataInputStream* in)
         }        
     }
     else{
-        throw Exception("DrawElementsUInt::read(): Expected DrawElementsUInt identification.");
+        in_THROW_EXCEPTION("DrawElementsUInt::read(): Expected DrawElementsUInt identification.");
     }
 }

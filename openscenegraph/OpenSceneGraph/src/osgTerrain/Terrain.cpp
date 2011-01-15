@@ -12,7 +12,9 @@
 */
 
 #include <osgTerrain/Terrain>
-#include <osgTerrain/GeometryTechnique>
+#include <osgUtil/UpdateVisitor>
+
+#include <iterator>
 
 #include <OpenThreads/ScopedLock>
 
@@ -21,17 +23,22 @@ using namespace osgTerrain;
 
 Terrain::Terrain():
     _sampleRatio(1.0),
-    _verticalScale(1.0)
+    _verticalScale(1.0),
+    _blendingPolicy(TerrainTile::INHERIT),
+    _equalizeBoundaries(false)
 {
-    _terrainTechnique = new GeometryTechnique;
+    setNumChildrenRequiringUpdateTraversal(1);
 }
 
 Terrain::Terrain(const Terrain& ts, const osg::CopyOp& copyop):
-    osg::Group(ts,copyop),
+    osg::CoordinateSystemNode(ts,copyop),
     _sampleRatio(ts._sampleRatio),
     _verticalScale(ts._verticalScale),
+    _blendingPolicy(ts._blendingPolicy),
+    _equalizeBoundaries(ts._equalizeBoundaries),
     _terrainTechnique(ts._terrainTechnique)
 {
+    setNumChildrenRequiringUpdateTraversal(getNumChildrenRequiringUpdateTraversal()+1);
 }
 
 
@@ -45,19 +52,80 @@ Terrain::~Terrain()
     {
         const_cast<TerrainTile*>(*itr)->_terrain = 0;
     }
-    
+
     _terrainTileSet.clear();
     _terrainTileMap.clear();
 }
 
+void Terrain::setSampleRatio(float ratio)
+{
+    if (_sampleRatio == ratio) return;
+    _sampleRatio  = ratio;
+    dirtyRegisteredTiles();
+}
+
+void Terrain::setVerticalScale(float scale)
+{
+    if (_verticalScale == scale) return;
+    _verticalScale = scale;
+    dirtyRegisteredTiles();
+}
+
+void Terrain::setEqualizeBoundaries(bool equalizeBoundaries)
+{
+  if(_equalizeBoundaries == equalizeBoundaries) return;
+  _equalizeBoundaries = equalizeBoundaries;
+  dirtyRegisteredTiles();
+}
+
+void Terrain::setBlendingPolicy(TerrainTile::BlendingPolicy policy)
+{
+    if (_blendingPolicy == policy) return;
+    _blendingPolicy = policy;
+    dirtyRegisteredTiles();
+}
+
 void Terrain::traverse(osg::NodeVisitor& nv)
 {
+    if (nv.getVisitorType()==osg::NodeVisitor::UPDATE_VISITOR)
+    {
+        // need to check if any TerrainTechniques need to have their update called on them.
+        osgUtil::UpdateVisitor* uv = dynamic_cast<osgUtil::UpdateVisitor*>(&nv);
+        if (uv)
+        {
+            typedef std::list< osg::ref_ptr<TerrainTile> >  TerrainTileList;
+            TerrainTileList tiles;
+            {
+                OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+                std::copy(_updateTerrainTileSet.begin(), _updateTerrainTileSet.end(), std::back_inserter(tiles));
+                _updateTerrainTileSet.clear();
+            }
+
+            for(TerrainTileList::iterator itr = tiles.begin();
+                itr != tiles.end();
+                ++itr)
+            {
+                TerrainTile* tile = itr->get();
+                tile->traverse(nv);
+            }
+        }
+    }
+
     Group::traverse(nv);
 }
+
+void Terrain::updateTerrainTileOnNextFrame(TerrainTile* terrainTile)
+{
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+    _updateTerrainTileSet.insert(terrainTile);
+}
+
 
 TerrainTile* Terrain::getTile(const TileID& tileID)
 {
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+
+    // OSG_NOTICE<<"Terrain::getTile("<<tileID.level<<", "<<tileID.x<<", "<<tileID.y<<")"<<std::endl;
 
     TerrainTileMap::iterator itr = _terrainTileMap.find(tileID);
     if (itr == _terrainTileMap.end()) return 0;
@@ -75,7 +143,7 @@ const TerrainTile* Terrain::getTile(const TileID& tileID) const
     return itr->second;
 }
 
-void Terrain::dirtyRegisteredTiles()
+void Terrain::dirtyRegisteredTiles(int dirtyMask)
 {
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
 
@@ -83,7 +151,7 @@ void Terrain::dirtyRegisteredTiles()
         itr != _terrainTileSet.end();
         ++itr)
     {
-        (const_cast<TerrainTile*>(*itr))->setDirty(true);
+        (const_cast<TerrainTile*>(*itr))->setDirtyMask(dirtyMask);
     }
 }
 
@@ -93,17 +161,18 @@ void Terrain::registerTerrainTile(TerrainTile* tile)
     if (!tile) return;
 
     OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
-    
+
     if (tile->getTileID().valid())
     {
         _terrainTileMap[tile->getTileID()] = tile;
     }
-    
+
     _terrainTileSet.insert(tile);
 
     if (_terrainTileSet.size() > s_maxNumTiles) s_maxNumTiles = _terrainTileSet.size();
 
-    // osg::notify(osg::NOTICE)<<"Terrain::registerTerrainTile "<<tile<<" total number of tile "<<_terrainTileSet.size()<<" max = "<<s_maxNumTiles<<std::endl;
+    // OSG_NOTICE<<"Terrain::registerTerrainTile "<<tile<<" total number of tile "<<_terrainTileSet.size()<<" max = "<<s_maxNumTiles<<std::endl;
+    // OSG_NOTICE<<"  tileID("<<tile->getTileID().level<<", "<<tile->getTileID().x<<", "<<tile->getTileID().y<<")"<<std::endl;
 }
 
 void Terrain::unregisterTerrainTile(TerrainTile* tile)
@@ -118,6 +187,7 @@ void Terrain::unregisterTerrainTile(TerrainTile* tile)
     }
     
     _terrainTileSet.erase(tile);
+    _updateTerrainTileSet.erase(tile);
 
-    // osg::notify(osg::NOTICE)<<"Terrain::unregisterTerrainTile "<<tile<<" total number of tile "<<_terrainTileSet.size()<<" max = "<<s_maxNumTiles<<std::endl;
+    // OSG_NOTICE<<"Terrain::unregisterTerrainTile "<<tile<<" total number of tile "<<_terrainTileSet.size()<<" max = "<<s_maxNumTiles<<std::endl;
 }

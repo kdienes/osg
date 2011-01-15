@@ -64,9 +64,6 @@ Win32ThreadPrivateData::~Win32ThreadPrivateData()
 {
 }
 
-const std::string OPENTHREAD_VERSION_STRING = "OpenThread v1.2preAlpha, WindowThreads (Public Implementation)";
-
-
 //-----------------------------------------------------------------------------
 // Initialize thread master priority level
 //
@@ -204,12 +201,15 @@ namespace OpenThreads {
             return status!=0;
         };
     };
-};
+}
 
 Thread* Thread::CurrentThread()
 {
-    return (Thread* )TlsGetValue(Win32ThreadPrivateData::TLS.getId());
-};
+    DWORD ID = Win32ThreadPrivateData::TLS.getId();
+    if (ID == TLS_OUT_OF_INDEXES)
+        return 0;
+    return (Thread* )TlsGetValue(ID);
+}
 
 //----------------------------------------------------------------------------
 //
@@ -219,7 +219,7 @@ Thread* Thread::CurrentThread()
 //
 int Thread::SetConcurrency(int) {
     return -1;
-};
+}
 
 //----------------------------------------------------------------------------
 //
@@ -229,7 +229,7 @@ int Thread::SetConcurrency(int) {
 //
 int Thread::GetConcurrency() {
     return -1;
-};
+}
 
 //----------------------------------------------------------------------------
 //

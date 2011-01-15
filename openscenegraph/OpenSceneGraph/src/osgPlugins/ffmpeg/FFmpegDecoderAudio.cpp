@@ -54,15 +54,7 @@ FFmpegDecoderAudio::FFmpegDecoderAudio(PacketQueue & packets, FFmpegClocks & clo
 
 FFmpegDecoderAudio::~FFmpegDecoderAudio()
 {
-    if (isRunning())
-    {
-        m_exit = true;
-#if 0        
-        while(isRunning()) { OpenThreads::YieldCurrentThread(); }
-#else        
-        join();
-#endif
-    }
+    this->close(true);
 }
 
 
@@ -123,11 +115,11 @@ void FFmpegDecoderAudio::pause(bool pause)
 
 void FFmpegDecoderAudio::close(bool waitForThreadToExit)
 {
-    m_exit = true;
-    
-    if (isRunning() && waitForThreadToExit)
+    if (isRunning())
     {
-        while(isRunning()) { OpenThreads::Thread::YieldCurrentThread(); }
+        m_exit = true;
+        if (waitForThreadToExit)
+            join();
     }
 }
 
@@ -157,12 +149,12 @@ void FFmpegDecoderAudio::run()
 
     catch (const std::exception & error)
     {
-        osg::notify(osg::WARN) << "FFmpegDecoderAudio::run : " << error.what() << std::endl;
+        OSG_WARN << "FFmpegDecoderAudio::run : " << error.what() << std::endl;
     }
 
     catch (...)
     {
-        osg::notify(osg::WARN) << "FFmpegDecoderAudio::run : unhandled exception" << std::endl;
+        OSG_WARN << "FFmpegDecoderAudio::run : unhandled exception" << std::endl;
     }
 }
 
@@ -170,7 +162,7 @@ void FFmpegDecoderAudio::run()
 void FFmpegDecoderAudio::setAudioSink(osg::ref_ptr<osg::AudioSink> audio_sink)
 {
     // The FFmpegDecoderAudio object takes the responsability of destroying the audio_sink.
-    osg::notify(osg::NOTICE)<<"Assigning "<<audio_sink<<std::endl;
+    OSG_NOTICE<<"Assigning "<<audio_sink<<std::endl;
     m_audio_sink = audio_sink;
 }
 
@@ -238,7 +230,7 @@ void FFmpegDecoderAudio::decodeLoop()
             m_clocks.pause(true);
             m_pause_timer.setStartTick();
 
-            while(m_paused)
+            while(m_paused && !m_exit)
             {
                 microSleep(10000);
             }

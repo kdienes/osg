@@ -20,8 +20,9 @@
 #include <stdio.h>
 #include <algorithm>
 #include <map>
+#include <iterator>
 
-#include "TriStrip_tri_stripper.h"
+#include "tristripper/include/tri_stripper.h"
 
 using namespace osg;
 using namespace osgUtil;
@@ -181,7 +182,7 @@ struct MyTriangleOperator
 {
 
     IndexList                                _remapIndices;
-    triangle_stripper::tri_stripper::indices _in_indices;
+    triangle_stripper::indices _in_indices;
 
     inline void operator()(unsigned int p1, unsigned int p2, unsigned int p3)
     {
@@ -224,7 +225,7 @@ void TriStripVisitor::stripify(Geometry& geom)
     if (geom.suitableForOptimization())
     {
         // removing coord indices
-        osg::notify(osg::INFO)<<"TriStripVisitor::stripify(Geometry&): Removing attribute indices"<<std::endl;
+        OSG_INFO<<"TriStripVisitor::stripify(Geometry&): Removing attribute indices"<<std::endl;
         geom.copyToAndOptimize(geom);
     }
 
@@ -380,16 +381,16 @@ void TriStripVisitor::stripify(Geometry& geom)
     float minimum_ratio_of_indices_to_unique_vertices = 1;
     float ratio_of_indices_to_unique_vertices = ((float)taf._in_indices.size()/(float)numUnique);
 
-    osg::notify(osg::INFO)<<"TriStripVisitor::stripify(Geometry&): Number of indices"<<taf._in_indices.size()<<" numUnique"<< numUnique << std::endl;
-    osg::notify(osg::INFO)<<"TriStripVisitor::stripify(Geometry&):     ratio indices/numUnique"<< ratio_of_indices_to_unique_vertices << std::endl;
+    OSG_INFO<<"TriStripVisitor::stripify(Geometry&): Number of indices"<<taf._in_indices.size()<<" numUnique"<< numUnique << std::endl;
+    OSG_INFO<<"TriStripVisitor::stripify(Geometry&):     ratio indices/numUnique"<< ratio_of_indices_to_unique_vertices << std::endl;
     
     // only tri strip if there is point in doing so.
     if (!taf._in_indices.empty() && ratio_of_indices_to_unique_vertices>=minimum_ratio_of_indices_to_unique_vertices)
     {
-        osg::notify(osg::INFO)<<"TriStripVisitor::stripify(Geometry&):     doing tri strip"<< std::endl;
+        OSG_INFO<<"TriStripVisitor::stripify(Geometry&):     doing tri strip"<< std::endl;
 
         unsigned int in_numVertices = 0;
-        for(triangle_stripper::tri_stripper::indices::iterator itr=taf._in_indices.begin();
+        for(triangle_stripper::indices::iterator itr=taf._in_indices.begin();
             itr!=taf._in_indices.end();
             ++itr)
         {
@@ -403,175 +404,163 @@ void TriStripVisitor::stripify(Geometry& geom)
         RemapArray ra(copyMapping);
         arrayComparitor.accept(ra);
 
-        try
+        triangle_stripper::tri_stripper stripifier(taf._in_indices);
+        stripifier.SetCacheSize(_cacheSize);
+        stripifier.SetMinStripSize(_minStripSize);
+
+        triangle_stripper::primitive_vector outPrimitives;
+        stripifier.Strip(&outPrimitives);
+        if (outPrimitives.empty())
         {
-            triangle_stripper::tri_stripper stripifier(taf._in_indices);
-            stripifier.SetCacheSize(_cacheSize);
-            stripifier.SetMinStripSize(_minStripSize);
+            OSG_WARN<<"Error: TriStripVisitor::stripify(Geometry& geom) failed."<<std::endl;
+            return;
+        }
 
-            triangle_stripper::tri_stripper::primitives_vector outPrimitives;
-            stripifier.Strip(&outPrimitives);
+        triangle_stripper::primitive_vector::iterator pitr;
+        if (_generateFourPointPrimitivesQuads)
+        {
+            OSG_INFO<<"Collecting all quads"<<std::endl;
 
-            triangle_stripper::tri_stripper::primitives_vector::iterator pitr;
-            if (_generateFourPointPrimitivesQuads)
-            {
-                osg::notify(osg::WARN)<<"Collecting all quads"<<std::endl;
+            typedef triangle_stripper::primitive_vector::iterator prim_iterator;
+            typedef std::multimap<unsigned int,prim_iterator> QuadMap;
+            QuadMap quadMap;
 
-                typedef triangle_stripper::tri_stripper::primitives_vector::iterator prim_iterator;
-                typedef std::multimap<unsigned int,prim_iterator> QuadMap;
-                QuadMap quadMap;
-
-                // pick out quads and place them in the quadMap, and also look for the max 
-                for(pitr=outPrimitives.begin();
-                    pitr!=outPrimitives.end();
-                    ++pitr)
-                {
-                    if (pitr->m_Indices.size()==4)
-                    {
-                        std::swap(pitr->m_Indices[2],pitr->m_Indices[3]);
-                        unsigned int minValue = *(std::max_element(pitr->m_Indices.begin(),pitr->m_Indices.end()));
-                        quadMap.insert(QuadMap::value_type(minValue,pitr));
-                    }
-                }
-
-
-                // handle the quads
-                if (!quadMap.empty())
-                {
-                    IndexList indices;
-                    indices.reserve(4*quadMap.size());
-
-                    // adds all the quads into the quad primitive, in ascending order 
-                    // and the QuadMap stores the quad's in ascending order.
-                    for(QuadMap::iterator qitr=quadMap.begin();
-                        qitr!=quadMap.end();
-                        ++qitr)
-                    {
-                        pitr = qitr->second;
-
-                        unsigned int min_pos = 0;
-                        for(i=1;i<4;++i)
-                        {
-                            if (pitr->m_Indices[min_pos]>pitr->m_Indices[i]) 
-                                min_pos = i;
-                        }
-                        indices.push_back(pitr->m_Indices[min_pos]);
-                        indices.push_back(pitr->m_Indices[(min_pos+1)%4]);
-                        indices.push_back(pitr->m_Indices[(min_pos+2)%4]);
-                        indices.push_back(pitr->m_Indices[(min_pos+3)%4]);
-                    }            
-
-                    bool inOrder = true;
-                    unsigned int previousValue = indices.front();
-                    for(IndexList::iterator qi_itr=indices.begin()+1;
-                        qi_itr!=indices.end() && inOrder;
-                        ++qi_itr)
-                    {
-                        inOrder = (previousValue+1)==*qi_itr;
-                        previousValue = *qi_itr;
-                    }
-
-
-                    if (inOrder)
-                    {
-                        new_primitives.push_back(new osg::DrawArrays(GL_QUADS,indices.front(),indices.size()));
-                    }
-                    else
-                    {
-                        unsigned int maxValue = *(std::max_element(indices.begin(),indices.end()));
-
-                        if (maxValue>=65536)
-                        {
-                            osg::DrawElementsUInt* elements = new osg::DrawElementsUInt(GL_QUADS);
-                            std::copy(indices.begin(),indices.end(),std::back_inserter(*elements));
-                            new_primitives.push_back(elements);
-                        }
-                        else
-                        {
-                            osg::DrawElementsUShort* elements = new osg::DrawElementsUShort(GL_QUADS);
-                            std::copy(indices.begin(),indices.end(),std::back_inserter(*elements));
-                            new_primitives.push_back(elements);
-                        }
-                    }
-                }    
-            }        
-
-            // handle non quad primitives    
+            // pick out quads and place them in the quadMap, and also look for the max 
             for(pitr=outPrimitives.begin();
                 pitr!=outPrimitives.end();
                 ++pitr)
             {
-                if (!_generateFourPointPrimitivesQuads || pitr->m_Indices.size()!=4)
+                if (pitr->Indices.size()==4)
                 {
-                    bool inOrder = true;
-                    unsigned int previousValue = pitr->m_Indices.front();
-                    for(triangle_stripper::tri_stripper::indices::iterator qi_itr=pitr->m_Indices.begin()+1;
-                        qi_itr!=pitr->m_Indices.end() && inOrder;
-                        ++qi_itr)
-                    {
-                        inOrder = (previousValue+1)==*qi_itr;
-                        previousValue = *qi_itr;
-                    }
-
-                    if (inOrder)
-                    {
-                        new_primitives.push_back(new osg::DrawArrays(pitr->m_Type,pitr->m_Indices.front(),pitr->m_Indices.size()));
-                    }
-                    else
-                    {
-                        unsigned int maxValue = *(std::max_element(pitr->m_Indices.begin(),pitr->m_Indices.end()));
-                        if (maxValue>=65536)
-                        {
-                            osg::DrawElementsUInt* elements = new osg::DrawElementsUInt(pitr->m_Type);
-                            elements->reserve(pitr->m_Indices.size());
-                            std::copy(pitr->m_Indices.begin(),pitr->m_Indices.end(),std::back_inserter(*elements));
-                            new_primitives.push_back(elements);
-                        }
-                        else
-                        {
-                            osg::DrawElementsUShort* elements = new osg::DrawElementsUShort(pitr->m_Type);
-                            elements->reserve(pitr->m_Indices.size());
-                            std::copy(pitr->m_Indices.begin(),pitr->m_Indices.end(),std::back_inserter(*elements));
-                            new_primitives.push_back(elements);
-                        }
-                    }
+                    std::swap(pitr->Indices[2],pitr->Indices[3]);
+                    unsigned int minValue = *(std::max_element(pitr->Indices.begin(),pitr->Indices.end()));
+                    quadMap.insert(QuadMap::value_type(minValue,pitr));
                 }
             }
 
-            geom.setPrimitiveSetList(new_primitives);
 
-            #if 0 
-            // debugging code for indentifying the tri-strips.       
-                    osg::Vec4Array* colors = new osg::Vec4Array(new_primitives.size());
-                    for(i=0;i<colors->size();++i)
+            // handle the quads
+            if (!quadMap.empty())
+            {
+                IndexList indices;
+                indices.reserve(4*quadMap.size());
+
+                // adds all the quads into the quad primitive, in ascending order 
+                // and the QuadMap stores the quad's in ascending order.
+                for(QuadMap::iterator qitr=quadMap.begin();
+                    qitr!=quadMap.end();
+                    ++qitr)
+                {
+                    pitr = qitr->second;
+
+                    unsigned int min_pos = 0;
+                    for(i=1;i<4;++i)
                     {
-                        (*colors)[i].set(((float)rand()/(float)RAND_MAX),
-                                         ((float)rand()/(float)RAND_MAX),
-                                         ((float)rand()/(float)RAND_MAX),
-                                         1.0f);
+                        if (pitr->Indices[min_pos]>pitr->Indices[i])
+                            min_pos = i;
                     }
-                    geom.setColorArray(colors);
-                    geom.setColorBinding(osg::Geometry::BIND_PER_PRIMITIVE_SET);
-            #endif        
+                    indices.push_back(pitr->Indices[min_pos]);
+                    indices.push_back(pitr->Indices[(min_pos+1)%4]);
+                    indices.push_back(pitr->Indices[(min_pos+2)%4]);
+                    indices.push_back(pitr->Indices[(min_pos+3)%4]);
+                }            
 
-        }
-        catch(const char* errorMessage)
+                bool inOrder = true;
+                unsigned int previousValue = indices.front();
+                for(IndexList::iterator qi_itr=indices.begin()+1;
+                    qi_itr!=indices.end() && inOrder;
+                    ++qi_itr)
+                {
+                    inOrder = (previousValue+1)==*qi_itr;
+                    previousValue = *qi_itr;
+                }
+
+
+                if (inOrder)
+                {
+                    new_primitives.push_back(new osg::DrawArrays(GL_QUADS,indices.front(),indices.size()));
+                }
+                else
+                {
+                    unsigned int maxValue = *(std::max_element(indices.begin(),indices.end()));
+
+                    if (maxValue>=65536)
+                    {
+                        osg::DrawElementsUInt* elements = new osg::DrawElementsUInt(GL_QUADS);
+                        std::copy(indices.begin(),indices.end(),std::back_inserter(*elements));
+                        new_primitives.push_back(elements);
+                    }
+                    else
+                    {
+                        osg::DrawElementsUShort* elements = new osg::DrawElementsUShort(GL_QUADS);
+                        std::copy(indices.begin(),indices.end(),std::back_inserter(*elements));
+                        new_primitives.push_back(elements);
+                    }
+                }
+            }    
+        }        
+
+        // handle non quad primitives    
+        for(pitr=outPrimitives.begin();
+            pitr!=outPrimitives.end();
+            ++pitr)
         {
-            osg::notify(osg::WARN)<<"Warning: '"<<errorMessage<<"' exception thrown from triangle_stripper"<<std::endl;
-        }
-        catch(triangle_stripper::tri_stripper::triangles_indices_error&)
-        {
-            osg::notify(osg::WARN)<<"Warning: triangles_indices_error exception thrown from triangle_stripper"<<std::endl;
-        }
-        catch(...)
-        {
-            osg::notify(osg::WARN)<<"Warning: Unhandled exception thrown from triangle_stripper"<<std::endl;
+            if (!_generateFourPointPrimitivesQuads || pitr->Indices.size()!=4)
+            {
+                bool inOrder = true;
+                unsigned int previousValue = pitr->Indices.front();
+                for(triangle_stripper::indices::iterator qi_itr=pitr->Indices.begin()+1;
+                    qi_itr!=pitr->Indices.end() && inOrder;
+                    ++qi_itr)
+                {
+                    inOrder = (previousValue+1)==*qi_itr;
+                    previousValue = *qi_itr;
+                }
+
+                if (inOrder)
+                {
+                    new_primitives.push_back(new osg::DrawArrays(pitr->Type,pitr->Indices.front(),pitr->Indices.size()));
+                }
+                else
+                {
+                    unsigned int maxValue = *(std::max_element(pitr->Indices.begin(),pitr->Indices.end()));
+                    if (maxValue>=65536)
+                    {
+                        osg::DrawElementsUInt* elements = new osg::DrawElementsUInt(pitr->Type);
+                        elements->reserve(pitr->Indices.size());
+                        std::copy(pitr->Indices.begin(),pitr->Indices.end(),std::back_inserter(*elements));
+                        new_primitives.push_back(elements);
+                    }
+                    else
+                    {
+                        osg::DrawElementsUShort* elements = new osg::DrawElementsUShort(pitr->Type);
+                        elements->reserve(pitr->Indices.size());
+                        std::copy(pitr->Indices.begin(),pitr->Indices.end(),std::back_inserter(*elements));
+                        new_primitives.push_back(elements);
+                    }
+                }
+            }
         }
 
+        geom.setPrimitiveSetList(new_primitives);
+
+        #if 0 
+        // debugging code for indentifying the tri-strips.       
+                osg::Vec4Array* colors = new osg::Vec4Array(new_primitives.size());
+                for(i=0;i<colors->size();++i)
+                {
+                    (*colors)[i].set(((float)rand()/(float)RAND_MAX),
+                                     ((float)rand()/(float)RAND_MAX),
+                                     ((float)rand()/(float)RAND_MAX),
+                                     1.0f);
+                }
+                geom.setColorArray(colors);
+                geom.setColorBinding(osg::Geometry::BIND_PER_PRIMITIVE_SET);
+        #endif        
     }
     else
     {
-        osg::notify(osg::INFO)<<"TriStripVisitor::stripify(Geometry&):     not doing tri strip *****************"<< std::endl;
+        OSG_INFO<<"TriStripVisitor::stripify(Geometry&):     not doing tri strip *****************"<< std::endl;
     }
 
 }

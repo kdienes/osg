@@ -44,13 +44,26 @@ class EasyCurl : public osg::Referenced
             bool            _foutOpened;
             std::string     _cacheFileName;
             std::ofstream   _fout;
+            std::string     _resultMimeType;
         };
     
         static size_t StreamMemoryCallback(void *ptr, size_t size, size_t nmemb, void *data);
 
         EasyCurl();
 
+        // Added this function to set the desired connection timeout if needed (in case someone needs to try to connect
+        // to offline servers without freezing the process for a very long time) [even if, as stated on curl website,
+        // some normal transfer may be timed out this way].
+        inline void setConnectionTimeout(long val) { _connectTimeout = val; }
+
+        // the timeout variable is used to limit the whole transfer duration instead of the connection phase only.
+        inline void setTimeout(long val) { _timeout = val; }
+
         osgDB::ReaderWriter::ReadResult read(const std::string& proxyAddress, const std::string& fileName, StreamObject& sp, const osgDB::ReaderWriter::Options *options);
+
+        /** Returns the mime type of the data retrieved with the provided stream object on a
+          * previous call to EasyCurl::read(). */
+        std::string getResultMimeType(const StreamObject& sp) const;
 
     protected:
 
@@ -65,6 +78,8 @@ class EasyCurl : public osg::Referenced
         
         std::string     _previousPassword;
         long            _previousHttpAuthentication;
+        long            _connectTimeout;
+        long            _timeout;
 };
 
 
@@ -82,6 +97,8 @@ class ReaderWriterCURL : public osgDB::ReaderWriter
         {
             return osgDB::equalCaseInsensitive(extension,"curl");
         }
+
+        virtual bool fileExists(const std::string& filename, const osgDB::Options* options) const;
 
         virtual ReadResult openArchive(const std::string& fileName,ArchiveStatus status, unsigned int , const Options* options) const
         {

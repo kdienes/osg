@@ -89,7 +89,7 @@ class LibVncImage : public osgWidget::VncImage
 
                         if(i)
                         {
-                            osg::notify(osg::NOTICE)<<"Handling "<<i<<" messages"<<std::endl;
+                            OSG_NOTICE<<"Handling "<<i<<" messages"<<std::endl;
                         
                             if(!HandleRFBServerMessage(_client))
                             return;
@@ -106,7 +106,7 @@ class LibVncImage : public osgWidget::VncImage
                     double deltaTime = _image->getTimeOfLastRender() - _image->getTimeOfLastUpdate();
                     if (deltaTime<-0.01)
                     {
-                        //osg::notify(osg::NOTICE)<<"Inactive"<<std::endl;
+                        //OSG_NOTICE<<"Inactive"<<std::endl;
                         //_image->_active = false;
                     }
                     else
@@ -178,19 +178,19 @@ static rfbBool rfbInitConnection(rfbClient* client)
       if (!SendScaleSetting(client, client->appData.scaleSetting))
           return FALSE;
       if (!SendFramebufferUpdateRequest(client,
-			      client->updateRect.x / client->appData.scaleSetting,
-			      client->updateRect.y / client->appData.scaleSetting,
-			      client->updateRect.w / client->appData.scaleSetting,
-			      client->updateRect.h / client->appData.scaleSetting,
-			      FALSE))
-	      return FALSE;
+                  client->updateRect.x / client->appData.scaleSetting,
+                  client->updateRect.y / client->appData.scaleSetting,
+                  client->updateRect.w / client->appData.scaleSetting,
+                  client->updateRect.h / client->appData.scaleSetting,
+                  FALSE))
+          return FALSE;
   }
   else
   {
       if (!SendFramebufferUpdateRequest(client,
-			      client->updateRect.x, client->updateRect.y,
-			      client->updateRect.w, client->updateRect.h,
-			      FALSE))
+                  client->updateRect.x, client->updateRect.y,
+                  client->updateRect.w, client->updateRect.h,
+                  FALSE))
       return FALSE;
   }
 
@@ -264,7 +264,7 @@ rfbBool LibVncImage::resizeImage(rfbClient* client)
     int height=client->height;
     int depth=client->format.bitsPerPixel;
 
-    osg::notify(osg::NOTICE)<<"resize "<<width<<", "<<height<<", "<<depth<<" image = "<<image<<std::endl;
+    OSG_NOTICE<<"resize "<<width<<", "<<height<<", "<<depth<<" image = "<<image<<std::endl;
 
     image->allocateImage(width,height,1,GL_RGBA,GL_UNSIGNED_BYTE);
     
@@ -338,7 +338,7 @@ class ReaderWriterVNC : public osgDB::ReaderWriter
 
             std::string hostname = osgDB::getNameLessExtension(fileName);
             
-            osg::notify(osg::NOTICE)<<"Hostname = "<<hostname<<std::endl;
+            OSG_NOTICE<<"Hostname = "<<hostname<<std::endl;
 
             osg::ref_ptr<LibVncImage> image = new LibVncImage;
             image->setDataVariance(osg::Object::DYNAMIC);
@@ -372,5 +372,5 @@ class ReaderWriterVNC : public osgDB::ReaderWriter
 
 // now register with Registry to instantiate the above
 // reader/writer.
-osgDB::RegisterReaderWriterProxy<ReaderWriterVNC> g_readerWriter_VNC_Proxy;
+REGISTER_OSGPLUGIN(vnc, ReaderWriterVNC)
 

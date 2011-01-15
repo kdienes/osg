@@ -313,9 +313,11 @@ void ShadowMap::init()
             fakeTex->setImage(image);
             // add fake texture
             _stateset->setTextureAttribute(_baseTextureUnit,fakeTex,osg::StateAttribute::ON);
-            _stateset->setTextureMode(_baseTextureUnit,GL_TEXTURE_1D,osg::StateAttribute::OFF);
             _stateset->setTextureMode(_baseTextureUnit,GL_TEXTURE_2D,osg::StateAttribute::ON);
             _stateset->setTextureMode(_baseTextureUnit,GL_TEXTURE_3D,osg::StateAttribute::OFF);
+            #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
+                _stateset->setTextureMode(_baseTextureUnit,GL_TEXTURE_1D,osg::StateAttribute::OFF);
+            #endif
         }
     }
 
@@ -406,7 +408,7 @@ void ShadowMap::cull(osgUtil::CullVisitor& cv)
         {
             osg::Vec3 position(lightpos.x(), lightpos.y(), lightpos.z());
             _camera->setProjectionMatrixAsPerspective(fov, 1.0, 0.1, 1000.0);
-            _camera->setViewMatrixAsLookAt(position,position+lightDir,osg::Vec3(0.0f,1.0f,0.0f));
+            _camera->setViewMatrixAsLookAt(position,position+lightDir,computeOrthogonalVector(lightDir));
         }
         else
         {
@@ -433,7 +435,7 @@ void ShadowMap::cull(osgUtil::CullVisitor& cv)
                 float right = top;
 
                 _camera->setProjectionMatrixAsFrustum(-right,right,-top,top,znear,zfar);
-                _camera->setViewMatrixAsLookAt(position,bb.center(),osg::Vec3(0.0f,1.0f,0.0f));
+                _camera->setViewMatrixAsLookAt(position,bb.center(),computeOrthogonalVector(bb.center()-position));
             }
             else    // directional light
             {
@@ -455,7 +457,7 @@ void ShadowMap::cull(osgUtil::CullVisitor& cv)
                 float right = top;
 
                 _camera->setProjectionMatrixAsOrtho(-right, right, -top, top, znear, zfar);
-                _camera->setViewMatrixAsLookAt(position,bb.center(),osg::Vec3(0.0f,1.0f,0.0f));
+                _camera->setViewMatrixAsLookAt(position,bb.center(),computeOrthogonalVector(lightDir));
             }
 
 

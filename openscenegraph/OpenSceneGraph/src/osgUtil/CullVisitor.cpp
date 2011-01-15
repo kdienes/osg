@@ -44,54 +44,6 @@ inline int EQUAL_F(float a, float b)
     { return a == b || fabsf(a-b) <= MAX_F(fabsf(a),fabsf(b))*1e-3f; }
 
 
-class PrintVisitor : public NodeVisitor
-{
-
-   public:
-   
-        PrintVisitor(std::ostream& out):
-            NodeVisitor(NodeVisitor::TRAVERSE_ALL_CHILDREN),
-            _out(out)
-        {
-            _indent = 0;
-            _step = 4;
-        }
-        
-        inline void moveIn() { _indent += _step; }
-        inline void moveOut() { _indent -= _step; }
-        inline void writeIndent() 
-        {
-            for(int i=0;i<_indent;++i) _out << " ";
-        }
-                
-        virtual void apply(Node& node)
-        {
-            moveIn();
-            writeIndent(); _out << node.className() <<std::endl;
-            traverse(node);
-            moveOut();
-        }
-
-        virtual void apply(Geode& node)         { apply((Node&)node); }
-        virtual void apply(Billboard& node)     { apply((Geode&)node); }
-        virtual void apply(LightSource& node)   { apply((Group&)node); }
-        virtual void apply(ClipNode& node)      { apply((Group&)node); }
-        
-        virtual void apply(Group& node)         { apply((Node&)node); }
-        virtual void apply(Transform& node)     { apply((Group&)node); }
-        virtual void apply(Projection& node)    { apply((Group&)node); }
-        virtual void apply(Switch& node)        { apply((Group&)node); }
-        virtual void apply(LOD& node)           { apply((Group&)node); }
-
-   protected:
-   
-        PrintVisitor& operator = (const PrintVisitor&) { return *this; }
-    
-        std::ostream& _out;
-        int _indent;
-        int _step;
-};
-
 CullVisitor::CullVisitor():
     NodeVisitor(CULL_VISITOR,TRAVERSE_ACTIVE_CHILDREN),
     _currentStateGraph(NULL),
@@ -136,7 +88,6 @@ CullVisitor* CullVisitor::create()
 
 void CullVisitor::reset()
 {
-
     //
     // first unref all referenced objects and then empty the containers.
     //
@@ -146,6 +97,9 @@ void CullVisitor::reset()
     _renderBinStack.clear();
 
     _numberOfEncloseOverrideRenderBinDetails = 0;
+
+    // reset the traversal number
+    _traversalNumber = 0;
 
     // reset the calculated near far planes.
     _computed_znear = FLT_MAX;
@@ -215,17 +169,17 @@ void CullVisitor::computeNearPlane()
             ++itr)
         {
             ++numTests;
-            // osg::notify(osg::WARN)<<"testing computeNearestPointInFrustum with d_near = "<<itr->first<<std::endl;
+            // OSG_WARN<<"testing computeNearestPointInFrustum with d_near = "<<itr->first<<std::endl;
             value_type d_near = computeNearestPointInFrustum(itr->second._matrix, itr->second._planes,*(itr->second._drawable));
             if (d_near<_computed_znear)
             {
                 _computed_znear = d_near;
-                // osg::notify(osg::WARN)<<"updating znear to "<<_computed_znear<<std::endl;
+                // OSG_WARN<<"updating znear to "<<_computed_znear<<std::endl;
             }
         } 
 
         // osg::Timer_t end_t = osg::Timer::instance()->tick();
-        // osg::notify(osg::NOTICE)<<"Took "<<osg::Timer::instance()->delta_m(start_t,end_t)<<"ms to test "<<numTests<<" out of "<<_nearPlaneCandidateMap.size()<<std::endl;
+        // OSG_NOTICE<<"Took "<<osg::Timer::instance()->delta_m(start_t,end_t)<<"ms to test "<<numTests<<" out of "<<_nearPlaneCandidateMap.size()<<std::endl;
 
         _nearPlaneCandidateMap.clear();
     }
@@ -238,7 +192,7 @@ void CullVisitor::popProjectionMatrix()
     if (_computeNearFar && _computed_zfar>=_computed_znear)
     {
 
-        //osg::notify(osg::INFO)<<"clamping "<< "znear="<<_computed_znear << " zfar="<<_computed_zfar<<std::endl;
+        //OSG_INFO<<"clamping "<< "znear="<<_computed_znear << " zfar="<<_computed_zfar<<std::endl;
 
 
         // adjust the projection matrix so that it encompases the local coords.
@@ -252,7 +206,7 @@ void CullVisitor::popProjectionMatrix()
     }
     else
     {
-        //osg::notify(osg::INFO)<<"Not clamping "<< "znear="<<_computed_znear << " zfar="<<_computed_zfar<<std::endl;
+        //OSG_INFO<<"Not clamping "<< "znear="<<_computed_znear << " zfar="<<_computed_zfar<<std::endl;
     }
 
     CullStack::popProjectionMatrix();
@@ -264,7 +218,7 @@ bool _clampProjectionMatrix(matrix_type& projection, double& znear, double& zfar
     double epsilon = 1e-6;
     if (zfar<znear-epsilon)
     {
-        osg::notify(osg::INFO)<<"_clampProjectionMatrix not applied, invalid depth range, znear = "<<znear<<"  zfar = "<<zfar<<std::endl;
+        OSG_INFO<<"_clampProjectionMatrix not applied, invalid depth range, znear = "<<znear<<"  zfar = "<<zfar<<std::endl;
         return false;
     }
     
@@ -275,12 +229,12 @@ bool _clampProjectionMatrix(matrix_type& projection, double& znear, double& zfar
         double average = (znear+zfar)*0.5;
         znear = average-epsilon;
         zfar = average+epsilon;
-        // osg::notify(osg::INFO) << "_clampProjectionMatrix widening znear and zfar to "<<znear<<" "<<zfar<<std::endl;
+        // OSG_INFO << "_clampProjectionMatrix widening znear and zfar to "<<znear<<" "<<zfar<<std::endl;
     }
 
     if (fabs(projection(0,3))<epsilon  && fabs(projection(1,3))<epsilon  && fabs(projection(2,3))<epsilon )
     {
-        // osg::notify(osg::INFO) << "Orthographic matrix before clamping"<<projection<<std::endl;
+        // OSG_INFO << "Orthographic matrix before clamping"<<projection<<std::endl;
 
         value_type delta_span = (zfar-znear)*0.02;
         if (delta_span<1.0) delta_span = 1.0;
@@ -294,12 +248,12 @@ bool _clampProjectionMatrix(matrix_type& projection, double& znear, double& zfar
         projection(2,2)=-2.0f/(desired_zfar-desired_znear);
         projection(3,2)=-(desired_zfar+desired_znear)/(desired_zfar-desired_znear);
 
-        // osg::notify(osg::INFO) << "Orthographic matrix after clamping "<<projection<<std::endl;
+        // OSG_INFO << "Orthographic matrix after clamping "<<projection<<std::endl;
     }
     else
     {
 
-        // osg::notify(osg::INFO) << "Persepective matrix before clamping"<<projection<<std::endl;
+        // OSG_INFO << "Persepective matrix before clamping"<<projection<<std::endl;
 
         //std::cout << "_computed_znear"<<_computed_znear<<std::endl;
         //std::cout << "_computed_zfar"<<_computed_zfar<<std::endl;
@@ -331,7 +285,7 @@ bool _clampProjectionMatrix(matrix_type& projection, double& znear, double& zfar
                                         0.0f,0.0f,ratio,0.0f,
                                         0.0f,0.0f,center*ratio,1.0f));
 
-        // osg::notify(osg::INFO) << "Persepective matrix after clamping"<<projection<<std::endl;
+        // OSG_INFO << "Persepective matrix after clamping"<<projection<<std::endl;
     }
     return true;
 }
@@ -382,7 +336,7 @@ struct ComputeNearestPointFunctor
             n2 >= _znear &&
             n3 >= _znear)
         {
-            //osg::notify(osg::NOTICE)<<"Triangle totally beyond znear"<<std::endl;
+            //OSG_NOTICE<<"Triangle totally beyond znear"<<std::endl;
             return;
         }
       
@@ -391,7 +345,7 @@ struct ComputeNearestPointFunctor
             n2 < 0.0 &&
             n3 < 0.0)
         {
-            // osg::notify(osg::NOTICE)<<"Triangle totally behind eye point"<<std::endl;
+            // OSG_NOTICE<<"Triangle totally behind eye point"<<std::endl;
             return;
         }
 
@@ -408,11 +362,11 @@ struct ComputeNearestPointFunctor
             float d1 = plane.distance(v1);
             float d2 = plane.distance(v2);
             float d3 = plane.distance(v3);
-            
+
             unsigned int numOutside = ((d1<0.0)?1:0) + ((d2<0.0)?1:0) + ((d3<0.0)?1:0);
             if (numOutside==3)
             {
-                //osg::notify(osg::NOTICE)<<"Triangle totally outside frustum "<<d1<<"\t"<<d2<<"\t"<<d3<<std::endl;
+                //OSG_NOTICE<<"Triangle totally outside frustum "<<d1<<"\t"<<d2<<"\t"<<d3<<std::endl;
                 return;
             }
             unsigned int numInside = ((d1>=0.0)?1:0) + ((d2>=0.0)?1:0) + ((d3>=0.0)?1:0);
@@ -421,7 +375,7 @@ struct ComputeNearestPointFunctor
                 active_mask = active_mask | selector_mask;
             }
             
-            //osg::notify(osg::NOTICE)<<"Triangle ok w.r.t plane "<<d1<<"\t"<<d2<<"\t"<<d3<<std::endl;
+            //OSG_NOTICE<<"Triangle ok w.r.t plane "<<d1<<"\t"<<d2<<"\t"<<d3<<std::endl;
 
             selector_mask <<= 1; 
         }        
@@ -431,7 +385,7 @@ struct ComputeNearestPointFunctor
             _znear = osg::minimum(_znear,n1);
             _znear = osg::minimum(_znear,n2);
             _znear = osg::minimum(_znear,n3);
-            // osg::notify(osg::NOTICE)<<"Triangle all inside frustum "<<n1<<"\t"<<n2<<"\t"<<n3<<" number of plane="<<_planes->size()<<std::endl;
+            // OSG_NOTICE<<"Triangle all inside frustum "<<n1<<"\t"<<n2<<"\t"<<n3<<" number of plane="<<_planes->size()<<std::endl;
             return;
         }
         
@@ -440,7 +394,7 @@ struct ComputeNearestPointFunctor
         // numPartiallyInside>0) so we have a triangle cutting an frustum wall,
         // this means that use brute force methods for deviding up triangle. 
         
-        //osg::notify(osg::NOTICE)<<"Using brute force method of triangle cutting frustum walls"<<std::endl;
+        //OSG_NOTICE<<"Using brute force method of triangle cutting frustum walls"<<std::endl;
         _polygonOriginal.clear();
         _polygonOriginal.push_back(DistancePoint(0,v1));
         _polygonOriginal.push_back(DistancePoint(0,v2));
@@ -504,7 +458,7 @@ struct ComputeNearestPointFunctor
             if (dist < _znear) 
             {
                 _znear = dist;
-                //osg::notify(osg::NOTICE)<<"Near plane updated "<<_znear<<std::endl;
+                //OSG_NOTICE<<"Near plane updated "<<_znear<<std::endl;
             }
         }
     }
@@ -512,7 +466,7 @@ struct ComputeNearestPointFunctor
 
 CullVisitor::value_type CullVisitor::computeNearestPointInFrustum(const osg::Matrix& matrix, const osg::Polytope::PlaneList& planes,const osg::Drawable& drawable)
 {
-    // osg::notify(osg::WARN)<<"CullVisitor::computeNearestPointInFrustum("<<getTraversalNumber()<<"\t"<<planes.size()<<std::endl;
+    // OSG_WARN<<"CullVisitor::computeNearestPointInFrustum("<<getTraversalNumber()<<"\t"<<planes.size()<<std::endl;
 
     osg::TriangleFunctor<ComputeNearestPointFunctor> cnpf;
     cnpf.set(_computed_znear, matrix, &planes);
@@ -534,8 +488,8 @@ bool CullVisitor::updateCalculatedNearFar(const osg::Matrix& matrix,const osg::B
         std::swap(d_near,d_far);
         if ( !EQUAL_F(d_near, d_far) ) 
         {
-            osg::notify(osg::WARN)<<"Warning: CullVisitor::updateCalculatedNearFar(.) near>far in range calculation,"<< std::endl;
-            osg::notify(osg::WARN)<<"         correcting by swapping values d_near="<<d_near<<" dfar="<<d_far<< std::endl;
+            OSG_WARN<<"Warning: CullVisitor::updateCalculatedNearFar(.) near>far in range calculation,"<< std::endl;
+            OSG_WARN<<"         correcting by swapping values d_near="<<d_near<<" dfar="<<d_far<< std::endl;
         }
     }
 
@@ -566,7 +520,7 @@ bool CullVisitor::updateCalculatedNearFar(const osg::Matrix& matrix,const osg::D
         static double elapsed_time = 0.0;
         if (lastFrameNumber != getTraversalNumber())
         {
-            osg::notify(osg::NOTICE)<<"Took "<<elapsed_time<<"ms to test "<<numBillboards<<" billboards"<<std::endl;
+            OSG_NOTICE<<"Took "<<elapsed_time<<"ms to test "<<numBillboards<<" billboards"<<std::endl;
             numBillboards = 0;
             elapsed_time = 0.0;
             lastFrameNumber = getTraversalNumber();
@@ -585,14 +539,14 @@ bool CullVisitor::updateCalculatedNearFar(const osg::Matrix& matrix,const osg::D
         d_near = distance(bb.corner(bbCornerNear),matrix);
         d_far = distance(bb.corner(bbCornerFar),matrix);
 
-        osg::notify(osg::NOTICE).precision(15);
+        OSG_NOTICE.precision(15);
 
         if (false)
         {
 
-            osg::notify(osg::NOTICE)<<"TESTING Billboard near/far computation"<<std::endl;
+            OSG_NOTICE<<"TESTING Billboard near/far computation"<<std::endl;
 
-             // osg::notify(osg::WARN)<<"Checking corners of billboard "<<std::endl;
+             // OSG_WARN<<"Checking corners of billboard "<<std::endl;
             // deprecated brute force way, use all corners of the bounding box.
             value_type nd_near, nd_far;
             nd_near = nd_far = distance(bb.corner(0),matrix);
@@ -601,16 +555,16 @@ bool CullVisitor::updateCalculatedNearFar(const osg::Matrix& matrix,const osg::D
                 value_type d = distance(bb.corner(i),matrix);
                 if (d<nd_near) nd_near = d;
                 if (d>nd_far) nd_far = d;
-                osg::notify(osg::NOTICE)<<"\ti="<<i<<"\td="<<d<<std::endl;
+                OSG_NOTICE<<"\ti="<<i<<"\td="<<d<<std::endl;
             }
 
             if (nd_near==d_near && nd_far==d_far)
             {
-                osg::notify(osg::NOTICE)<<"\tBillboard near/far computation correct "<<std::endl;
+                OSG_NOTICE<<"\tBillboard near/far computation correct "<<std::endl;
             }
             else
             {
-                osg::notify(osg::NOTICE)<<"\tBillboard near/far computation ERROR\n\t\t"<<d_near<<"\t"<<nd_near
+                OSG_NOTICE<<"\tBillboard near/far computation ERROR\n\t\t"<<d_near<<"\t"<<nd_near
                                         <<"\n\t\t"<<d_far<<"\t"<<nd_far<<std::endl;
             }
 
@@ -636,8 +590,8 @@ bool CullVisitor::updateCalculatedNearFar(const osg::Matrix& matrix,const osg::D
         std::swap(d_near,d_far);
         if ( !EQUAL_F(d_near, d_far) ) 
         {
-            osg::notify(osg::WARN)<<"Warning: CullVisitor::updateCalculatedNearFar(.) near>far in range calculation,"<< std::endl;
-            osg::notify(osg::WARN)<<"         correcting by swapping values d_near="<<d_near<<" dfar="<<d_far<< std::endl;
+            OSG_WARN<<"Warning: CullVisitor::updateCalculatedNearFar(.) near>far in range calculation,"<< std::endl;
+            OSG_WARN<<"         correcting by swapping values d_near="<<d_near<<" dfar="<<d_far<< std::endl;
         }
     }
 
@@ -652,11 +606,11 @@ bool CullVisitor::updateCalculatedNearFar(const osg::Matrix& matrix,const osg::D
         if (_computeNearFar==COMPUTE_NEAR_FAR_USING_PRIMITIVES)
         {
             osg::Polytope& frustum = getCurrentCullingSet().getFrustum();
-            if (frustum.getCurrentMask() && frustum.getResultMask())
+            if (frustum.getResultMask())
             {
                 if (isBillboard)
                 {
-                    // osg::notify(osg::WARN)<<"Adding billboard into deffered list"<<std::endl;
+                    // OSG_WARN<<"Adding billboard into deffered list"<<std::endl;
                 
                     osg::Polytope transformed_frustum;
                     transformed_frustum.setAndTransformProvidingInverse(getProjectionCullingStack().back().getFrustum(),matrix);
@@ -671,32 +625,27 @@ bool CullVisitor::updateCalculatedNearFar(const osg::Matrix& matrix,const osg::D
                     _nearPlaneCandidateMap.insert(
                         DistanceMatrixDrawableMap::value_type(d_near,MatrixPlanesDrawables(matrix,&drawable,frustum)) );
                 }
-            
-      
-                                    
+
                 // use the far point if its nearer than current znear as this is a conservative estimate of the znear
                 // while the final computation for this drawable is deferred.
                 if (d_far<_computed_znear)
                 {
-                    if (d_far<0.0) osg::notify(osg::WARN)<<"       1)  sett near with dnear="<<d_near<<"  dfar="<<d_far<< std::endl;
-                    else _computed_znear = d_far;
+                    if (d_far>=0.0) _computed_znear = d_far;
+                    else OSG_WARN<<"       1)  sett near with dnear="<<d_near<<"  dfar="<<d_far<< std::endl;
                 }
-                
             }
             else
             {
-                
-                if (d_near<0.0) osg::notify(osg::WARN)<<"        2) sett near with d_near="<<d_near<< std::endl;
-                else _computed_znear = d_near;
+                if (d_near>=0.0) _computed_znear = d_near;
+                else OSG_WARN<<"        2) sett near with d_near="<<d_near<< std::endl;
             }
-            
         }
         else
         {
-            //if (d_near<0.0) osg::notify(osg::WARN)<<"         3) set near with d_near="<<d_near<< std::endl;
+            //if (d_near<0.0) OSG_WARN<<"         3) set near with d_near="<<d_near<< std::endl;
             _computed_znear = d_near;
         }
-    }    
+    }
 
     if (d_far>_computed_zfar) _computed_zfar = d_far;
 
@@ -732,7 +681,7 @@ void CullVisitor::updateCalculatedNearFar(const osg::Vec3& pos)
     if (d<_computed_znear) 
     {
        _computed_znear = d;
-       if (d<0.0) osg::notify(osg::WARN)<<"Alerting billboard ="<<d<< std::endl;
+       if (d<0.0) OSG_WARN<<"Alerting billboard ="<<d<< std::endl;
     }
     if (d>_computed_zfar) _computed_zfar = d;
 }   
@@ -823,9 +772,14 @@ void CullVisitor::apply(Geode& node)
         
         if (osg::isNaN(depth))
         {
-            osg::notify(osg::NOTICE)<<"CullVisitor::apply(Geode&) detected NaN,"<<std::endl
+            OSG_NOTICE<<"CullVisitor::apply(Geode&) detected NaN,"<<std::endl
                                     <<"    depth="<<depth<<", center=("<<bb.center()<<"),"<<std::endl
                                     <<"    matrix="<<matrix<<std::endl;
+            OSG_DEBUG << "    NodePath:" << std::endl;
+            for (NodePath::const_iterator i = getNodePath().begin(); i != getNodePath().end(); ++i)
+            {
+                OSG_DEBUG << "        \"" << (*i)->getName() << "\"" << std::endl;
+            }
         }
         else
         {        
@@ -885,7 +839,7 @@ void CullVisitor::apply(Billboard& node)
         {
             if (d<_computed_znear)
             {
-                if (d<0.0) osg::notify(osg::WARN)<<"Alerting billboard handling ="<<d<< std::endl;
+                if (d<0.0) OSG_WARN<<"Alerting billboard handling ="<<d<< std::endl;
                 _computed_znear = d;
             }
             if (d>_computed_zfar) _computed_zfar = d;
@@ -896,9 +850,14 @@ void CullVisitor::apply(Billboard& node)
         
         if (osg::isNaN(depth))
         {
-            osg::notify(osg::NOTICE)<<"CullVisitor::apply(Billboard&) detected NaN,"<<std::endl
+            OSG_NOTICE<<"CullVisitor::apply(Billboard&) detected NaN,"<<std::endl
                                     <<"    depth="<<depth<<", pos=("<<pos<<"),"<<std::endl
                                     <<"    *billboard_matrix="<<*billboard_matrix<<std::endl;
+            OSG_DEBUG << "    NodePath:" << std::endl;
+            for (NodePath::const_iterator i = getNodePath().begin(); i != getNodePath().end(); ++i)
+            {
+                OSG_DEBUG << "        \"" << (*i)->getName() << "\"" << std::endl;
+            }
         }
         else
         {        
@@ -1066,7 +1025,7 @@ void CullVisitor::apply(Projection& node)
     ref_ptr<RefMatrix> matrix = createOrReuseMatrix(node.getMatrix());
     pushProjectionMatrix(matrix.get());
     
-    //osg::notify(osg::INFO)<<"Push projection "<<*matrix<<std::endl;
+    //OSG_INFO<<"Push projection "<<*matrix<<std::endl;
     
     // note do culling check after the frustum has been updated to ensure
     // that the node is not culled prematurely.
@@ -1077,7 +1036,7 @@ void CullVisitor::apply(Projection& node)
 
     popProjectionMatrix();
 
-    //osg::notify(osg::INFO)<<"Pop projection "<<*matrix<<std::endl;
+    //OSG_INFO<<"Pop projection "<<*matrix<<std::endl;
 
     _computed_znear = previous_znear;
     _computed_zfar = previous_zfar;
@@ -1128,7 +1087,7 @@ void CullVisitor::apply(osg::ClearNode& node)
     }
     else
     {
-      // we have an earth sky implementation to do the work for use
+      // we have an earth sky implementation to do the work for us
       // so we don't need to clear.
       getCurrentRenderBin()->getStage()->setClearMask(0);
     }
@@ -1185,16 +1144,22 @@ void CullVisitor::apply(osg::Camera& camera)
 //#define DEBUG_CULLSETTINGS
 
 #ifdef DEBUG_CULLSETTINGS
-    osg::notify(osg::NOTICE)<<std::endl<<std::endl<<"CullVisitor, before : ";
-    write(osg::notify(osg::NOTICE));
+    if (osg::isNotifyEnabled(osg::NOTICE))
+    {
+        OSG_NOTICE<<std::endl<<std::endl<<"CullVisitor, before : ";
+        write(osg::notify(osg::NOTICE));
+    }
 #endif
 
     // Save current cull settings
     CullSettings saved_cull_settings(*this);
 
 #ifdef DEBUG_CULLSETTINGS
-    osg::notify(osg::NOTICE)<<"CullVisitor, saved_cull_settings : ";
-    saved_cull_settings.write(osg::notify(osg::NOTICE));
+    if (osg::isNotifyEnabled(osg::NOTICE))
+    {
+        OSG_NOTICE<<"CullVisitor, saved_cull_settings : ";
+        saved_cull_settings.write(osg::notify(osg::NOTICE));
+    }
 #endif
 
 #if 1
@@ -1202,14 +1167,14 @@ void CullVisitor::apply(osg::Camera& camera)
     setCullSettings(camera);
 
 #ifdef DEBUG_CULLSETTINGS
-    osg::notify(osg::NOTICE)<<"CullVisitor, after setCullSettings(camera) : ";
+    OSG_NOTICE<<"CullVisitor, after setCullSettings(camera) : ";
     write(osg::notify(osg::NOTICE));
 #endif
     // inherit the settings from above
     inheritCullSettings(saved_cull_settings, camera.getInheritanceMask());
 
 #ifdef DEBUG_CULLSETTINGS
-    osg::notify(osg::NOTICE)<<"CullVisitor, after inheritCullSettings(saved_cull_settings,"<<camera.getInheritanceMask()<<") : ";
+    OSG_NOTICE<<"CullVisitor, after inheritCullSettings(saved_cull_settings,"<<camera.getInheritanceMask()<<") : ";
     write(osg::notify(osg::NOTICE));
 #endif
 
@@ -1298,26 +1263,25 @@ void CullVisitor::apply(osg::Camera& camera)
 
             rtts->setCamera(&camera);
 
-            if (camera.getDrawBuffer() != GL_NONE)
+            if ( camera.getInheritanceMask() & DRAW_BUFFER )
+            {
+                // inherit draw buffer from above.
+                rtts->setDrawBuffer(previous_stage->getDrawBuffer(),previous_stage->getDrawBufferApplyMask());
+            }
+            else
             {
                 rtts->setDrawBuffer(camera.getDrawBuffer());
             }
-            else
+            
+            if ( camera.getInheritanceMask() & READ_BUFFER )
             {
-                // inherit draw buffer from above.
-                rtts->setDrawBuffer(previous_stage->getDrawBuffer());
+                // inherit read buffer from above.
+                rtts->setReadBuffer(previous_stage->getReadBuffer(), previous_stage->getReadBufferApplyMask());
             }
-
-            if (camera.getReadBuffer() != GL_NONE)
+            else
             {
                 rtts->setReadBuffer(camera.getReadBuffer());
             }
-            else
-            {
-                // inherit read buffer from above.
-                rtts->setReadBuffer(previous_stage->getReadBuffer());
-            }
-
         }
         else
         {
@@ -1341,6 +1305,15 @@ void CullVisitor::apply(osg::Camera& camera)
         {
             rtts->setClearColor(camera.getClearColor());
         }
+        if (camera.getInheritanceMask() & CLEAR_MASK)
+        {
+            rtts->setClearMask(previous_stage->getClearMask());
+        }
+        else
+        {
+            rtts->setClearMask(camera.getClearMask());
+        }
+
         
         // set the color mask.
         osg::ColorMask* colorMask = camera.getColorMask()!=0 ? camera.getColorMask() : previous_stage->getColorMask();
@@ -1350,7 +1323,8 @@ void CullVisitor::apply(osg::Camera& camera)
         osg::Viewport* viewport = camera.getViewport()!=0 ? camera.getViewport() : previous_stage->getViewport();
         rtts->setViewport( viewport );
         
-
+        // set initial view matrix
+        rtts->setInitialViewMatrix(modelview);
 
         // set up to charge the same PositionalStateContainer is the parent previous stage.
         osg::Matrix inheritedMVtolocalMV;

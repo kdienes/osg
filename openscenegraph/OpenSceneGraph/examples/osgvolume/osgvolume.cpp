@@ -55,6 +55,10 @@
 #include <osgViewer/Viewer>
 #include <osgViewer/ViewerEventHandlers>
 
+#include <osgManipulator/TabBoxDragger>
+#include <osgManipulator/TabPlaneTrackballDragger>
+#include <osgManipulator/TrackballDragger>
+
 #include <osg/io_utils>
 
 #include <algorithm>
@@ -87,8 +91,8 @@ struct ProcessRow
     virtual ~ProcessRow() {}
 
     virtual void operator() (unsigned int num,
-                    GLenum source_pixelFormat, unsigned char* source, 
-                    GLenum dest_pixelFormat, unsigned char* dest) const 
+                    GLenum source_pixelFormat, unsigned char* source,
+                    GLenum dest_pixelFormat, unsigned char* dest) const
     {
         switch(source_pixelFormat)
         {
@@ -96,7 +100,7 @@ struct ProcessRow
         case(GL_ALPHA):
             switch(dest_pixelFormat)
             {
-            case(GL_LUMINANCE): 
+            case(GL_LUMINANCE):
             case(GL_ALPHA): A_to_A(num, source, dest); break;
             case(GL_LUMINANCE_ALPHA): A_to_LA(num, source, dest); break;
             case(GL_RGB): A_to_RGB(num, source, dest); break;
@@ -106,7 +110,7 @@ struct ProcessRow
         case(GL_LUMINANCE_ALPHA):
             switch(dest_pixelFormat)
             {
-            case(GL_LUMINANCE): 
+            case(GL_LUMINANCE):
             case(GL_ALPHA): LA_to_A(num, source, dest); break;
             case(GL_LUMINANCE_ALPHA): LA_to_LA(num, source, dest); break;
             case(GL_RGB): LA_to_RGB(num, source, dest); break;
@@ -116,7 +120,7 @@ struct ProcessRow
         case(GL_RGB):
             switch(dest_pixelFormat)
             {
-            case(GL_LUMINANCE): 
+            case(GL_LUMINANCE):
             case(GL_ALPHA): RGB_to_A(num, source, dest); break;
             case(GL_LUMINANCE_ALPHA): RGB_to_LA(num, source, dest); break;
             case(GL_RGB): RGB_to_RGB(num, source, dest); break;
@@ -126,7 +130,7 @@ struct ProcessRow
         case(GL_RGBA):
             switch(dest_pixelFormat)
             {
-            case(GL_LUMINANCE): 
+            case(GL_LUMINANCE):
             case(GL_ALPHA): RGBA_to_A(num, source, dest); break;
             case(GL_LUMINANCE_ALPHA): RGBA_to_LA(num, source, dest); break;
             case(GL_RGB): RGBA_to_RGB(num, source, dest); break;
@@ -137,7 +141,7 @@ struct ProcessRow
     }
 
     ///////////////////////////////////////////////////////////////////////////////
-    // alpha sources..    
+    // alpha sources..
     virtual void A_to_A(unsigned int num, unsigned char* source, unsigned char* dest) const
     {
         for(unsigned int i=0;i<num;++i)
@@ -154,7 +158,7 @@ struct ProcessRow
             *dest++ = *source++;
         }
     }
-                    
+
     virtual void A_to_RGB(unsigned int num, unsigned char* source, unsigned char* dest) const
     {
         for(unsigned int i=0;i<num;++i)
@@ -177,7 +181,7 @@ struct ProcessRow
     }
 
     ///////////////////////////////////////////////////////////////////////////////
-    // alpha luminance sources..    
+    // alpha luminance sources..
     virtual void LA_to_A(unsigned int num, unsigned char* source, unsigned char* dest) const
     {
         for(unsigned int i=0;i<num;++i)
@@ -195,7 +199,7 @@ struct ProcessRow
             *dest++ = *source++;
         }
     }
-                    
+
     virtual void LA_to_RGB(unsigned int num, unsigned char* source, unsigned char* dest) const
     {
         for(unsigned int i=0;i<num;++i)
@@ -219,7 +223,7 @@ struct ProcessRow
     }
 
     ///////////////////////////////////////////////////////////////////////////////
-    // RGB sources..    
+    // RGB sources..
     virtual void RGB_to_A(unsigned int num, unsigned char* source, unsigned char* dest) const
     {
         for(unsigned int i=0;i<num;++i)
@@ -240,7 +244,7 @@ struct ProcessRow
             source += 3;
         }
     }
-                    
+
     virtual void RGB_to_RGB(unsigned int num, unsigned char* source, unsigned char* dest) const
     {
         for(unsigned int i=0;i<num;++i)
@@ -264,7 +268,7 @@ struct ProcessRow
     }
 
     ///////////////////////////////////////////////////////////////////////////////
-    // RGBA sources..    
+    // RGBA sources..
     virtual void RGBA_to_A(unsigned int num, unsigned char* source, unsigned char* dest) const
     {
         for(unsigned int i=0;i<num;++i)
@@ -284,7 +288,7 @@ struct ProcessRow
             *dest++ = *source++;
         }
     }
-                    
+
     virtual void RGBA_to_RGB(unsigned int num, unsigned char* source, unsigned char* dest) const
     {
         for(unsigned int i=0;i<num;++i)
@@ -326,8 +330,8 @@ void clampToNearestValidPowerOfTwo(int& sizeX, int& sizeY, int& sizeZ, int s_max
     sizeZ = r_nearestPowerOfTwo;
 }
 
-osg::Image* createTexture3D(ImageList& imageList, ProcessRow& processRow, 
-            unsigned int numComponentsDesired, 
+osg::Image* createTexture3D(ImageList& imageList, ProcessRow& processRow,
+            unsigned int numComponentsDesired,
             int s_maximumTextureSize,
             int t_maximumTextureSize,
             int r_maximumTextureSize,
@@ -344,11 +348,11 @@ osg::Image* createTexture3D(ImageList& imageList, ProcessRow& processRow,
     {
         osg::Image* image = itr->get();
         GLenum pixelFormat = image->getPixelFormat();
-        if (pixelFormat==GL_ALPHA || 
-            pixelFormat==GL_INTENSITY || 
-            pixelFormat==GL_LUMINANCE || 
-            pixelFormat==GL_LUMINANCE_ALPHA || 
-            pixelFormat==GL_RGB || 
+        if (pixelFormat==GL_ALPHA ||
+            pixelFormat==GL_INTENSITY ||
+            pixelFormat==GL_LUMINANCE ||
+            pixelFormat==GL_LUMINANCE_ALPHA ||
+            pixelFormat==GL_RGB ||
             pixelFormat==GL_RGBA)
         {
             max_s = osg::maximum(image->s(), max_s);
@@ -361,9 +365,9 @@ osg::Image* createTexture3D(ImageList& imageList, ProcessRow& processRow,
             osg::notify(osg::NOTICE)<<"Image "<<image->getFileName()<<" has unsuitable pixel format"<< std::hex<< pixelFormat << std::dec << std::endl;
         }
     }
-    
+
     if (numComponentsDesired!=0) max_components = numComponentsDesired;
-    
+
     GLenum desiredPixelFormat = 0;
     switch(max_components)
     {
@@ -383,11 +387,11 @@ osg::Image* createTexture3D(ImageList& imageList, ProcessRow& processRow,
         osg::notify(osg::NOTICE)<<"desiredPixelFormat = GL_RGBA" << std::endl;
         desiredPixelFormat = GL_RGBA;
         break;
-    }    
+    }
     if (desiredPixelFormat==0) return 0;
-    
+
     // compute nearest powers of two for each axis.
-    
+
     int s_nearestPowerOfTwo = 1;
     int t_nearestPowerOfTwo = 1;
     int r_nearestPowerOfTwo = 1;
@@ -408,12 +412,12 @@ osg::Image* createTexture3D(ImageList& imageList, ProcessRow& processRow,
         t_nearestPowerOfTwo = max_t;
         r_nearestPowerOfTwo = total_r;
     }
-    
+
     // now allocate the 3d texture;
     osg::ref_ptr<osg::Image> image_3d = new osg::Image;
     image_3d->allocateImage(s_nearestPowerOfTwo,t_nearestPowerOfTwo,r_nearestPowerOfTwo,
                             desiredPixelFormat,GL_UNSIGNED_BYTE);
-        
+
 
     unsigned int r_offset = (total_r<r_nearestPowerOfTwo) ? r_nearestPowerOfTwo/2 - total_r/2 : 0;
 
@@ -426,18 +430,18 @@ osg::Image* createTexture3D(ImageList& imageList, ProcessRow& processRow,
     {
         osg::Image* image = itr->get();
         GLenum pixelFormat = image->getPixelFormat();
-        if (pixelFormat==GL_ALPHA || 
-            pixelFormat==GL_LUMINANCE || 
-            pixelFormat==GL_INTENSITY || 
-            pixelFormat==GL_LUMINANCE_ALPHA || 
-            pixelFormat==GL_RGB || 
+        if (pixelFormat==GL_ALPHA ||
+            pixelFormat==GL_LUMINANCE ||
+            pixelFormat==GL_INTENSITY ||
+            pixelFormat==GL_LUMINANCE_ALPHA ||
+            pixelFormat==GL_RGB ||
             pixelFormat==GL_RGBA)
         {
-        
+
             int num_r = osg::minimum(image->r(), (image_3d->r() - curr_dest_r));
             int num_t = osg::minimum(image->t(), image_3d->t());
             int num_s = osg::minimum(image->s(), image_3d->s());
-        
+
             unsigned int s_offset_dest = (image->s()<s_nearestPowerOfTwo) ? s_nearestPowerOfTwo/2 - image->s()/2 : 0;
             unsigned int t_offset_dest = (image->t()<t_nearestPowerOfTwo) ? t_nearestPowerOfTwo/2 - image->t()/2 : 0;
 
@@ -452,7 +456,7 @@ osg::Image* createTexture3D(ImageList& imageList, ProcessRow& processRow,
                 }
             }
         }
-    } 
+    }
     return image_3d.release();
 }
 
@@ -462,14 +466,14 @@ struct ScaleOperator
     ScaleOperator():_scale(1.0f) {}
     ScaleOperator(float scale):_scale(scale) {}
     ScaleOperator(const ScaleOperator& so):_scale(so._scale) {}
-    
+
     ScaleOperator& operator = (const ScaleOperator& so) { _scale = so._scale; return *this; }
 
     float _scale;
 
-    inline void luminance(float& l) const { l*= _scale; } 
-    inline void alpha(float& a) const { a*= _scale; } 
-    inline void luminance_alpha(float& l,float& a) const { l*= _scale; a*= _scale;  } 
+    inline void luminance(float& l) const { l*= _scale; }
+    inline void alpha(float& a) const { a*= _scale; }
+    inline void luminance_alpha(float& l,float& a) const { l*= _scale; a*= _scale;  }
     inline void rgb(float& r,float& g,float& b) const { r*= _scale; g*=_scale; b*=_scale; }
     inline void rgba(float& r,float& g,float& b,float& a) const { r*= _scale; g*=_scale; b*=_scale; a*=_scale; }
 };
@@ -480,10 +484,10 @@ struct RecordRowOperator
 
     mutable std::vector<osg::Vec4>  _colours;
     mutable unsigned int            _pos;
-    
-    inline void luminance(float l) const { rgba(l,l,l,1.0f); } 
-    inline void alpha(float a) const { rgba(1.0f,1.0f,1.0f,a); } 
-    inline void luminance_alpha(float l,float a) const { rgba(l,l,l,a);  } 
+
+    inline void luminance(float l) const { rgba(l,l,l,1.0f); }
+    inline void alpha(float a) const { rgba(1.0f,1.0f,1.0f,a); }
+    inline void luminance_alpha(float l,float a) const { rgba(l,l,l,a);  }
     inline void rgb(float r,float g,float b) const { rgba(r,g,b,1.0f); }
     inline void rgba(float r,float g,float b,float a) const { _colours[_pos++].set(r,g,b,a); }
 };
@@ -495,10 +499,10 @@ struct WriteRowOperator
 
     std::vector<osg::Vec4>  _colours;
     mutable unsigned int    _pos;
-    
-    inline void luminance(float& l) const { l = _colours[_pos++].r(); } 
-    inline void alpha(float& a) const { a = _colours[_pos++].a(); } 
-    inline void luminance_alpha(float& l,float& a) const { l = _colours[_pos].r(); a = _colours[_pos++].a(); } 
+
+    inline void luminance(float& l) const { l = _colours[_pos++].r(); }
+    inline void alpha(float& a) const { a = _colours[_pos++].a(); }
+    inline void luminance_alpha(float& l,float& a) const { l = _colours[_pos].r(); a = _colours[_pos++].a(); }
     inline void rgb(float& r,float& g,float& b) const { r = _colours[_pos].r(); g = _colours[_pos].g(); b = _colours[_pos].b(); }
     inline void rgba(float& r,float& g,float& b,float& a) const {  r = _colours[_pos].r(); g = _colours[_pos].g(); b = _colours[_pos].b(); a = _colours[_pos++].a(); }
 };
@@ -520,20 +524,20 @@ osg::Image* readRaw(int sizeX, int sizeY, int sizeZ, int numberBytesPerComponent
             return 0;
     }
 
-    
+
     GLenum dataType;
     switch(numberBytesPerComponent)
     {
         case 1 : dataType = GL_UNSIGNED_BYTE; break;
         case 2 : dataType = GL_UNSIGNED_SHORT; break;
         case 4 : dataType = GL_UNSIGNED_INT; break;
-        default : 
+        default :
             osg::notify(osg::NOTICE)<<"Error: numberBytesPerComponent="<<numberBytesPerComponent<<" not supported, only 1,2 or 4 are supported."<<std::endl;
             return 0;
     }
-    
+
     int s_maximumTextureSize=256, t_maximumTextureSize=256, r_maximumTextureSize=256;
-    
+
     int sizeS = sizeX;
     int sizeT = sizeY;
     int sizeR = sizeZ;
@@ -541,12 +545,12 @@ osg::Image* readRaw(int sizeX, int sizeY, int sizeZ, int numberBytesPerComponent
 
     osg::ref_ptr<osg::Image> image = new osg::Image;
     image->allocateImage(sizeS, sizeT, sizeR, pixelFormat, dataType);
-    
-    
+
+
     bool endianSwap = (osg::getCpuByteOrder()==osg::BigEndian) ? (endian!="big") : (endian=="big");
-    
+
     unsigned int r_offset = (sizeZ<sizeR) ? sizeR/2 - sizeZ/2 : 0;
-    
+
     int offset = endianSwap ? numberBytesPerComponent : 0;
     int delta = endianSwap ? -1 : 1;
     for(int r=0;r<sizeZ;++r)
@@ -557,7 +561,7 @@ osg::Image* readRaw(int sizeX, int sizeY, int sizeZ, int numberBytesPerComponent
             for(int s=0;s<sizeX;++s)
             {
                 if (!fin) return 0;
-                
+
                 for(int c=0;c<numberOfComponents;++c)
                 {
                     char* ptr = data+offset;
@@ -578,19 +582,19 @@ osg::Image* readRaw(int sizeX, int sizeY, int sizeZ, int numberBytesPerComponent
         // compute range of values
         osg::Vec4 minValue, maxValue;
         osg::computeMinMax(image.get(), minValue, maxValue);
-        osg::modifyImage(image.get(),ScaleOperator(1.0f/maxValue.r())); 
+        osg::modifyImage(image.get(),ScaleOperator(1.0f/maxValue.r()));
     }
-    
-    
+
+
     fin.close();
 
     if (dataType!=GL_UNSIGNED_BYTE)
     {
         // need to convert to ubyte
-        
+
         osg::ref_ptr<osg::Image> new_image = new osg::Image;
         new_image->allocateImage(sizeS, sizeT, sizeR, pixelFormat, GL_UNSIGNED_BYTE);
-        
+
         RecordRowOperator readOp(sizeS);
         WriteRowOperator writeOp;
 
@@ -601,26 +605,26 @@ osg::Image* readRaw(int sizeX, int sizeY, int sizeZ, int numberBytesPerComponent
                 // reset the indices to beginning
                 readOp._pos = 0;
                 writeOp._pos = 0;
-            
+
                 // read the pixels into readOp's _colour array
                 osg::readRow(sizeS, pixelFormat, dataType, image->data(0,t,r), readOp);
-                                
+
                 // pass readOp's _colour array contents over to writeOp (note this is just a pointer swap).
                 writeOp._colours.swap(readOp._colours);
-                
+
                 osg::modifyRow(sizeS, pixelFormat, GL_UNSIGNED_BYTE, new_image->data(0,t,r), writeOp);
 
                 // return readOp's _colour array contents back to its rightful owner.
                 writeOp._colours.swap(readOp._colours);
             }
         }
-        
+
         image = new_image;
     }
-    
+
     return image.release();
-    
-    
+
+
 }
 
 enum ColourSpaceOperation
@@ -628,7 +632,7 @@ enum ColourSpaceOperation
     NO_COLOUR_SPACE_OPERATION,
     MODULATE_ALPHA_BY_LUMINANCE,
     MODULATE_ALPHA_BY_COLOUR,
-    REPLACE_ALPHA_WITH_LUMINANACE,
+    REPLACE_ALPHA_WITH_LUMINANCE,
     REPLACE_RGB_WITH_LUMINANCE
 };
 
@@ -636,9 +640,9 @@ struct ModulateAlphaByLuminanceOperator
 {
     ModulateAlphaByLuminanceOperator() {}
 
-    inline void luminance(float&) const {} 
-    inline void alpha(float&) const {} 
-    inline void luminance_alpha(float& l,float& a) const { a*= l; } 
+    inline void luminance(float&) const {}
+    inline void alpha(float&) const {}
+    inline void luminance_alpha(float& l,float& a) const { a*= l; }
     inline void rgb(float&,float&,float&) const {}
     inline void rgba(float& r,float& g,float& b,float& a) const { float l = (r+g+b)*0.3333333; a *= l;}
 };
@@ -646,13 +650,13 @@ struct ModulateAlphaByLuminanceOperator
 struct ModulateAlphaByColourOperator
 {
     ModulateAlphaByColourOperator(const osg::Vec4& colour):_colour(colour) { _lum = _colour.length(); }
-    
+
     osg::Vec4 _colour;
     float _lum;
 
-    inline void luminance(float&) const {} 
-    inline void alpha(float&) const {} 
-    inline void luminance_alpha(float& l,float& a) const { a*= l*_lum; } 
+    inline void luminance(float&) const {}
+    inline void alpha(float&) const {}
+    inline void luminance_alpha(float& l,float& a) const { a*= l*_lum; }
     inline void rgb(float&,float&,float&) const {}
     inline void rgba(float& r,float& g,float& b,float& a) const { a = (r*_colour.r()+g*_colour.g()+b*_colour.b()+a*_colour.a()); }
 };
@@ -661,9 +665,9 @@ struct ReplaceAlphaWithLuminanceOperator
 {
     ReplaceAlphaWithLuminanceOperator() {}
 
-    inline void luminance(float&) const {} 
-    inline void alpha(float&) const {} 
-    inline void luminance_alpha(float& l,float& a) const { a= l; } 
+    inline void luminance(float&) const {}
+    inline void alpha(float&) const {}
+    inline void luminance_alpha(float& l,float& a) const { a= l; }
     inline void rgb(float&,float&,float&) const { }
     inline void rgba(float& r,float& g,float& b,float& a) const { float l = (r+g+b)*0.3333333; a = l; }
 };
@@ -675,28 +679,28 @@ osg::Image* doColourSpaceConversion(ColourSpaceOperation op, osg::Image* image, 
         case (MODULATE_ALPHA_BY_LUMINANCE):
         {
             std::cout<<"doing conversion MODULATE_ALPHA_BY_LUMINANCE"<<std::endl;
-            osg::modifyImage(image,ModulateAlphaByLuminanceOperator()); 
+            osg::modifyImage(image,ModulateAlphaByLuminanceOperator());
             return image;
         }
         case (MODULATE_ALPHA_BY_COLOUR):
         {
             std::cout<<"doing conversion MODULATE_ALPHA_BY_COLOUR"<<std::endl;
-            osg::modifyImage(image,ModulateAlphaByColourOperator(colour)); 
+            osg::modifyImage(image,ModulateAlphaByColourOperator(colour));
             return image;
         }
-        case (REPLACE_ALPHA_WITH_LUMINANACE):
+        case (REPLACE_ALPHA_WITH_LUMINANCE):
         {
-            std::cout<<"doing conversion REPLACE_ALPHA_WITH_LUMINANACE"<<std::endl;
-            osg::modifyImage(image,ReplaceAlphaWithLuminanceOperator()); 
+            std::cout<<"doing conversion REPLACE_ALPHA_WITH_LUMINANCE"<<std::endl;
+            osg::modifyImage(image,ReplaceAlphaWithLuminanceOperator());
             return image;
         }
         case (REPLACE_RGB_WITH_LUMINANCE):
         {
-            std::cout<<"doing conversion REPLACE_ALPHA_WITH_LUMINANACE"<<std::endl;
+            std::cout<<"doing conversion REPLACE_ALPHA_WITH_LUMINANCE"<<std::endl;
             osg::Image* newImage = new osg::Image;
             newImage->allocateImage(image->s(), image->t(), image->r(), GL_LUMINANCE, image->getDataType());
             osg::copyImage(image, 0, 0, 0, image->s(), image->t(), image->r(),
-                           newImage, 0, 0, 0, false);
+                        newImage, 0, 0, 0, false);
             return newImage;
         }
         default:
@@ -708,12 +712,12 @@ osg::Image* doColourSpaceConversion(ColourSpaceOperation op, osg::Image* image, 
 osg::TransferFunction1D* readTransferFunctionFile(const std::string& filename)
 {
     std::string foundFile = osgDB::findDataFile(filename);
-    if (foundFile.empty()) 
+    if (foundFile.empty())
     {
         std::cout<<"Error: could not find transfer function file : "<<filename<<std::endl;
         return 0;
     }
-    
+
     std::cout<<"Reading transfer function "<<filename<<std::endl;
 
     osg::TransferFunction1D::ColorMap colorMap;
@@ -722,22 +726,22 @@ osg::TransferFunction1D* readTransferFunctionFile(const std::string& filename)
     {
         float value, red, green, blue, alpha;
         fin >> value >> red >> green >> blue >> alpha;
-        if (fin) 
+        if (fin)
         {
             std::cout<<"value = "<<value<<" ("<<red<<", "<<green<<", "<<blue<<", "<<alpha<<")"<<std::endl;
             colorMap[value] = osg::Vec4(red,green,blue,alpha);
         }
     }
-    
+
     if (colorMap.empty())
     {
         std::cout<<"Error: No values read from transfer function file: "<<filename<<std::endl;
         return 0;
     }
-    
+
     osg::TransferFunction1D* tf = new osg::TransferFunction1D;
     tf->assign(colorMap);
-    
+
     return tf;
 }
 
@@ -757,23 +761,86 @@ public:
         OpenThreads::ScopedLock<OpenThreads::Mutex> lock(mutex);
 
         glGetIntegerv( GL_MAX_3D_TEXTURE_SIZE, &maximumTextureSize );
-        
+
         osg::notify(osg::NOTICE)<<"Max texture size="<<maximumTextureSize<<std::endl;
     }
-        
+
     OpenThreads::Mutex  mutex;
     bool                supported;
     std::string         errorMessage;
     GLint               maximumTextureSize;
 };
 
+class DraggerVolumeTileCallback : public osgManipulator::DraggerCallback
+{
+public:
 
+    DraggerVolumeTileCallback(osgVolume::VolumeTile* volume, osgVolume::Locator* locator):
+        _volume(volume),
+        _locator(locator) {}
+
+
+    virtual bool receive(const osgManipulator::MotionCommand& command);
+
+
+    osg::observer_ptr<osgVolume::VolumeTile>    _volume;
+    osg::ref_ptr<osgVolume::Locator>            _locator;
+
+    osg::Matrix _startMotionMatrix;
+
+    osg::Matrix _localToWorld;
+    osg::Matrix _worldToLocal;
+
+};
+
+bool DraggerVolumeTileCallback::receive(const osgManipulator::MotionCommand& command)
+{
+    if (!_locator) return false;
+
+    switch (command.getStage())
+    {
+        case osgManipulator::MotionCommand::START:
+        {
+            // Save the current matrix
+            _startMotionMatrix = _locator->getTransform();
+
+            // Get the LocalToWorld and WorldToLocal matrix for this node.
+            osg::NodePath nodePathToRoot;
+            osgManipulator::computeNodePathToRoot(*_volume,nodePathToRoot);
+            _localToWorld = _startMotionMatrix * osg::computeLocalToWorld(nodePathToRoot);
+            _worldToLocal = osg::Matrix::inverse(_localToWorld);
+
+            return true;
+        }
+        case osgManipulator::MotionCommand::MOVE:
+        {
+            // Transform the command's motion matrix into local motion matrix.
+            osg::Matrix localMotionMatrix = _localToWorld * command.getWorldToLocal()
+                                            * command.getMotionMatrix()
+                                            * command.getLocalToWorld() * _worldToLocal;
+
+            // Transform by the localMotionMatrix
+            _locator->setTransform(localMotionMatrix * _startMotionMatrix);
+
+            // osg::notify(osg::NOTICE)<<"New locator matrix "<<_locator->getTransform()<<std::endl;
+
+            return true;
+        }
+        case osgManipulator::MotionCommand::FINISH:
+        {
+            return true;
+        }
+        case osgManipulator::MotionCommand::NONE:
+        default:
+            return false;
+    }
+}
 
 int main( int argc, char **argv )
 {
     // use an ArgumentParser object to manage the program arguments.
     osg::ArgumentParser arguments(&argc,argv);
-    
+
     // set up the usage document, in case we need to print out how to use this program.
     arguments.getApplicationUsage()->setDescription(arguments.getApplicationName()+" is the example which demonstrates use of 3D textures.");
     arguments.getApplicationUsage()->setCommandLineUsage(arguments.getApplicationName()+" [options] filename ...");
@@ -817,12 +884,12 @@ int main( int argc, char **argv )
 
     // add the window size toggle handler
     viewer.addEventHandler(new osgViewer::WindowSizeHandler);
-        
+
     {
         osg::ref_ptr<osgGA::KeySwitchMatrixManipulator> keyswitchManipulator = new osgGA::KeySwitchMatrixManipulator;
 
         keyswitchManipulator->addMatrixManipulator( '1', "Trackball", new osgGA::TrackballManipulator() );
-        
+
         osgGA::FlightManipulator* flightManipulator = new osgGA::FlightManipulator();
         flightManipulator->setYawControlMode(osgGA::FlightManipulator::NO_AUTOMATIC_YAW);
         keyswitchManipulator->addMatrixManipulator( '2', "Flight", flightManipulator );
@@ -853,7 +920,7 @@ int main( int argc, char **argv )
     {
         transferFunction = readTransferFunctionFile(tranferFunctionFile);
     }
-    
+
     while(arguments.read("--test"))
     {
         transferFunction = new osg::TransferFunction1D;
@@ -873,8 +940,8 @@ int main( int argc, char **argv )
 
     unsigned int numSlices=500;
     while (arguments.read("-s",numSlices)) {}
-    
-    
+
+
     float sliceEnd=1.0f;
     while (arguments.read("--clip",sliceEnd)) {}
 
@@ -882,7 +949,7 @@ int main( int argc, char **argv )
     while (arguments.read("--alphaFunc",alphaFunc)) {}
 
 
-    
+
     ShadingModel shadingModel = Standard;
     while(arguments.read("--mip")) shadingModel =  MaximumIntensityProjection;
 
@@ -897,7 +964,7 @@ int main( int argc, char **argv )
 
     osg::ref_ptr<TestSupportOperation> testSupportOperation = new TestSupportOperation;
     viewer.setRealizeOperation(testSupportOperation.get());
-    
+
     viewer.realize();
 
     int maximumTextureSize = testSupportOperation->maximumTextureSize;
@@ -920,14 +987,14 @@ int main( int argc, char **argv )
     while(arguments.read("--compressed-dxt1")) { internalFormatMode = osg::Texture::USE_S3TC_DXT1_COMPRESSION; }
     while(arguments.read("--compressed-dxt3")) { internalFormatMode = osg::Texture::USE_S3TC_DXT3_COMPRESSION; }
     while(arguments.read("--compressed-dxt5")) { internalFormatMode = osg::Texture::USE_S3TC_DXT5_COMPRESSION; }
-    
-    
+
+
     // set up colour space operation.
     ColourSpaceOperation colourSpaceOperation = NO_COLOUR_SPACE_OPERATION;
     osg::Vec4 colourModulate(0.25f,0.25f,0.25f,0.25f);
     while(arguments.read("--modulate-alpha-by-luminance")) { colourSpaceOperation = MODULATE_ALPHA_BY_LUMINANCE; }
     while(arguments.read("--modulate-alpha-by-colour", colourModulate.x(),colourModulate.y(),colourModulate.z(),colourModulate.w() )) { colourSpaceOperation = MODULATE_ALPHA_BY_COLOUR; }
-    while(arguments.read("--replace-alpha-with-luminance")) { colourSpaceOperation = REPLACE_ALPHA_WITH_LUMINANACE; }
+    while(arguments.read("--replace-alpha-with-luminance")) { colourSpaceOperation = REPLACE_ALPHA_WITH_LUMINANCE; }
     while(arguments.read("--replace-rgb-with-luminance")) { colourSpaceOperation = REPLACE_RGB_WITH_LUMINANCE; }
 
 
@@ -937,57 +1004,61 @@ int main( int argc, char **argv )
         RESCALE_TO_ZERO_TO_ONE_RANGE,
         SHIFT_MIN_TO_ZERO
     };
-    
+
     RescaleOperation rescaleOperation = RESCALE_TO_ZERO_TO_ONE_RANGE;
     while(arguments.read("--no-rescale")) rescaleOperation = NO_RESCALE;
     while(arguments.read("--rescale")) rescaleOperation = RESCALE_TO_ZERO_TO_ONE_RANGE;
     while(arguments.read("--shift-min-to-zero")) rescaleOperation = SHIFT_MIN_TO_ZERO;
 
-        
+
     bool resizeToPowerOfTwo = false;
-    
-    unsigned int numComponentsDesired = 0; 
+
+    unsigned int numComponentsDesired = 0;
     while(arguments.read("--num-components", numComponentsDesired)) {}
 
-    bool useShader = true; 
+    bool useManipulator = false;
+    while(arguments.read("--manipulator") || arguments.read("-m")) { useManipulator = true; }
+
+
+    bool useShader = true;
     while(arguments.read("--shader")) { useShader = true; }
     while(arguments.read("--no-shader")) { useShader = false; }
 
-    bool gpuTransferFunction = true; 
+    bool gpuTransferFunction = true;
     while(arguments.read("--gpu-tf")) { gpuTransferFunction = true; }
     while(arguments.read("--cpu-tf")) { gpuTransferFunction = false; }
 
     double sequenceLength = 10.0;
-    while(arguments.read("--sequence-duration", sequenceLength) || 
-          arguments.read("--sd", sequenceLength)) {}
+    while(arguments.read("--sequence-duration", sequenceLength) ||
+        arguments.read("--sd", sequenceLength)) {}
 
     typedef std::list< osg::ref_ptr<osg::Image> > Images;
     Images images;
 
 
     std::string vh_filename;
-    while (arguments.read("--vh", vh_filename)) 
+    while (arguments.read("--vh", vh_filename))
     {
         std::string raw_filename, transfer_filename;
-	int xdim(0), ydim(0), zdim(0);
+        int xdim(0), ydim(0), zdim(0);
 
         osgDB::ifstream header(vh_filename.c_str());
         if (header)
         {
             header >> raw_filename >> transfer_filename >> xdim >> ydim >> zdim >> xSize >> ySize >> zSize;
         }
-        
+
         if (xdim*ydim*zdim==0)
         {
             std::cout<<"Error in reading volume header "<<vh_filename<<std::endl;
             return 1;
         }
-        
+
         if (!raw_filename.empty())
         {
             images.push_back(readRaw(xdim, ydim, zdim, 1, 1, "little", raw_filename));
         }
-        
+
         if (!transfer_filename.empty())
         {
             osgDB::ifstream fin(transfer_filename.c_str());
@@ -999,7 +1070,7 @@ int main( int argc, char **argv )
                 {
                     float red, green, blue, alpha;
                     fin >> red >> green >> blue >> alpha;
-                    if (fin) 
+                    if (fin)
                     {
                         colorMap[value] = osg::Vec4(red/255.0f,green/255.0f,blue/255.0f,alpha/255.0f);
                         std::cout<<"value = "<<value<<" ("<<red<<", "<<green<<", "<<blue<<", "<<alpha<<")";
@@ -1020,11 +1091,11 @@ int main( int argc, char **argv )
         }
 
     }
-    
+
 
     int sizeX, sizeY, sizeZ, numberBytesPerComponent, numberOfComponents;
     std::string endian, raw_filename;
-    while (arguments.read("--raw", sizeX, sizeY, sizeZ, numberBytesPerComponent, numberOfComponents, endian, raw_filename)) 
+    while (arguments.read("--raw", sizeX, sizeY, sizeZ, numberBytesPerComponent, numberOfComponents, endian, raw_filename))
     {
         images.push_back(readRaw(sizeX, sizeY, sizeZ, numberBytesPerComponent, numberOfComponents, endian, raw_filename));
     }
@@ -1036,20 +1107,38 @@ int main( int argc, char **argv )
         int pos=images_pos+1;
         for(;pos<arguments.argc() && !arguments.isOption(pos);++pos)
         {
-            // not an option so assume string is a filename.
-            osg::Image *image = osgDB::readImageFile( arguments[pos]);
-
-            if(image)
+            std::string arg(arguments[pos]);
+            if (arg.find('*') != std::string::npos)
             {
-                imageList.push_back(image);
+                osgDB::DirectoryContents contents = osgDB::expandWildcardsInFilename(arg);
+                for (unsigned int i = 0; i < contents.size(); ++i)
+                {
+                    osg::Image *image = osgDB::readImageFile( contents[i] );
+
+                    if(image)
+                    {
+                        imageList.push_back(image);
+                    }
+                }
+            }
+            else
+            {
+                // not an option so assume string is a filename.
+                osg::Image *image = osgDB::readImageFile( arguments[pos] );
+
+                if(image)
+                {
+                    imageList.push_back(image);
+                }
             }
         }
-        
+
         arguments.remove(images_pos, pos-images_pos);
-        
+
         // pack the textures into a single texture.
         ProcessRow processRow;
-        images.push_back(createTexture3D(imageList, processRow, numComponentsDesired, s_maximumTextureSize, t_maximumTextureSize, r_maximumTextureSize, resizeToPowerOfTwo));
+        osg::Image* image = createTexture3D(imageList, processRow, numComponentsDesired, s_maximumTextureSize, t_maximumTextureSize, r_maximumTextureSize, resizeToPowerOfTwo);
+        if (image) images.push_back(image);
     }
 
 
@@ -1062,7 +1151,7 @@ int main( int argc, char **argv )
         arguments.writeErrorMessages(std::cout);
         return 1;
     }
-    
+
 
     // assume remaining arguments are file names of textures.
     for(int pos=1;pos<arguments.argc();++pos)
@@ -1073,8 +1162,8 @@ int main( int argc, char **argv )
             if (osgDB::getLowerCaseFileExtension(filename)=="dicom")
             {
                 // not an option so assume string is a filename.
-                osg::Image *image = osgDB::readImageFile(filename);
-                if(image)
+                osg::Image* image = osgDB::readImageFile(filename);
+                if (image)
                 {
                     images.push_back(image);
                 }
@@ -1090,27 +1179,25 @@ int main( int argc, char **argv )
 
                 if (fileType == osgDB::DIRECTORY)
                 {
-                   osg::Image *image = osgDB::readImageFile(filename+".dicom");
-                    if(image)
-                    {
-                        images.push_back(image);
-                    } 
+                    osg::Image* image = osgDB::readImageFile(filename+".dicom");
+                    if (image) images.push_back(image);
                 }
                 else if (fileType == osgDB::REGULAR_FILE)
                 {
                     // not an option so assume string is a filename.
-                    images.push_back(osgDB::readImageFile( filename ));
+                    osg::Image* image = osgDB::readImageFile( filename );
+                    if (image) images.push_back(image);
                 }
                 else
                 {
                     osg::notify(osg::NOTICE)<<"Error: could not find file: "<<filename<<std::endl;
                     return 1;
                 }
-            }            
+            }
         }
     }
-    
-    if (images.empty()) 
+
+    if (images.empty())
     {
         std::cout<<"No model loaded, please specify and volumetric image file on the command line."<<std::endl;
         return 1;
@@ -1125,7 +1212,7 @@ int main( int argc, char **argv )
 
     for(;sizeItr != images.end(); ++sizeItr)
     {
-        if ((*sizeItr)->s() != image_s || 
+        if ((*sizeItr)->s() != image_s ||
             (*sizeItr)->t() != image_t ||
             (*sizeItr)->r() != image_r)
         {
@@ -1135,14 +1222,15 @@ int main( int argc, char **argv )
     }
 
 
-    osg::ref_ptr<osg::RefMatrix> matrix = dynamic_cast<osg::RefMatrix*>(images.front()->getUserData());
+    osg::ref_ptr<osgVolume::ImageDetails> details = dynamic_cast<osgVolume::ImageDetails*>(images.front()->getUserData());
+    osg::ref_ptr<osg::RefMatrix> matrix = details ? details->getMatrix() : dynamic_cast<osg::RefMatrix*>(images.front()->getUserData());
 
     if (!matrix)
     {
         if (xSize==0.0) xSize = static_cast<float>(image_s);
         if (ySize==0.0) ySize = static_cast<float>(image_t);
         if (zSize==0.0) zSize = static_cast<float>(image_r);
-        
+
         matrix = new osg::RefMatrix(xSize, 0.0,   0.0,   0.0,
                                     0.0,   ySize, 0.0,   0.0,
                                     0.0,   0.0,   zSize, 0.0,
@@ -1174,7 +1262,7 @@ int main( int argc, char **argv )
             computeMinMax = true;
         }
     }
-    
+
     if (computeMinMax)
     {
         osg::notify(osg::NOTICE)<<"Min value "<<minValue<<std::endl;
@@ -1190,7 +1278,7 @@ int main( int argc, char **argv )
         maxComponent = osg::maximum(maxComponent,maxValue[2]);
         maxComponent = osg::maximum(maxComponent,maxValue[3]);
 
-
+#if 0
         switch(rescaleOperation)
         {
             case(NO_RESCALE):
@@ -1204,8 +1292,8 @@ int main( int argc, char **argv )
                 for(Images::iterator itr = images.begin();
                     itr != images.end();
                     ++itr)
-                {        
-                    osg::offsetAndScaleImage(itr->get(), 
+                {
+                    osg::offsetAndScaleImage(itr->get(),
                         osg::Vec4(offset, offset, offset, offset),
                         osg::Vec4(scale, scale, scale, scale));
                 }
@@ -1218,38 +1306,38 @@ int main( int argc, char **argv )
                 for(Images::iterator itr = images.begin();
                     itr != images.end();
                     ++itr)
-                {        
-                    osg::offsetAndScaleImage(itr->get(), 
+                {
+                    osg::offsetAndScaleImage(itr->get(),
                         osg::Vec4(offset, offset, offset, offset),
                         osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f));
                 }
                 break;
             }
         };
-
+#endif
     }
 
-    
+
     if (colourSpaceOperation!=NO_COLOUR_SPACE_OPERATION)
     {
         for(Images::iterator itr = images.begin();
             itr != images.end();
             ++itr)
-        {        
+        {
             (*itr) = doColourSpaceConversion(colourSpaceOperation, itr->get(), colourModulate);
         }
     }
-    
+
     if (!gpuTransferFunction && transferFunction.valid())
     {
         for(Images::iterator itr = images.begin();
             itr != images.end();
             ++itr)
-        {        
+        {
             *itr = osgVolume::applyTransferFunction(itr->get(), transferFunction.get());
         }
     }
-    
+
     osg::ref_ptr<osg::Image> image_3d = 0;
 
     if (images.size()==1)
@@ -1260,28 +1348,50 @@ int main( int argc, char **argv )
     else
     {
         osg::notify(osg::NOTICE)<<"Creating sequence of "<<images.size()<<" volumes."<<std::endl;
-    
+
         osg::ref_ptr<osg::ImageSequence> imageSequence = new osg::ImageSequence;
         imageSequence->setLength(sequenceLength);
         image_3d = imageSequence.get();
         for(Images::iterator itr = images.begin();
             itr != images.end();
             ++itr)
-        {        
+        {
             imageSequence->addImage(itr->get());
         }
         imageSequence->play();
     }
-    
+
     osg::ref_ptr<osgVolume::Volume> volume = new osgVolume::Volume;
     osg::ref_ptr<osgVolume::VolumeTile> tile = new osgVolume::VolumeTile;
     volume->addChild(tile.get());
 
-    osg::ref_ptr<osgVolume::Layer> layer = new osgVolume::ImageLayer(image_3d.get());
+    osg::ref_ptr<osgVolume::ImageLayer> layer = new osgVolume::ImageLayer(image_3d.get());
 
-    osgVolume::Locator* locator = new osgVolume::Locator(*matrix);
-    layer->setLocator(locator);
-    tile->setLocator(locator);
+    if (details)
+    {
+        layer->setTexelOffset(details->getTexelOffset());
+        layer->setTexelScale(details->getTexelScale());
+    }
+
+    switch(rescaleOperation)
+    {
+        case(NO_RESCALE):
+            break;
+
+        case(RESCALE_TO_ZERO_TO_ONE_RANGE):
+        {
+            layer->rescaleToZeroToOneRange();
+            break;
+        }
+        case(SHIFT_MIN_TO_ZERO):
+        {
+            layer->translateMinToZero();
+            break;
+        }
+    };
+
+    layer->setLocator(new osgVolume::Locator(*matrix));
+    tile->setLocator(new osgVolume::Locator(*matrix));
 
     tile->setLayer(layer.get());
 
@@ -1361,23 +1471,23 @@ int main( int argc, char **argv )
         layer->addProperty(new osgVolume::AlphaFuncProperty(alphaFunc));
         tile->setVolumeTechnique(new osgVolume::FixedFunctionTechnique);
     }
-        
+
     if (!outputFile.empty())
-    {   
+    {
         std::string ext = osgDB::getFileExtension(outputFile);
         std::string name_no_ext = osgDB::getNameLessExtension(outputFile);
         if (ext=="osg")
         {
             if (image_3d.valid())
             {
-                image_3d->setFileName(name_no_ext + ".dds");            
+                image_3d->setFileName(name_no_ext + ".dds");
                 osgDB::writeImageFile(*image_3d, image_3d->getFileName());
             }
             osgDB::writeNodeFile(*volume, outputFile);
         }
         else if (ext=="ive")
         {
-            osgDB::writeNodeFile(*volume, outputFile);        
+            osgDB::writeNodeFile(*volume, outputFile);
         }
         else if (ext=="dds")
         {
@@ -1387,21 +1497,48 @@ int main( int argc, char **argv )
         {
             std::cout<<"Extension not support for file output, not file written."<<std::endl;
         }
-        
+
         return 0;
     }
 
-
-    if (volume.valid()) 
+    if (volume.valid())
     {
 
+        osg::ref_ptr<osg::Node> loadedModel = volume.get();
+
+        if (useManipulator)
+        {
+            osg::ref_ptr<osg::Group> group = new osg::Group;
+
+#if 1
+            osg::ref_ptr<osgManipulator::Dragger> dragger = new osgManipulator::TabBoxDragger;
+#else
+            osg::ref_ptr<osgManipulator::Dragger> dragger = new osgManipulator::TrackballDragger();
+#endif
+            dragger->setupDefaultGeometry();
+            dragger->setHandleEvents(true);
+            dragger->setActivationModKeyMask(osgGA::GUIEventAdapter::MODKEY_SHIFT);
+            dragger->addDraggerCallback(new DraggerVolumeTileCallback(tile.get(), tile->getLocator()));
+            dragger->setMatrix(osg::Matrix::translate(0.5,0.5,0.5)*tile->getLocator()->getTransform());
+
+
+            group->addChild(dragger.get());
+
+            //dragger->addChild(volume.get());
+
+            group->addChild(volume.get());
+
+            loadedModel = group;
+        }
+
+
         // set the scene to render
-        viewer.setSceneData(volume.get());
-        
+        viewer.setSceneData(loadedModel.get());
+
         // the the viewers main frame loop
         viewer.run();
-    }    
-    
+    }
+
     return 0;
 
 }

@@ -39,7 +39,7 @@ void TexGen::setPlane(Coord which, const Plane& plane)
         case T : _plane_t = plane; break;
         case R : _plane_r = plane; break;
         case Q : _plane_q = plane; break;
-        default : notify(WARN)<<"Error: invalid 'which' passed TexGen::setPlane("<<(unsigned int)which<<","<<plane<<")"<<std::endl; break;
+        default : OSG_WARN<<"Error: invalid 'which' passed TexGen::setPlane("<<(unsigned int)which<<","<<plane<<")"<<std::endl; break;
     }
 }
 
@@ -51,7 +51,7 @@ const Plane& TexGen::getPlane(Coord which) const
         case T : return _plane_t;
         case R : return _plane_r;
         case Q : return _plane_q;
-        default : notify(WARN)<<"Error: invalid 'which' passed TexGen::getPlane(which)"<<std::endl; return _plane_r;
+        default : OSG_WARN<<"Error: invalid 'which' passed TexGen::getPlane(which)"<<std::endl; return _plane_r;
     }
 }
 
@@ -63,7 +63,7 @@ Plane& TexGen::getPlane(Coord which)
         case T : return _plane_t;
         case R : return _plane_r;
         case Q : return _plane_q;
-        default : notify(WARN)<<"Error: invalid 'which' passed TexGen::getPlane(which)"<<std::endl; return _plane_r;
+        default : OSG_WARN<<"Error: invalid 'which' passed TexGen::getPlane(which)"<<std::endl; return _plane_r;
     }
 }
 
@@ -77,7 +77,7 @@ void TexGen::setPlanesFromMatrix(const Matrixd& matrix)
 
 void TexGen::apply(State&) const
 {
-
+#if defined(OSG_GL_FIXED_FUNCTION_AVAILABLE) && !defined(OSG_GLES1_AVAILABLE)
     if (_mode == OBJECT_LINEAR || _mode == EYE_LINEAR)
     {
         GLenum glmode = _mode == OBJECT_LINEAR ? GL_OBJECT_PLANE : GL_EYE_PLANE;
@@ -125,5 +125,7 @@ void TexGen::apply(State&) const
         glTexGeni( GL_S, GL_TEXTURE_GEN_MODE, _mode );
         glTexGeni( GL_T, GL_TEXTURE_GEN_MODE, _mode );
     }
-
+#else
+    OSG_NOTICE<<"Warning: TexGen::apply(State&) - not supported."<<std::endl;
+#endif
 }

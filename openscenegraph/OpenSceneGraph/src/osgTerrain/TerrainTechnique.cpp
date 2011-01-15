@@ -16,6 +16,48 @@
 
 using namespace osgTerrain;
 
+/////////////////////////////////////////////////////////////////////////////////////
+//
+// TerrainNeighbours
+//
+TerrainNeighbours::TerrainNeighbours()
+{
+}
+
+TerrainNeighbours::~TerrainNeighbours()
+{
+    clear();
+}
+
+void TerrainNeighbours::addNeighbour(TerrainTile* tile)
+{
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_neighboursMutex);
+    _neighbours.insert(tile);
+}
+
+void TerrainNeighbours::removeNeighbour(TerrainTile* tile)
+{
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_neighboursMutex);
+    _neighbours.erase(tile);
+}
+
+void TerrainNeighbours::clear()
+{
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_neighboursMutex);
+    _neighbours.clear();
+}
+
+
+bool TerrainNeighbours::containsNeighbour(TerrainTile* tile) const
+{
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_neighboursMutex);
+    return _neighbours.count(tile)!=0;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+// TerrainTechnique
+//
 TerrainTechnique::TerrainTechnique():
     _terrainTile(0)
 {
@@ -32,26 +74,35 @@ TerrainTechnique::~TerrainTechnique()
 {
 }
 
-void TerrainTechnique::init()
+void TerrainTechnique::setTerrainTile(TerrainTile* tile)
 {
-    osg::notify(osg::NOTICE)<<className()<<"::initialize(..) not implementated yet"<<std::endl;
+    if (_terrainTile==tile) return;
+
+    _neighbours.clear();
+
+    _terrainTile = tile;
+}
+
+void TerrainTechnique::init(int dirtyMask, bool assumeMultiThreaded)
+{
+    OSG_NOTICE<<className()<<"::init(..) not implementated yet"<<std::endl;
 }
 
 void TerrainTechnique::update(osgUtil::UpdateVisitor* uv)
 {
-    osg::notify(osg::NOTICE)<<className()<<"::update(..) not implementated yet"<<std::endl;
+    OSG_NOTICE<<className()<<"::update(..) not implementated yet"<<std::endl;
     if (_terrainTile) _terrainTile->osg::Group::traverse(*uv);
 }
 
 void TerrainTechnique::cull(osgUtil::CullVisitor* cv)
 {
-    osg::notify(osg::NOTICE)<<className()<<"::cull(..) not implementated yet"<<std::endl;
+    OSG_NOTICE<<className()<<"::cull(..) not implementated yet"<<std::endl;
     if (_terrainTile) _terrainTile->osg::Group::traverse(*cv);
 }
 
 void TerrainTechnique::cleanSceneGraph()
 {
-    osg::notify(osg::NOTICE)<<className()<<"::cleanSceneGraph(..) not implementated yet"<<std::endl;
+    OSG_NOTICE<<className()<<"::cleanSceneGraph(..) not implementated yet"<<std::endl;
 }
 
 void TerrainTechnique::traverse(osg::NodeVisitor& nv)
@@ -61,7 +112,7 @@ void TerrainTechnique::traverse(osg::NodeVisitor& nv)
     // if app traversal update the frame count.
     if (nv.getVisitorType()==osg::NodeVisitor::UPDATE_VISITOR)
     {
-        if (_terrainTile->getDirty()) _terrainTile->init();
+        if (_terrainTile->getDirty()) _terrainTile->init(_terrainTile->getDirtyMask(), false);
 
         osgUtil::UpdateVisitor* uv = dynamic_cast<osgUtil::UpdateVisitor*>(&nv);
         if (uv)
@@ -81,7 +132,10 @@ void TerrainTechnique::traverse(osg::NodeVisitor& nv)
         }
     }
 
-    if (_terrainTile->getDirty()) _terrainTile->init();
+    if (_terrainTile->getDirty())
+    {
+        _terrainTile->init(_terrainTile->getDirtyMask(), false);
+    }
 
     // otherwise fallback to the Group::traverse()
     _terrainTile->osg::Group::traverse(nv);

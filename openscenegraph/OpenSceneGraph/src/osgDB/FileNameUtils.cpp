@@ -33,43 +33,33 @@ using namespace std;
 
 std::string osgDB::getFilePath(const std::string& fileName)
 {
-    std::string::size_type slash1 = fileName.find_last_of('/');
-    std::string::size_type slash2 = fileName.find_last_of('\\');
-    if (slash1==std::string::npos) 
-    {
-        if (slash2==std::string::npos) return std::string();
-        return std::string(fileName,0,slash2);
-    }
-    if (slash2==std::string::npos) return std::string(fileName,0,slash1);
-    return std::string(fileName, 0, slash1>slash2 ?  slash1 : slash2);
+    std::string::size_type slash = fileName.find_last_of("/\\");
+    if (slash==std::string::npos) return std::string();
+    else return std::string(fileName, 0, slash);
 }
 
 
 std::string osgDB::getSimpleFileName(const std::string& fileName)
 {
-    std::string::size_type slash1 = fileName.find_last_of('/');
-    std::string::size_type slash2 = fileName.find_last_of('\\');
-    if (slash1==std::string::npos) 
-    {
-        if (slash2==std::string::npos) return fileName;
-        return std::string(fileName.begin()+slash2+1,fileName.end());
-    }
-    if (slash2==std::string::npos) return std::string(fileName.begin()+slash1+1,fileName.end());
-    return std::string(fileName.begin()+(slash1>slash2?slash1:slash2)+1,fileName.end());
+    std::string::size_type slash = fileName.find_last_of("/\\");
+    if (slash==std::string::npos) return fileName;
+    else return std::string(fileName.begin()+slash+1,fileName.end());
 }
 
 
 std::string osgDB::getFileExtension(const std::string& fileName)
 {
     std::string::size_type dot = fileName.find_last_of('.');
-    if (dot==std::string::npos) return std::string("");
+    std::string::size_type slash = fileName.find_last_of("/\\");
+    if (dot==std::string::npos || (slash!=std::string::npos && dot<slash)) return std::string("");
     return std::string(fileName.begin()+dot+1,fileName.end());
 }
 
 std::string osgDB::getFileExtensionIncludingDot(const std::string& fileName)
 {
     std::string::size_type dot = fileName.find_last_of('.');
-    if (dot==std::string::npos) return std::string("");
+    std::string::size_type slash = fileName.find_last_of("/\\");
+    if (dot==std::string::npos || (slash!=std::string::npos && dot<slash)) return std::string("");
     return std::string(fileName.begin()+dot,fileName.end());
 }
 
@@ -78,9 +68,9 @@ std::string osgDB::convertFileNameToWindowsStyle(const std::string& fileName)
     std::string new_fileName(fileName);
     
     std::string::size_type slash = 0;
-    while( (slash=new_fileName.find_first_of('/',slash)) != std::string::npos)
+    while( (slash=new_fileName.find_first_of(UNIX_PATH_SEPARATOR,slash)) != std::string::npos)
     {
-        new_fileName[slash]='\\';
+        new_fileName[slash]=WINDOWS_PATH_SEPARATOR;
     }
     return new_fileName;
 }
@@ -90,20 +80,29 @@ std::string osgDB::convertFileNameToUnixStyle(const std::string& fileName)
     std::string new_fileName(fileName);
     
     std::string::size_type slash = 0;
-    while( (slash=new_fileName.find_first_of('\\',slash)) != std::string::npos)
+    while( (slash=new_fileName.find_first_of(WINDOWS_PATH_SEPARATOR,slash)) != std::string::npos)
     {
-        new_fileName[slash]='/';
+        new_fileName[slash]=UNIX_PATH_SEPARATOR;
     }
 
     return new_fileName;
 }
 
+char osgDB::getNativePathSeparator()
+{
+#if defined(WIN32) && !defined(__CYGWIN__)
+    return WINDOWS_PATH_SEPARATOR;
+#else
+    return UNIX_PATH_SEPARATOR;
+#endif
+}
+
 bool osgDB::isFileNameNativeStyle(const std::string& fileName)
 {
 #if defined(WIN32) && !defined(__CYGWIN__)
-    return fileName.find('/') == std::string::npos; // return true if no unix style slash exist
+    return fileName.find(UNIX_PATH_SEPARATOR) == std::string::npos; // return true if no unix style slash exist
 #else
-    return fileName.find('\\') == std::string::npos; // return true if no windows style slash exist
+    return fileName.find(WINDOWS_PATH_SEPARATOR) == std::string::npos; // return true if no windows style backslash exist
 #endif
 }
 
@@ -139,10 +138,22 @@ std::string osgDB::convertToLowerCase(const std::string& str)
 std::string osgDB::getNameLessExtension(const std::string& fileName)
 {
     std::string::size_type dot = fileName.find_last_of('.');
-    if (dot==std::string::npos) return fileName;
+    std::string::size_type slash = fileName.find_last_of("/\\");        // Finds forward slash *or* back slash
+    if (dot==std::string::npos || (slash!=std::string::npos && dot<slash)) return fileName;
     return std::string(fileName.begin(),fileName.begin()+dot);
 }
 
+
+// strip all extensions from the filename.
+std::string osgDB::getNameLessAllExtensions(const std::string& fileName)
+{
+    // Finds start serach position: from last slash, or the begining of the string if none found
+    std::string::size_type startPos = fileName.find_last_of("/\\");            // Finds forward slash *or* back slash
+    if (startPos == std::string::npos) startPos = 0;
+    std::string::size_type dot = fileName.find_first_of('.', startPos);        // Finds *FIRST* dot from start pos
+    if (dot==std::string::npos) return fileName;
+    return std::string(fileName.begin(),fileName.begin()+dot);
+}
 
 std::string osgDB::getStrippedName(const std::string& fileName)
 {
@@ -179,26 +190,42 @@ bool osgDB::equalCaseInsensitive(const std::string& lhs,const char* rhs)
     return true;
 }
 
+
+
 bool osgDB::containsServerAddress(const std::string& filename)
 {
-    // need to check for http://
-    if (filename.size()<7) return false;
-    if (filename.compare(0,7,"http://")==0) return true;
-    return false;
+    // need to check for ://
+    std::string::size_type pos(filename.find("://"));
+    if (pos == std::string::npos) 
+        return false;
+    std::string proto(filename.substr(0, pos));
+    
+    return Registry::instance()->isProtocolRegistered(proto);
+}
+
+std::string osgDB::getServerProtocol(const std::string& filename)
+{
+    std::string::size_type pos(filename.find("://"));
+    if (pos != std::string::npos)
+        return filename.substr(0,pos);
+
+    return "";
 }
 
 std::string osgDB::getServerAddress(const std::string& filename)
 {
-    if (filename.size()>=7 && filename.compare(0,7,"http://")==0)
+    std::string::size_type pos(filename.find("://"));
+    
+    if (pos != std::string::npos)
     {
-        std::string::size_type pos_slash = filename.find_first_of('/',7);
+        std::string::size_type pos_slash = filename.find_first_of('/',pos+3);
         if (pos_slash!=std::string::npos)
         {
-            return filename.substr(7,pos_slash-7);
+            return filename.substr(pos+3,pos_slash-pos-3);
         }
         else
         {
-            return filename.substr(7,std::string::npos);
+            return filename.substr(pos+3,std::string::npos);
         }
     }
     return "";
@@ -206,9 +233,11 @@ std::string osgDB::getServerAddress(const std::string& filename)
 
 std::string osgDB::getServerFileName(const std::string& filename)
 {
-    if (filename.size()>=7 && filename.compare(0,7,"http://")==0)
+    std::string::size_type pos(filename.find("://"));
+
+    if (pos != std::string::npos)
     {
-        std::string::size_type pos_slash = filename.find_first_of('/',7);
+        std::string::size_type pos_slash = filename.find_first_of('/',pos+3);
         if (pos_slash!=std::string::npos)
         {
             return filename.substr(pos_slash+1,std::string::npos);
@@ -225,11 +254,11 @@ std::string osgDB::getServerFileName(const std::string& filename)
 std::string osgDB::concatPaths(const std::string& left, const std::string& right)
 {
 #if defined(WIN32) && !defined(__CYGWIN__)
-    const char delimiterNative  = '\\';
-    const char delimiterForeign = '/';
+    const char delimiterNative  = WINDOWS_PATH_SEPARATOR;
+    const char delimiterForeign = UNIX_PATH_SEPARATOR;
 #else
-    const char delimiterNative  = '/';
-    const char delimiterForeign = '\\';
+    const char delimiterNative  = UNIX_PATH_SEPARATOR;
+    const char delimiterForeign = WINDOWS_PATH_SEPARATOR;
 #endif
 
     if(left.empty())
@@ -279,7 +308,7 @@ std::string osgDB::getRealPath(const std::string& path)
         if (0 == GetLongPathName(tempbuf1, tempbuf2, sizeof(tempbuf2)))
             return std::string(retbuf);
         FilePath = std::string(tempbuf2);
-        FilePath.append("\\");
+        FilePath += WINDOWS_PATH_SEPARATOR;
         FilePath.append(getSimpleFileName(std::string(retbuf)));
         return FilePath;
     }

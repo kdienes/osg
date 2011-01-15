@@ -191,6 +191,30 @@ public:
             }
         }
     }
+
+    void write(const std::string &dir)
+    {
+        for(TextureSet::iterator itr=_textureSet.begin();
+            itr!=_textureSet.end();
+            ++itr)
+        {
+            osg::Texture* texture = const_cast<osg::Texture*>(itr->get());
+            
+            osg::Texture2D* texture2D = dynamic_cast<osg::Texture2D*>(texture);
+            osg::Texture3D* texture3D = dynamic_cast<osg::Texture3D*>(texture);
+            
+            osg::ref_ptr<osg::Image> image = texture2D ? texture2D->getImage() : (texture3D ? texture3D->getImage() : 0);
+            if (image.valid())
+            {
+                std::string name = osgDB::getStrippedName(image->getFileName());
+                name += ".dds";
+                image->setFileName(name);
+                std::string path = dir.empty() ? name : osgDB::concatPaths(dir, name);
+                osgDB::writeImageFile(*image, path);
+                osg::notify(osg::NOTICE) << "Image written to '" << path << "'." << std::endl;
+            }
+        }
+    }
     
     typedef std::set< osg::ref_ptr<osg::Texture> > TextureSet;
     TextureSet                          _textureSet;
@@ -428,11 +452,11 @@ static void usage( const char *prog, const char *msg )
     osg::notify(osg::NOTICE)<<"    --compressed-dxt3  - Enable the usage of S3TC DXT3 compressed textures"<< std::endl;
     osg::notify(osg::NOTICE)<<"    --compressed-dxt5  - Enable the usage of S3TC DXT5 compressed textures"<< std::endl;
     osg::notify(osg::NOTICE)<< std::endl;
-    osg::notify(osg::NOTICE)<<"    --fix-transparency  - fix stateset which are curerntly declared as transprent,"<< std::endl;
+    osg::notify(osg::NOTICE)<<"    --fix-transparency  - fix stateset which are curerntly declared as transparent,"<< std::endl;
     osg::notify(osg::NOTICE)<<"                         but should be opaque. Defaults to using the "<< std::endl;
     osg::notify(osg::NOTICE)<<"                         fixTranspancyMode MAKE_OPAQUE_TEXTURE_STATESET_OPAQUE."<< std::endl;
     osg::notify(osg::NOTICE)<<"    --fix-transparency-mode <mode_string>  - fix stateset which are curerntly declared as"<< std::endl;
-    osg::notify(osg::NOTICE)<<"                         transprent but should be opaque. The mode_string determines"<< std::endl;
+    osg::notify(osg::NOTICE)<<"                         transparent but should be opaque. The mode_string determines"<< std::endl;
     osg::notify(osg::NOTICE)<<"                         algorithm is used to fix the transparency, options are:    "<< std::endl;
     osg::notify(osg::NOTICE)<<"                                 MAKE_OPAQUE_TEXTURE_STATESET_OPAQUE,"<<std::endl;
     osg::notify(osg::NOTICE)<<"                                 MAKE_ALL_STATESET_OPAQUE."<<std::endl;
@@ -492,6 +516,7 @@ static void usage( const char *prog, const char *msg )
     osg::notify(osg::NOTICE)<<"    --addMissingColors - Adding a white color value to all geometry that don't have\n"
                               "                         their own color values (--addMissingColours also accepted)."<< std::endl;
     osg::notify(osg::NOTICE)<<"    --overallNormal    - Replace normals with a single overall normal."<< std::endl;
+    osg::notify(osg::NOTICE)<<"    --enable-object-cache - Enable caching of objects, images, etc."<< std::endl;
 
     osg::notify( osg::NOTICE ) << std::endl;
     osg::notify( osg::NOTICE ) <<
@@ -707,6 +732,9 @@ int main( int argc, char **argv )
     bool do_overallNormal = false;
     while(arguments.read("--overallNormal") || arguments.read("--overallNormal")) { do_overallNormal = true; }
 
+    bool enableObjectCache = false;
+    while(arguments.read("--enable-object-cache")) { enableObjectCache = true; }
+
     // any option left unread are converted into errors to write out later.
     arguments.reportRemainingOptionsAsUnrecognized();
 
@@ -725,6 +753,11 @@ int main( int argc, char **argv )
         }
     }
 
+    if (enableObjectCache)
+    {
+        if (osgDB::Registry::instance()->getOptions()==0) osgDB::Registry::instance()->setOptions(new osgDB::Options());
+        osgDB::Registry::instance()->getOptions()->setObjectCacheHint(osgDB::Options::CACHE_ALL);
+    }
 
     std::string fileNameOut("converted.osg");
     if (fileNames.size()>1)
@@ -781,15 +814,14 @@ int main( int argc, char **argv )
         if (internalFormatMode != osg::Texture::USE_IMAGE_DATA_FORMAT)
         {
             std::string ext = osgDB::getFileExtension(fileNameOut);
-            if (ext=="ive")
+            CompressTexturesVisitor ctv(internalFormatMode);
+            root->accept(ctv);
+            ctv.compress();
+
+            osgDB::ReaderWriter::Options *options = osgDB::Registry::instance()->getOptions();
+            if (ext!="ive" || (options && options->getOptionString().find("noTexturesInIVEFile")!=std::string::npos))
             {
-                CompressTexturesVisitor ctv(internalFormatMode);
-                root->accept(ctv);
-                ctv.compress();
-            }
-            else
-            {
-                std::cout<<"Warning: compressing texture only supported when outputing to .ive"<<std::endl;
+                ctv.write(osgDB::getFilePath(fileNameOut));
             }
         }
 

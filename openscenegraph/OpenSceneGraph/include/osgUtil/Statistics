@@ -102,6 +102,7 @@ class OSGUTIL_EXPORT Statistics : public osg::PrimitiveFunctor
         virtual void end();
         
         void addDrawable() { numDrawables++;}
+        void addFastDrawable() { numFastDrawables++;}
         void addMatrix() { nummat++;}
         void addLight(int np) { nlights+=np;}
         void addImpostor(int np) { nimpostor+= np; }
@@ -110,6 +111,8 @@ class OSGUTIL_EXPORT Statistics : public osg::PrimitiveFunctor
         void addBins(int np) { nbins+= np; }
 
         void setBinNo(int n) { _binNo=n;}
+        void addStateGraphs(int n) { numStateGraphs += n; }
+        void addOrderedLeaves(int n) { numOrderedLeaves += n; }
         
         void add(const Statistics& stats);
                 
@@ -118,17 +121,23 @@ class OSGUTIL_EXPORT Statistics : public osg::PrimitiveFunctor
         PrimitiveCountMap& getPrimitiveCountMap() { return _primitives_count; }
         const PrimitiveCountMap& getPrimitiveCountMap() const { return _primitives_count; }
         
+        PrimitiveValueMap& getPrimitiveValueMap() { return _primitiveCount; }
+        const PrimitiveValueMap& getPrimitiveValueMap() const { return _primitiveCount; }
+
+
         /// deprecated
         PrimitiveCountMap::iterator GetPrimitivesBegin() { return _primitives_count.begin(); }
         /// deprecated
         PrimitiveCountMap::iterator GetPrimitivesEnd() { return _primitives_count.end(); }
 
-        int numDrawables, nummat, nbins;
+        int numDrawables, nummat, nbins, numStateGraphs;
+        int numFastDrawables;
         int nlights;
         int depth; // depth into bins - eg 1.1,1.2,1.3 etc
         int _binNo;
         StatsType stattype;
         int nimpostor; // number of impostors rendered
+        int numOrderedLeaves;   // leaves from RenderBin fine grain ordering
         
         unsigned int        _vertexCount;
         PrimitiveValueMap    _primitiveCount;
@@ -201,6 +210,7 @@ public:
     unsigned int _numInstancedGeode;
     unsigned int _numInstancedDrawable;
     unsigned int _numInstancedGeometry;
+    unsigned int _numInstancedFastGeometry;
     unsigned int _numInstancedStateSet;
 
     NodeSet _groupSet;
@@ -210,6 +220,7 @@ public:
     NodeSet _geodeSet;
     DrawableSet _drawableSet;
     DrawableSet _geometrySet;
+    DrawableSet _fastGeometrySet;
     StateSetSet _statesetSet;
 
     osgUtil::Statistics _uniqueStats;

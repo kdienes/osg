@@ -1,13 +1,13 @@
-/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2006 Robert Osfield 
+/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2006 Robert Osfield
  *
- * This library is open source and may be redistributed and/or modified under  
- * the terms of the OpenSceneGraph Public License (OSGPL) version 0.0 or 
+ * This library is open source and may be redistributed and/or modified under
+ * the terms of the OpenSceneGraph Public License (OSGPL) version 0.0 or
  * (at your option) any later version.  The full license is in LICENSE file
  * included with this distribution, and on the openscenegraph.org website.
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the 
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * OpenSceneGraph Public License for more details.
 */
 
@@ -17,7 +17,6 @@
 #include <osg/DeleteHandler>
 #include <osg/io_utils>
 
-#include <osgUtil/GLObjectsVisitor>
 #include <osgDB/Registry>
 #include <osgDB/ReadFile>
 #include <osgGA/TrackballManipulator>
@@ -53,18 +52,36 @@ Viewer::Viewer(osg::ArgumentParser& arguments)
     arguments.getApplicationUsage()->addCommandLineOption("--clear-color <color>","Set the background color of the viewer in the form \"r,g,b[,a]\".");
     arguments.getApplicationUsage()->addCommandLineOption("--screen <num>","Set the screen to use when multiple screens are present.");
     arguments.getApplicationUsage()->addCommandLineOption("--window <x y w h>","Set the position (x,y) and size (w,h) of the viewer window.");
+
+    arguments.getApplicationUsage()->addCommandLineOption("--run-on-demand","Set the run methods frame rate management to only rendering frames when required.");
+    arguments.getApplicationUsage()->addCommandLineOption("--run-continuous","Set the run methods frame rate management to rendering frames continuously.");
+    arguments.getApplicationUsage()->addCommandLineOption("--run-max-frame-rate","Set the run methods maximum permissable frame rate, 0.0 is default and switching off frame rate capping.");
+    arguments.getApplicationUsage()->addCommandLineOption("--enable-object-cache","Enable caching of objects, images, etc.");
+
     // FIXME: Uncomment these lines when the options have been documented properly
     //arguments.getApplicationUsage()->addCommandLineOption("--3d-sd","");
     //arguments.getApplicationUsage()->addCommandLineOption("--panoramic-sd","");
     //arguments.getApplicationUsage()->addCommandLineOption("--radius","");
     //arguments.getApplicationUsage()->addCommandLineOption("--collar","");
     //arguments.getApplicationUsage()->addCommandLineOption("--im","");
-    
+
+    if (arguments.read("--ico"))
+    {
+        setIncrementalCompileOperation(new osgUtil::IncrementalCompileOperation());
+    }
+
     std::string filename;
     bool readConfig = false;
     while (arguments.read("-c",filename))
     {
         readConfig = readConfiguration(filename) || readConfig;
+    }
+
+    // Enable caching?
+    while (arguments.read("--enable-object-cache"))
+    {
+        if (osgDB::Registry::instance()->getOptions()==0) osgDB::Registry::instance()->setOptions(new osgDB::Options());
+        osgDB::Registry::instance()->getOptions()->setObjectCacheHint(osgDB::Options::CACHE_ALL);
     }
 
     while (arguments.read("--SingleThreaded")) setThreadingModel(SingleThreaded);
@@ -81,16 +98,30 @@ Viewer::Viewer(osg::ArgumentParser& arguments)
         float r, g, b;
         float a = 1.0f;
         int cnt = sscanf( colorStr.c_str(), "%f,%f,%f,%f", &r, &g, &b, &a );
-        if( cnt==3 || cnt==4 ) getCamera()->setClearColor( osg::Vec4(r,g,b,a) );
-        else osg::notify(osg::WARN)<<"Invalid clear color \""<<colorStr<<"\""<<std::endl;
+        if( cnt==3 || cnt==4 )
+        {
+            getCamera()->setClearColor( osg::Vec4(r,g,b,a) );
+        }
+        else
+        {
+            OSG_WARN<<"Invalid clear color \""<<colorStr<<"\""<<std::endl;
+        }
     }
-    
+
+
+    while(arguments.read("--run-on-demand")) { setRunFrameScheme(ON_DEMAND); }
+    while(arguments.read("--run-continuous")) { setRunFrameScheme(CONTINUOUS); }
+
+    double runMaxFrameRate;
+    while(arguments.read("--run-max-frame-rate", runMaxFrameRate)) { setRunMaxFrameRate(runMaxFrameRate); }
+
+
     int screenNum = -1;
     while (arguments.read("--screen",screenNum)) {}
-    
+
     int x = -1, y = -1, width = -1, height = -1;
     while (arguments.read("--window",x,y,width,height)) {}
-    
+
     bool ss3d = false;
     bool wowvx20 = false;
     bool wowvx42 = false;
@@ -118,9 +149,9 @@ Viewer::Viewer(osg::ArgumentParser& arguments)
         while (arguments.read("--wow-vz",wow_vz)) {}
         while (arguments.read("--wow-M",wow_M)) {}
         while (arguments.read("--wow-C",wow_C)) {}
-            
+
         if (screenNum<0) screenNum = 0;
-        
+
         setUpViewForWoWVxDisplay( screenNum, wow_content, wow_factor, wow_offset, wow_Zd, wow_vz, wow_M, wow_C );
     }
     else if ((ss3d=arguments.read("--3d-sd")) || arguments.read("--panoramic-sd"))
@@ -153,7 +184,7 @@ Viewer::Viewer(osg::ArgumentParser& arguments)
     {
         if (screenNum>=0) setUpViewInWindow(x, y, width, height, screenNum);
         else setUpViewInWindow(x,y,width,height);
-        
+
     }
     else if (screenNum>=0)
     {
@@ -173,7 +204,7 @@ void Viewer::constructorInit()
     _eventVisitor = new osgGA::EventVisitor;
     _eventVisitor->setActionAdapter(this);
     _eventVisitor->setFrameStamp(_frameStamp.get());
-    
+
     _updateVisitor = new osgUtil::UpdateVisitor;
     _updateVisitor->setFrameStamp(_frameStamp.get());
 
@@ -182,17 +213,15 @@ void Viewer::constructorInit()
 
 Viewer::~Viewer()
 {
-    //osg::notify(osg::NOTICE)<<"Viewer::~Viewer()"<<std::endl;
-
+    //OSG_NOTICE<<"Viewer::~Viewer()"<<std::endl;
 
     Threads threads;
     getAllThreads(threads);
 
-    osg::notify(osg::INFO)<<"Viewer::~Viewer():: start destructor getThreads = "<<threads.size()<<std::endl;
-
+    OSG_INFO<<"Viewer::~Viewer():: start destructor getThreads = "<<threads.size()<<std::endl;
 
     stopThreading();
-    
+
     if (_scene.valid() && _scene->getDatabasePager())
     {
         _scene->getDatabasePager()->cancel();
@@ -209,19 +238,18 @@ Viewer::~Viewer()
     {
         (*citr)->close();
     }
-    
-    //osg::notify(osg::NOTICE)<<"finish Viewer::~Viewer()"<<std::endl;
-    
+
+    //OSG_NOTICE<<"finish Viewer::~Viewer()"<<std::endl;
+
     getAllThreads(threads);
 
-    osg::notify(osg::INFO)<<"Viewer::~Viewer() end destrcutor getThreads = "<<threads.size()<<std::endl;
-
+    OSG_INFO<<"Viewer::~Viewer() end destructor getThreads = "<<threads.size()<<std::endl;
 }
 
 void Viewer::take(View& rhs)
 {
     osgViewer::View::take(rhs);
-    
+
 #if 1
     osgViewer::Viewer* rhs_viewer = dynamic_cast<osgViewer::Viewer*>(&rhs);
     if (rhs_viewer)
@@ -256,27 +284,27 @@ void Viewer::take(View& rhs)
         rhs_viewer->_realizeOperation = 0;
         rhs_viewer->_currentContext = 0;
     }
-#endif    
+#endif
 }
 
 bool Viewer::readConfiguration(const std::string& filename)
 {
-    osg::notify(osg::INFO)<<"Viewer::readConfiguration("<<filename<<")"<<std::endl;
-    
+    OSG_INFO<<"Viewer::readConfiguration("<<filename<<")"<<std::endl;
+
     osg::ref_ptr<osg::Object> object = osgDB::readObjectFile(filename);
-    if (!object) 
+    if (!object)
     {
-        //osg::notify(osg::NOTICE)<<"Error: Unable to load configuration file \""<<filename<<"\""<<std::endl;
+        //OSG_NOTICE<<"Error: Unable to load configuration file \""<<filename<<"\""<<std::endl;
         return false;
     }
-    
+
     CompositeViewer* compositeViewer = dynamic_cast<CompositeViewer*>(object.get());
     if (compositeViewer)
     {
-        osg::notify(osg::NOTICE)<<"Error: Config file \""<<filename<<"\" containing CompositeViewer cannot be loaded by Viewer."<<std::endl;
+        OSG_NOTICE<<"Error: Config file \""<<filename<<"\" containing CompositeViewer cannot be loaded by Viewer."<<std::endl;
         return false;
     }
-    
+
     View* view = dynamic_cast<osgViewer::View*>(object.get());
     if (view)
     {
@@ -285,8 +313,8 @@ bool Viewer::readConfiguration(const std::string& filename)
         return true;
     }
     else
-    {    
-        osg::notify(osg::NOTICE)<<"Error: Config file \""<<filename<<"\" does not contain a valid Viewer configuration."<<std::endl;
+    {
+        OSG_NOTICE<<"Error: Config file \""<<filename<<"\" does not contain a valid Viewer configuration."<<std::endl;
         return false;
     }
 }
@@ -305,8 +333,32 @@ bool Viewer::isRealized() const
     {
         if ((*citr)->isRealized()) ++numRealizedWindows;
     }
-    
+
     return numRealizedWindows > 0;
+}
+
+bool Viewer::checkNeedToDoFrame()
+{
+    if (_requestRedraw) return true;
+    if (_requestContinousUpdate) return true;
+
+
+    // If the database pager is going to update the scene the render flag is
+    // set so that the updates show up
+    if(getDatabasePager()->requiresUpdateSceneGraph() || getDatabasePager()->getRequestsInProgress()) return true;
+
+    // if there update callbacks then we need to do frame.
+    if (_camera->getUpdateCallback()) return true;
+    if (getSceneData()!=0 && getSceneData()->getNumChildrenRequiringUpdateTraversal()>0) return true;
+
+    // now do a eventTraversal to see if any events might require a new frame.
+    eventTraversal();
+
+    // now check if any of the event handles have prompted a redraw.
+    if (_requestRedraw) return true;
+    if (_requestContinousUpdate) return true;
+
+    return false;
 }
 
 int Viewer::run()
@@ -315,16 +367,16 @@ int Viewer::run()
     {
         setCameraManipulator(new osgGA::TrackballManipulator());
     }
-    
+
     setReleaseContextAtEndOfFrameHint(false);
-            
+
     return ViewerBase::run();
 }
 
 void Viewer::setStartTick(osg::Timer_t tick)
 {
     View::setStartTick(tick);
-    
+
     Contexts contexts;
     getContexts(contexts,false);
 
@@ -373,19 +425,19 @@ GraphicsWindowEmbedded* Viewer::setUpViewerAsEmbeddedInWindow(int x, int y, int 
 
 void Viewer::realize()
 {
-    //osg::notify(osg::INFO)<<"Viewer::realize()"<<std::endl;
-    
+    //OSG_INFO<<"Viewer::realize()"<<std::endl;
+
     setCameraWithFocus(0);
 
     Contexts contexts;
     getContexts(contexts);
-    
+
     if (contexts.empty())
     {
-        osg::notify(osg::INFO)<<"Viewer::realize() - No valid contexts found, setting up view across all screens."<<std::endl;
-    
-        // no windows are already set up so set up a default view        
-        
+        OSG_INFO<<"Viewer::realize() - No valid contexts found, setting up view across all screens."<<std::endl;
+
+        // no windows are already set up so set up a default view
+
         const char* ptr = 0;
         if ((ptr = getenv("OSG_CONFIG_FILE")) != 0)
         {
@@ -421,34 +473,50 @@ void Viewer::realize()
                 setUpViewAcrossAllScreens();
             }
         }
-        
+
         getContexts(contexts);
     }
 
     if (contexts.empty())
     {
-        osg::notify(osg::NOTICE)<<"Viewer::realize() - failed to set up any windows"<<std::endl;
+        OSG_NOTICE<<"Viewer::realize() - failed to set up any windows"<<std::endl;
         _done = true;
         return;
     }
-    
+
+    unsigned int maxTexturePoolSize = osg::DisplaySettings::instance()->getMaxTexturePoolSize();
+    if (_camera->getDisplaySettings()) maxTexturePoolSize = std::max(maxTexturePoolSize, _camera->getDisplaySettings()->getMaxTexturePoolSize());
+    if (_displaySettings.valid()) maxTexturePoolSize = std::max(maxTexturePoolSize, _displaySettings->getMaxTexturePoolSize());
+
+    unsigned int maxBufferObjectPoolSize = osg::DisplaySettings::instance()->getMaxBufferObjectPoolSize();
+    if (_displaySettings.valid()) maxBufferObjectPoolSize = std::max(maxBufferObjectPoolSize, _displaySettings->getMaxBufferObjectPoolSize());
+    if (_camera->getDisplaySettings()) maxBufferObjectPoolSize = std::max(maxBufferObjectPoolSize, _camera->getDisplaySettings()->getMaxBufferObjectPoolSize());
+
     for(Contexts::iterator citr = contexts.begin();
         citr != contexts.end();
         ++citr)
     {
         osg::GraphicsContext* gc = *citr;
+
+        // set the pool sizes, 0 the default will result in no GL object pools.
+        gc->getState()->setMaxTexturePoolSize(maxTexturePoolSize);
+        gc->getState()->setMaxBufferObjectPoolSize(maxBufferObjectPoolSize);
+
         gc->realize();
-        
+
         if (_realizeOperation.valid() && gc->valid())
         {
             gc->makeCurrent();
-            
+
             (*_realizeOperation)(gc);
-            
+
             gc->releaseContext();
         }
     }
-    
+
+    // attach contexts to _incrementalCompileOperation if attached.
+    if (_incrementalCompileOperation) _incrementalCompileOperation->assignContexts(contexts);
+
     bool grabFocus = true;
     if (grabFocus)
     {
@@ -459,11 +527,11 @@ void Viewer::realize()
             osgViewer::GraphicsWindow* gw = dynamic_cast<osgViewer::GraphicsWindow*>(*citr);
             if (gw)
             {
-                gw->grabFocusIfPointerInWindow();    
+                gw->grabFocusIfPointerInWindow();
             }
         }
     }
-    
+
     // initialize the global timer to be relative to the current time.
     osg::Timer::instance()->setStartTick();
 
@@ -471,7 +539,7 @@ void Viewer::realize()
     setStartTick(osg::Timer::instance()->getStartTick());
 
     setUpThreading();
-    
+
     if (osg::DisplaySettings::instance()->getCompileContextsHint())
     {
         int numProcessors = OpenThreads::GetNumberOfProcessors();
@@ -486,12 +554,12 @@ void Viewer::realize()
                 gc->createGraphicsThread();
                 gc->getGraphicsThread()->setProcessorAffinity(processNum % numProcessors);
                 gc->getGraphicsThread()->startThread();
-                
+
                 ++processNum;
             }
         }
     }
-    
+
 }
 
 
@@ -515,7 +583,7 @@ void Viewer::advance(double simulationTime)
     {
         _frameStamp->setSimulationTime(simulationTime);
     }
-    
+
     if (getViewerStats() && getViewerStats()->collectStats("frame_rate"))
     {
         // update previous frame stats
@@ -541,17 +609,17 @@ void Viewer::eventTraversal()
 
     double beginEventTraversal = osg::Timer::instance()->delta_s(_startTick, osg::Timer::instance()->tick());
 
-    // osg::notify(osg::NOTICE)<<"Viewer::frameEventTraversal()."<<std::endl;
-    
+    // OSG_NOTICE<<"Viewer::frameEventTraversal()."<<std::endl;
+
     // need to copy events from the GraphicsWindow's into local EventQueue;
     osgGA::EventQueue::Events events;
 
     Contexts contexts;
     getContexts(contexts);
 
-    osgGA::GUIEventAdapter* eventState = getEventQueue()->getCurrentEventState(); 
+    osgGA::GUIEventAdapter* eventState = getEventQueue()->getCurrentEventState();
     osg::Matrix masterCameraVPW = getCamera()->getViewMatrix() * getCamera()->getProjectionMatrix();
-    if (getCamera()->getViewport()) 
+    if (getCamera()->getViewport())
     {
         osg::Viewport* viewport = getCamera()->getViewport();
         masterCameraVPW *= viewport->computeWindowMatrix();
@@ -571,34 +639,35 @@ void Viewer::eventTraversal()
         if (gw)
         {
             gw->checkEvents();
-            
+
             osgGA::EventQueue::Events gw_events;
             gw->getEventQueue()->takeEvents(gw_events);
-            
+
             osgGA::EventQueue::Events::iterator itr;
             for(itr = gw_events.begin();
                 itr != gw_events.end();
                 ++itr)
             {
                 osgGA::GUIEventAdapter* event = itr->get();
-                
+
                 bool pointerEvent = false;
 
                 float x = event->getX();
                 float y = event->getY();
-                
+
                 bool invert_y = event->getMouseYOrientation()==osgGA::GUIEventAdapter::Y_INCREASING_DOWNWARDS;
                 if (invert_y && gw->getTraits()) y = gw->getTraits()->height - y;
-                
+
                 switch(event->getEventType())
                 {
                     case(osgGA::GUIEventAdapter::PUSH):
                     case(osgGA::GUIEventAdapter::RELEASE):
+                    case(osgGA::GUIEventAdapter::DOUBLECLICK):
                     case(osgGA::GUIEventAdapter::DRAG):
                     case(osgGA::GUIEventAdapter::MOVE):
                     {
                         pointerEvent = true;
-                        
+
                         if (event->getEventType()!=osgGA::GUIEventAdapter::DRAG || !getCameraWithFocus())
                         {
                             osg::GraphicsContext::Cameras& cameras = gw->getCameras();
@@ -607,44 +676,47 @@ void Viewer::eventTraversal()
                                 ++citr)
                             {
                                 osg::Camera* camera = *citr;
-                                if (camera->getView()==this && 
+                                if (camera->getView()==this &&
                                     camera->getAllowEventFocus() &&
                                     camera->getRenderTargetImplementation()==osg::Camera::FRAME_BUFFER)
                                 {
                                     osg::Viewport* viewport = camera ? camera->getViewport() : 0;
-                                    if (viewport && 
+                                    if (viewport &&
                                         x >= viewport->x() && y >= viewport->y() &&
                                         x <= (viewport->x()+viewport->width()) && y <= (viewport->y()+viewport->height()) )
                                     {
-                                        // osg::notify(osg::NOTICE)<<"setCamera with focus "<<camera->getName()<<" x="<<x<<" y="<<y<<std::endl;
+                                        // OSG_NOTICE<<"setCamera with focus "<<camera->getName()<<" x="<<x<<" y="<<y<<std::endl;
                                         setCameraWithFocus(camera);
                                     }
                                 }
                             }
                         }
-                        
+
                         break;
                     }
                     default:
                         break;
                 }
-                
+
                 if (pointerEvent)
                 {
                     if (getCameraWithFocus())
                     {
-                        osg::Viewport* viewport = getCameraWithFocus()->getViewport();
-                        osg::Matrix localCameraVPW = getCameraWithFocus()->getViewMatrix() * getCameraWithFocus()->getProjectionMatrix();
-                        if (viewport) localCameraVPW *= viewport->computeWindowMatrix();
+                        if (getCameraWithFocus()!=getCamera())
+                        {
+                            osg::Viewport* viewport = getCameraWithFocus()->getViewport();
+                            osg::Matrix localCameraVPW = getCameraWithFocus()->getViewMatrix() * getCameraWithFocus()->getProjectionMatrix();
+                            if (viewport) localCameraVPW *= viewport->computeWindowMatrix();
 
-                        osg::Matrix matrix( osg::Matrix::inverse(localCameraVPW) * masterCameraVPW );
+                            osg::Matrix matrix( osg::Matrix::inverse(localCameraVPW) * masterCameraVPW );
 
-                        osg::Vec3d new_coord = osg::Vec3d(x,y,0.0) * matrix;
+                            osg::Vec3d new_coord = osg::Vec3d(x,y,0.0) * matrix;
 
-                        x = new_coord.x();
-                        y = new_coord.y();                                
+                            x = new_coord.x();
+                            y = new_coord.y();
+                        }
 
-                        // osg::notify(osg::NOTICE)<<"pointer event new_coord.x()="<<new_coord.x()<<" new_coord.y()="<<new_coord.y()<<std::endl;
+                        // OSG_NOTICE<<"pointer event new_coord.x()="<<new_coord.x()<<" new_coord.y()="<<new_coord.y()<<std::endl;
 
                         event->setInputRange(eventState->getXmin(), eventState->getYmin(), eventState->getXmax(), eventState->getYmax());
                         event->setX(x);
@@ -656,15 +728,15 @@ void Viewer::eventTraversal()
                     {
                         x = eventState->getXmin() + (x/double(gw->getTraits()->width))*(eventState->getXmax() - eventState->getXmin());
                         y = eventState->getYmin() + (y/double(gw->getTraits()->height))*(eventState->getYmax() - eventState->getYmin());
-                        // osg::notify(osg::NOTICE)<<"new x = "<<x<<" new y = "<<y<<std::endl;
+                        // OSG_NOTICE<<"new x = "<<x<<" new y = "<<y<<std::endl;
 
                         event->setInputRange(eventState->getXmin(), eventState->getYmin(), eventState->getXmax(), eventState->getYmax());
                         event->setX(x);
                         event->setY(y);
                         event->setMouseYOrientation(osgGA::GUIEventAdapter::Y_INCREASING_UPWARDS);
                     }
-                    
-                    // pass along the new pointer events details to the eventState of the viewer 
+
+                    // pass along the new pointer events details to the eventState of the viewer
                     eventState->setX(x);
                     eventState->setY(y);
                     eventState->setButtonMask(event->getButtonMask());
@@ -679,8 +751,8 @@ void Viewer::eventTraversal()
                     event->setButtonMask(eventState->getButtonMask());
                     event->setMouseYOrientation(eventState->getMouseYOrientation());
                 }
-                //osg::notify(osg::NOTICE)<<"   mouse x = "<<event->getX()<<" y="<<event->getY()<<std::endl;
-                // osg::notify(osg::NOTICE)<<"   mouse Xmin = "<<event->getXmin()<<" Ymin="<<event->getYmin()<<" xMax="<<event->getXmax()<<" Ymax="<<event->getYmax()<<std::endl;
+                //OSG_NOTICE<<"   mouse x = "<<event->getX()<<" y="<<event->getY()<<std::endl;
+                // OSG_NOTICE<<"   mouse Xmin = "<<event->getXmin()<<" Ymin="<<event->getYmin()<<" xMax="<<event->getXmax()<<" Ymax="<<event->getYmax()<<std::endl;
             }
 
             for(itr = gw_events.begin();
@@ -694,12 +766,12 @@ void Viewer::eventTraversal()
                     {
                         bool wasThreading = areThreadsRunning();
                         if (wasThreading) stopThreading();
-                        
+
                         gw->close();
-                        _currentContext = NULL; 
-                        
+                        _currentContext = NULL;
+
                         if (wasThreading) startThreading();
-                        
+
                         break;
                     }
                     default:
@@ -711,9 +783,9 @@ void Viewer::eventTraversal()
 
         }
     }
-    
 
-    // osg::notify(osg::NOTICE)<<"mouseEventState Xmin = "<<eventState->getXmin()<<" Ymin="<<eventState->getYmin()<<" xMax="<<eventState->getXmax()<<" Ymax="<<eventState->getYmax()<<std::endl;
+
+    // OSG_NOTICE<<"mouseEventState Xmin = "<<eventState->getXmin()<<" Ymin="<<eventState->getYmin()<<" xMax="<<eventState->getXmax()<<" Ymax="<<eventState->getYmax()<<std::endl;
 
 
     _eventQueue->frame( getFrameStamp()->getReferenceTime() );
@@ -721,7 +793,7 @@ void Viewer::eventTraversal()
 
 
 #if 0
-    // osg::notify(osg::NOTICE)<<"Events "<<events.size()<<std::endl;
+    // OSG_NOTICE<<"Events "<<events.size()<<std::endl;
     for(osgGA::EventQueue::Events::iterator itr = events.begin();
         itr != events.end();
         ++itr)
@@ -730,44 +802,44 @@ void Viewer::eventTraversal()
         switch(event->getEventType())
         {
             case(osgGA::GUIEventAdapter::PUSH):
-                osg::notify(osg::NOTICE)<<"  PUSH "<<event->getButton()<<" x="<<event->getX()<<" y="<<event->getY()<<std::endl;
+                OSG_NOTICE<<"  PUSH "<<event->getButton()<<" x="<<event->getX()<<" y="<<event->getY()<<std::endl;
                 break;
             case(osgGA::GUIEventAdapter::RELEASE):
-                osg::notify(osg::NOTICE)<<"  RELEASE "<<event->getButton()<<" x="<<event->getX()<<" y="<<event->getY()<<std::endl;
+                OSG_NOTICE<<"  RELEASE "<<event->getButton()<<" x="<<event->getX()<<" y="<<event->getY()<<std::endl;
                 break;
             case(osgGA::GUIEventAdapter::DRAG):
-                osg::notify(osg::NOTICE)<<"  DRAG "<<event->getButtonMask()<<" x="<<event->getX()<<" y="<<event->getY()<<std::endl;
+                OSG_NOTICE<<"  DRAG "<<event->getButtonMask()<<" x="<<event->getX()<<" y="<<event->getY()<<std::endl;
                 break;
             case(osgGA::GUIEventAdapter::MOVE):
-                osg::notify(osg::NOTICE)<<"  MOVE "<<event->getButtonMask()<<" x="<<event->getX()<<" y="<<event->getY()<<std::endl;
+                OSG_NOTICE<<"  MOVE "<<event->getButtonMask()<<" x="<<event->getX()<<" y="<<event->getY()<<std::endl;
                 break;
             case(osgGA::GUIEventAdapter::SCROLL):
-                osg::notify(osg::NOTICE)<<"  SCROLL "<<event->getScrollingMotion()<<std::endl;
+                OSG_NOTICE<<"  SCROLL "<<event->getScrollingMotion()<<std::endl;
                 break;
             case(osgGA::GUIEventAdapter::KEYDOWN):
-                osg::notify(osg::NOTICE)<<"  KEYDOWN '"<<(char)event->getKey()<<"'"<<std::endl;
+                OSG_NOTICE<<"  KEYDOWN '"<<(char)event->getKey()<<"'"<<std::endl;
                 break;
             case(osgGA::GUIEventAdapter::KEYUP):
-                osg::notify(osg::NOTICE)<<"  KEYUP '"<<(char)event->getKey()<<"'"<<std::endl;
+                OSG_NOTICE<<"  KEYUP '"<<(char)event->getKey()<<"'"<<std::endl;
                 break;
             case(osgGA::GUIEventAdapter::RESIZE):
-                osg::notify(osg::NOTICE)<<"  RESIZE "<<event->getWindowX()<<"/"<<event->getWindowY()<<" x "<<event->getWindowWidth()<<"/"<<event->getWindowHeight() << std::endl;
+                OSG_NOTICE<<"  RESIZE "<<event->getWindowX()<<"/"<<event->getWindowY()<<" x "<<event->getWindowWidth()<<"/"<<event->getWindowHeight() << std::endl;
                 break;
             case(osgGA::GUIEventAdapter::QUIT_APPLICATION):
-                osg::notify(osg::NOTICE)<<"  QUIT_APPLICATION " << std::endl;
+                OSG_NOTICE<<"  QUIT_APPLICATION " << std::endl;
                 break;
             case(osgGA::GUIEventAdapter::FRAME):
-                // osg::notify(osg::NOTICE)<<"  FRAME "<<std::endl;
+                // OSG_NOTICE<<"  FRAME "<<std::endl;
                 break;
             default:
-                // osg::notify(osg::NOTICE)<<"  Event not handled"<<std::endl;
+                // OSG_NOTICE<<"  Event not handled"<<std::endl;
                 break;
         }
     }
 #endif
 
-    // osg::notify(osg::NOTICE)<<"Events "<<events.size()<<std::endl;
-    
+    // OSG_NOTICE<<"Events "<<events.size()<<std::endl;
+
     if ((_keyEventSetsDone!=0) || _quitEventSetsDone)
     {
         for(osgGA::EventQueue::Events::iterator itr = events.begin();
@@ -780,17 +852,17 @@ void Viewer::eventTraversal()
                 case(osgGA::GUIEventAdapter::KEYUP):
                     if (_keyEventSetsDone && event->getKey()==_keyEventSetsDone) _done = true;
                     break;
-                
+
                 case(osgGA::GUIEventAdapter::QUIT_APPLICATION):
                     if (_quitEventSetsDone) _done = true;
                     break;
-                    
+
                 default:
                     break;
             }
         }
     }
-        
+
     if (_done) return;
 
     if (_eventVisitor.valid() && getSceneData())
@@ -809,7 +881,19 @@ void Viewer::eventTraversal()
 
             getSceneData()->accept(*_eventVisitor);
 
-            // call any camera update callbacks, but only traverse that callback, don't traverse its subgraph
+            // Do EventTraversal for slaves with their own subgraph
+            for(unsigned int i=0; i<getNumSlaves(); ++i)
+            {
+                osg::View::Slave& slave = getSlave(i);
+                osg::Camera* camera = slave._camera.get();
+                if(camera && !slave._useMastersSceneData)
+                {
+                    camera->accept(*_eventVisitor);
+                }
+            }
+
+
+            // call any camera event callbacks, but only traverse that callback, don't traverse its subgraph
             // leave that to the scene update traversal.
             osg::NodeVisitor::TraversalMode tm = _eventVisitor->getTraversalMode();
             _eventVisitor->setTraversalMode(osg::NodeVisitor::TRAVERSE_NONE);
@@ -818,8 +902,12 @@ void Viewer::eventTraversal()
 
             for(unsigned int i=0; i<getNumSlaves(); ++i)
             {
-                osg::Camera* camera = getSlave(i)._camera.get();
-                if (camera && camera->getEventCallback()) camera->accept(*_eventVisitor);
+                osg::View::Slave& slave = getSlave(i);
+                osg::Camera* camera = slave._camera.get();
+                if (camera && slave._useMastersSceneData && camera->getEventCallback())
+                {
+                    camera->accept(*_eventVisitor);
+                }
             }
 
             _eventVisitor->setTraversalMode(tm);
@@ -840,7 +928,7 @@ void Viewer::eventTraversal()
         {
             (*hitr)->handleWithCheckAgainstIgnoreHandledEventsMask( *event, *this, 0, 0);
         }
-        
+
     }
 
     for(osgGA::EventQueue::Events::iterator itr = events.begin();
@@ -853,7 +941,7 @@ void Viewer::eventTraversal()
             _cameraManipulator->handleWithCheckAgainstIgnoreHandledEventsMask( *event, *this);
         }
     }
-    
+
     if (getViewerStats() && getViewerStats()->collectStats("event"))
     {
         double endEventTraversal = osg::Timer::instance()->delta_s(_startTick, osg::Timer::instance()->tick());
@@ -892,6 +980,25 @@ void Viewer::updateTraversal()
         _updateOperations->runOperations(this);
     }
 
+    if (_incrementalCompileOperation.valid())
+    {
+        // merge subgraphs that have been compiled by the incremental compiler operation.
+        _incrementalCompileOperation->mergeCompiledSubgraphs();
+    }
+
+    {
+        // Do UpdateTraversal for slaves with their own subgraph
+        for(unsigned int i=0; i<getNumSlaves(); ++i)
+        {
+            osg::View::Slave& slave = getSlave(i);
+            osg::Camera* camera = slave._camera.get();
+            if(camera && !slave._useMastersSceneData)
+            {
+                camera->accept(*_updateVisitor);
+            }
+        }
+    }
+
     {
         // call any camera update callbacks, but only traverse that callback, don't traverse its subgraph
         // leave that to the scene update traversal.
@@ -902,8 +1009,12 @@ void Viewer::updateTraversal()
 
         for(unsigned int i=0; i<getNumSlaves(); ++i)
         {
-            osg::Camera* camera = getSlave(i)._camera.get();
-            if (camera && camera->getUpdateCallback()) camera->accept(*_updateVisitor);
+            osg::View::Slave& slave = getSlave(i);
+            osg::Camera* camera = slave._camera.get();
+            if (camera && slave._useMastersSceneData && camera->getUpdateCallback())
+            {
+                camera->accept(*_updateVisitor);
+            }
         }
 
         _updateVisitor->setTraversalMode(tm);
@@ -948,14 +1059,14 @@ void Viewer::getAllThreads(Threads& threads, bool onlyActive)
 
     OperationThreads operationThreads;
     getOperationThreads(operationThreads);
-    
+
     for(OperationThreads::iterator itr = operationThreads.begin();
         itr != operationThreads.end();
         ++itr)
     {
         threads.push_back(*itr);
     }
-    
+
 
     if (_scene.valid())
     {
@@ -978,7 +1089,7 @@ void Viewer::getAllThreads(Threads& threads, bool onlyActive)
 void Viewer::getOperationThreads(OperationThreads& threads, bool onlyActive)
 {
     threads.clear();
-    
+
     Contexts contexts;
     getContexts(contexts);
     for(Contexts::iterator gcitr = contexts.begin();
@@ -986,13 +1097,13 @@ void Viewer::getOperationThreads(OperationThreads& threads, bool onlyActive)
         ++gcitr)
     {
         osg::GraphicsContext* gc = *gcitr;
-        if (gc->getGraphicsThread() && 
+        if (gc->getGraphicsThread() &&
             (!onlyActive || gc->getGraphicsThread()->isRunning()) )
         {
             threads.push_back(gc->getGraphicsThread());
         }
     }
-    
+
     Cameras cameras;
     getCameras(cameras);
     for(Cameras::iterator citr = cameras.begin();
@@ -1000,13 +1111,13 @@ void Viewer::getOperationThreads(OperationThreads& threads, bool onlyActive)
         ++citr)
     {
         osg::Camera* camera = *citr;
-        if (camera->getCameraThread() && 
+        if (camera->getCameraThread() &&
             (!onlyActive || camera->getCameraThread()->isRunning()) )
         {
             threads.push_back(camera->getCameraThread());
         }
     }
-    
+
 }
 
 void Viewer::getContexts(Contexts& contexts, bool onlyValid)
@@ -1016,14 +1127,14 @@ void Viewer::getContexts(Contexts& contexts, bool onlyValid)
 
     contexts.clear();
 
-    if (_camera.valid() && 
-        _camera->getGraphicsContext() && 
+    if (_camera.valid() &&
+        _camera->getGraphicsContext() &&
         (_camera->getGraphicsContext()->valid() || !onlyValid))
     {
         contextSet.insert(_camera->getGraphicsContext());
         contexts.push_back(_camera->getGraphicsContext());
     }
-    
+
     for(unsigned int i=0; i<getNumSlaves(); ++i)
     {
         Slave& slave = getSlave(i);
@@ -1042,8 +1153,8 @@ void Viewer::getContexts(Contexts& contexts, bool onlyValid)
 void Viewer::getCameras(Cameras& cameras, bool onlyActive)
 {
     cameras.clear();
-    
-    if (_camera.valid() && 
+
+    if (_camera.valid() &&
         (!onlyActive || (_camera->getGraphicsContext() && _camera->getGraphicsContext()->valid())) ) cameras.push_back(_camera.get());
 
     for(Slaves::iterator itr = _slaves.begin();

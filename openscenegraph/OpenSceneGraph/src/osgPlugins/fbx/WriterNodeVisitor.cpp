@@ -12,21 +12,18 @@
  * The OSG homepage is http://www.openscenegraph.org/
  */
 
+#include <climits>                     // required for UINT_MAX
 #include <cassert>
-#include <sstream>
-#include <map>
 #include <osg/CullFace>
-#include <osg/Math>
 #include <osg/MatrixTransform>
 #include <osg/NodeVisitor>
 #include <osg/PrimitiveSet>
 #include <osgDB/FileUtils>
 #include <osgDB/WriteFile>
 #include "WriterNodeVisitor.h"
-#include <limits.h>
 
 
-// Use namespace qualification to avoid static-link symbol collitions
+// Use namespace qualification to avoid static-link symbol collisions
 // from multiply defined symbols.
 namespace pluginfbx
 {
@@ -46,9 +43,19 @@ public:
         _lastFaceIndex(0),
         _listTriangles(listTriangles),
         _drawable_n(drawable_n),
-        _material(material)
+        _material(material),
+        //_iPrimitiveSet(iPrimitiveSet),
+        _curNormalIndex(0),
+        _normalBinding(geo->getNormalBinding())
     {
+        if (!geo->getNormalArray() || geo->getNormalArray()->getNumElements()==0)
+        {
+            _normalBinding = osg::Geometry::BIND_OFF;        // Turn off binding if there is no normal data
+        }
+        reset();
     }
+
+    void reset() { _curNormalIndex = 0; }
 
     unsigned int getNextFaceIndex() { return _lastFaceIndex; }
 
@@ -71,6 +78,16 @@ public:
         triangle.t1 = i1;
         triangle.t2 = i2;
         triangle.t3 = i3;
+        if (_normalBinding == osg::Geometry::BIND_PER_VERTEX){
+            triangle.normalIndex1 = i1;
+            triangle.normalIndex2 = i2;
+            triangle.normalIndex3 = i3;
+        }
+        else{
+            triangle.normalIndex1 = _curNormalIndex;
+            triangle.normalIndex2 = _curNormalIndex;
+            triangle.normalIndex3 = _curNormalIndex;
+        }
         triangle.material = _material;
         _listTriangles.push_back(std::make_pair(triangle, _drawable_n));
     }
@@ -124,8 +141,10 @@ protected:
             {
                 IndexPointer ilast = indices + count;
                 for (IndexPointer iptr = indices; iptr < ilast; iptr+=3)
+                {
                     writeTriangle(iptr[0], iptr[1], iptr[2]);
-
+                    if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
+                }
                 break;
             }
         case GL_TRIANGLE_STRIP:
@@ -136,6 +155,7 @@ protected:
                     if (i & 1) writeTriangle(iptr[0], iptr[2], iptr[1]);
                     else       writeTriangle(iptr[0], iptr[1], iptr[2]);
                 }
+                if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
                 break;
             }
         case GL_QUADS:
@@ -145,6 +165,7 @@ protected:
                 {
                     writeTriangle(iptr[0], iptr[1], iptr[2]);
                     writeTriangle(iptr[0], iptr[2], iptr[3]);
+                    if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
                 }
                 break;
             }
@@ -156,6 +177,7 @@ protected:
                     writeTriangle(iptr[0], iptr[1], iptr[2]);
                     writeTriangle(iptr[1], iptr[3], iptr[2]);
                 }
+                if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
                 break;
             }
         case GL_POLYGON: // treat polygons as GL_TRIANGLE_FAN
@@ -168,6 +190,7 @@ protected:
                 {
                     writeTriangle(first, iptr[0], iptr[1]);
                 }
+                if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
                 break;
             }
         case GL_POINTS:
@@ -180,10 +203,11 @@ protected:
             // uhm should never come to this point :)
             break;
         }
+        if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE_SET) ++_curNormalIndex;
     }
 
 private:
-    PrimitiveIndexWriter& operator = (const PrimitiveIndexWriter&) { return *this; }
+    PrimitiveIndexWriter& operator = (const PrimitiveIndexWriter&); // { return *this; }
 
     unsigned int         _drawable_n;
     ListTriangle&        _listTriangles;
@@ -193,6 +217,8 @@ private:
     const osg::Geometry* _geo;
     unsigned int         _lastFaceIndex;
     int                  _material;
+    unsigned int         _curNormalIndex;
+    osg::Geometry::AttributeBinding _normalBinding;
     KFbxMesh*            _mesh;
 };
 
@@ -205,6 +231,7 @@ void PrimitiveIndexWriter::drawArrays(GLenum mode,GLint first,GLsizei count)
         for (GLsizei i = 2; i < count; i += 3, pos += 3)
         {
             writeTriangle(pos, pos + 1, pos + 2);
+            if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
         }
         break;
     case GL_TRIANGLE_STRIP:
@@ -213,12 +240,14 @@ void PrimitiveIndexWriter::drawArrays(GLenum mode,GLint first,GLsizei count)
             if (i & 1) writeTriangle(pos, pos + 2, pos + 1);
             else       writeTriangle(pos, pos + 1, pos + 2);
         }
+        if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
         break;
     case GL_QUADS:
         for (GLsizei i = 3; i < count; i += 4, pos += 4)
         {
             writeTriangle(pos, pos + 1, pos + 2);
             writeTriangle(pos, pos + 2, pos + 3);
+            if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
         }
         break;
     case GL_QUAD_STRIP:
@@ -227,6 +256,7 @@ void PrimitiveIndexWriter::drawArrays(GLenum mode,GLint first,GLsizei count)
             writeTriangle(pos, pos + 1, pos + 2);
             writeTriangle(pos + 1, pos + 3, pos + 2);
         }
+        if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
         break;
     case GL_POLYGON: // treat polygons as GL_TRIANGLE_FAN
     case GL_TRIANGLE_FAN:
@@ -235,15 +265,17 @@ void PrimitiveIndexWriter::drawArrays(GLenum mode,GLint first,GLsizei count)
         {
             writeTriangle(first, pos, pos+1);
         }
+        if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE) ++_curNormalIndex;
         break;
     case GL_POINTS:
     case GL_LINES:
     case GL_LINE_STRIP:
     case GL_LINE_LOOP:
     default:
-        osg::notify(osg::WARN) << "WriterNodeVisitor :: can't handle mode " << mode << std::endl;
+        OSG_WARN << "WriterNodeVisitor :: can't handle mode " << mode << std::endl;
         break;
     }
+    if (_normalBinding == osg::Geometry::BIND_PER_PRIMITIVE_SET) ++_curNormalIndex;
 }
 
 // If 'to' is in a subdirectory of 'from' then this function returns the
@@ -335,12 +367,12 @@ WriterNodeVisitor::Material::Material(WriterNodeVisitor& writerNodeVisitor,
             osg::CullFace::Mode mode = static_cast<const osg::CullFace*>(attribute)->getMode();
             if (mode == osg::CullFace::FRONT)
             {
-                osg::notify(osg::WARN) << "FBX Writer: Reversed face (culled FRONT) not supported yet." << std::endl;
+                OSG_WARN << "FBX Writer: Reversed face (culled FRONT) not supported yet." << std::endl;
             }
             else if (mode != osg::CullFace::BACK)
             {
                 assert(mode == osg::CullFace::FRONT_AND_BACK);
-                osg::notify(osg::WARN) << "FBX Writer: Invisible face (culled FRONT_AND_BACK) not supported yet." << std::endl;
+                OSG_WARN << "FBX Writer: Invisible face (culled FRONT_AND_BACK) not supported yet." << std::endl;
             }
         }
 
@@ -405,6 +437,10 @@ WriterNodeVisitor::Material::Material(WriterNodeVisitor& writerNodeVisitor,
                 destPath = osgDB::getRealPath(osgDB::convertFileNameToNativeStyle( osgDB::concatPaths(_directory, relativePath) ));
                 if (destPath != canonicalPath)
                 {
+                    if (!osgDB::makeDirectoryForFile(destPath))
+                    {
+                        OSG_NOTICE << "Can't create directory for file '" << destPath << "'. May fail creating the image file." << std::endl;
+                    }
                     osgDB::writeImageFile(*_osgImage, destPath);
                 }
             }
@@ -422,7 +458,7 @@ WriterNodeVisitor::Material::Material(WriterNodeVisitor& writerNodeVisitor,
 
 int WriterNodeVisitor::processStateSet(const osg::StateSet* ss)
 {
-    //osg::notify(osg::ALWAYS) << "Trying Adding " << ss->getAttribute(osg::StateAttribute::MATERIAL)->getName() << std::endl;
+    //OSG_ALWAYS << "Trying Adding " << ss->getAttribute(osg::StateAttribute::MATERIAL)->getName() << std::endl;
     MaterialMap::iterator itr = _materialMap.find(MaterialMap::key_type(ss));
     if (itr != _materialMap.end())
     {
@@ -445,27 +481,26 @@ int WriterNodeVisitor::processStateSet(const osg::StateSet* ss)
     return -1;
 }
 
-/**
-*  Add a vertex to the index and link him with the Triangle index and the drawable.
-*  \param index_vert is the map where the vertices are stored.
-*  \param index is the index of the vertices position in the vec3.
-*  \param drawable_n is the number of the drawable.
-*  \return the position of the vertex in the final mesh.
-*/
-unsigned int
-WriterNodeVisitor::getMeshIndexForGeometryIndex(MapIndices& index_vert,
-                                                unsigned int index,
-                                                unsigned int drawable_n)
+unsigned int addPolygon(MapIndices & index_vert, unsigned int vertIndex, unsigned int normIndex, unsigned int drawableNum)
 {
-    MapIndices::iterator itIndex = index_vert.find(std::make_pair(index, drawable_n));
+    VertexIndex vert(vertIndex, drawableNum, normIndex);
+    MapIndices::iterator itIndex = index_vert.find(vert);
     if (itIndex == index_vert.end())
     {
         unsigned int indexMesh = index_vert.size();
-        index_vert.insert(std::make_pair(std::make_pair(index, drawable_n), indexMesh));
+        index_vert.insert(std::make_pair(vert, indexMesh));
         return indexMesh;
     }
     return itIndex->second;
 }
+
+void addPolygon(KFbxMesh * mesh, MapIndices & index_vert, const Triangle & tri, unsigned int drawableNum)
+{
+    mesh->AddPolygon(addPolygon(index_vert, tri.t1, tri.normalIndex1, drawableNum));
+    mesh->AddPolygon(addPolygon(index_vert, tri.t2, tri.normalIndex2, drawableNum));
+    mesh->AddPolygon(addPolygon(index_vert, tri.t3, tri.normalIndex3, drawableNum));
+}
+
 
 void
 WriterNodeVisitor::setLayerTextureAndMaterial(KFbxMesh* mesh)
@@ -491,7 +526,7 @@ WriterNodeVisitor::setLayerTextureAndMaterial(KFbxMesh* mesh)
         }
     }
     mesh->GetLayer(0)->SetMaterials(lMaterialLayer);
-    mesh->GetLayer(0)->SetDiffuseTextures(lTextureDiffuseLayer);
+    mesh->GetLayer(0)->SetTextures(KFbxLayerElement::eDIFFUSE_TEXTURES, lTextureDiffuseLayer);
 }
 
 void
@@ -502,6 +537,7 @@ WriterNodeVisitor::setControlPointAndNormalsAndUV(const osg::Geode& geo,
 {
     mesh->InitControlPoints(index_vert.size());
     KFbxLayerElementNormal* lLayerElementNormal= KFbxLayerElementNormal::Create(mesh, "");
+    // For now, FBX writer only supports normals bound per vertices
     lLayerElementNormal->SetMappingMode(KFbxLayerElement::eBY_CONTROL_POINT);
     lLayerElementNormal->SetReferenceMode(KFbxLayerElement::eDIRECT);
     lLayerElementNormal->GetDirectArray().SetCount(index_vert.size());
@@ -518,53 +554,101 @@ WriterNodeVisitor::setControlPointAndNormalsAndUV(const osg::Geode& geo,
 
     for (MapIndices::iterator it = index_vert.begin(); it != index_vert.end(); ++it)
     {
-        const osg::Geometry* pGeometry = geo.getDrawable(it->first.second)->asGeometry();
-        assert(pGeometry->getVertexArray());
+        const osg::Geometry* pGeometry = geo.getDrawable(it->first.drawableIndex)->asGeometry();
+        unsigned int vertexIndex = it->first.vertexIndex;
+        unsigned int normalIndex = it->first.normalIndex;
 
-        if (pGeometry->getVertexArray()->getType() != osg::Array::Vec3ArrayType)
+        const osg::Array * basevecs = pGeometry->getVertexArray();
+        assert(basevecs);
+        if (!basevecs || basevecs->getNumElements()==0)
         {
-            throw "Vertex array is not Vec3. Not implemented";        // TODO
+            //OSG_NOTIFY()
+            continue;
         }
-
-        const osg::Vec3Array* vecs= static_cast<const osg::Vec3Array*>(pGeometry->getVertexArray());
-        if (vecs)
+        KFbxVector4 vertex;
+        if (basevecs->getType() == osg::Array::Vec3ArrayType)
         {
-            mesh->SetControlPointAt(*new KFbxVector4(
-                (*vecs)[it->first.first].x(),
-                (*vecs)[it->first.first].y(),
-                (*vecs)[it->first.first].z()), it->second);
+            const osg::Vec3  & vec = (*static_cast<const osg::Vec3Array  *>(basevecs))[vertexIndex];
+            // Sukender: "*new KFbxVector4"? Shouldn't it be "KFbxVector4" alone?
+            //mesh->SetControlPointAt(*new KFbxVector4(vec.x(), vec.y(), vec.z()), it->second);
+            vertex.Set(vec.x(), vec.y(), vec.z());
         }
-
-        const osg::Vec3Array* pNormals = static_cast<const osg::Vec3Array*>(pGeometry->getNormalArray());
-
-        if (pNormals)
+        else if (basevecs->getType() == osg::Array::Vec3dArrayType)
         {
-            switch (pGeometry->getNormalBinding())
+            const osg::Vec3d & vec = (*static_cast<const osg::Vec3dArray *>(basevecs))[vertexIndex];
+            // Sukender: "*new KFbxVector4"? Shouldn't it be "KFbxVector4" alone?
+            //mesh->SetControlPointAt(*new KFbxVector4(vec.x(), vec.y(), vec.z()), it->second);
+            vertex.Set(vec.x(), vec.y(), vec.z());
+        }
+        else
+        {
+            OSG_NOTIFY(osg::FATAL) << "Vertex array is not Vec3 or Vec3d. Not implemented" << std::endl;
+            throw "Vertex array is not Vec3 or Vec3d. Not implemented";
+            //_succeeded = false;
+            //return;
+        }
+        mesh->SetControlPointAt(vertex, it->second);
+
+
+        const osg::Array * basenormals = pGeometry->getNormalArray();
+
+        if (basenormals && basenormals->getNumElements()>0)
+        {
+            KFbxVector4 normal;
+            if (basenormals->getType() == osg::Array::Vec3ArrayType)
             {
-            case osg::Geometry::BIND_PER_PRIMITIVE_SET:
-            case osg::Geometry::BIND_PER_PRIMITIVE:
-                lLayerElementNormal->GetDirectArray().SetAt(it->second,
-                    KFbxVector4(
-                    (*pNormals)[0].x(),
-                    (*pNormals)[0].y(),
-                    (*pNormals)[0].z(), 0));
-                break;
+                const osg::Vec3  & vec = (*static_cast<const osg::Vec3Array  *>(basenormals))[normalIndex];
+                normal.Set(vec.x(), vec.y(), vec.z(), 0);
+            }
+            else if (basenormals->getType() == osg::Array::Vec3dArrayType)
+            {
+                const osg::Vec3d & vec = (*static_cast<const osg::Vec3dArray *>(basenormals))[normalIndex];
+                normal.Set(vec.x(), vec.y(), vec.z(), 0);
+            }
+            else
+            {
+                OSG_NOTIFY(osg::FATAL) << "Normal array is not Vec3 or Vec3d. Not implemented" << std::endl;
+                throw "Normal array is not Vec3 or Vec3d. Not implemented";
+                //_succeeded = false;
+                //return;
+            }
 
-            case osg::Geometry::BIND_PER_VERTEX:
-                lLayerElementNormal->GetDirectArray().SetAt(it->second,
-                    KFbxVector4(
-                    (*pNormals)[it->first.first].x(),
-                    (*pNormals)[it->first.first].y(),
-                    (*pNormals)[it->first.first].z(), 0));
-                break;
-            }   
+            //switch (pGeometry->getNormalBinding())
+            //{
+            //case osg::Geometry::BIND_PER_PRIMITIVE_SET:
+            //case osg::Geometry::BIND_PER_PRIMITIVE:
+            //case osg::Geometry::BIND_PER_VERTEX:
+            //    break;
+            //}   
+            lLayerElementNormal->GetDirectArray().SetAt(it->second, normal);
         }
 
         if (texcoords)
         {
-            const osg::Vec2Array* vec2= static_cast<const osg::Vec2Array*>(pGeometry->getTexCoordArray(0));
-            if (vec2)
-                lUVDiffuseLayer->GetDirectArray().SetAt(it->second, KFbxVector2((*vec2)[it->first.first].x(), (*vec2)[it->first.first].y()));
+            const osg::Array * basetexcoords = pGeometry->getTexCoordArray(0);
+            if (basetexcoords && basetexcoords->getNumElements()>0)
+            {
+                KFbxVector2 texcoord;
+                if (basetexcoords->getType() == osg::Array::Vec2ArrayType)
+                {
+                    const osg::Vec2 & vec = (*static_cast<const osg::Vec2Array *>(basetexcoords))[vertexIndex];
+                    texcoord.Set(vec.x(), vec.y());
+                }
+                else if (basetexcoords->getType() == osg::Array::Vec2dArrayType)
+                {
+                    const osg::Vec2d & vec = (*static_cast<const osg::Vec2dArray *>(basetexcoords))[vertexIndex];
+                    texcoord.Set(vec.x(), vec.y());
+                }
+                else
+                {
+                    OSG_NOTIFY(osg::FATAL) << "Texture coords array is not Vec2 or Vec2d. Not implemented" << std::endl;
+                    throw "Texture coords array is not Vec2 or Vec2d. Not implemented";
+                    //_succeeded = false;
+                    //return;
+                }
+
+                lUVDiffuseLayer->GetDirectArray().SetAt(it->second, texcoord);
+            }
         }
     }
 }
@@ -584,7 +668,7 @@ void WriterNodeVisitor::buildFaces(const osg::Geode& geo,
         lLayer = mesh->GetLayer(0);
     }
     setLayerTextureAndMaterial(mesh);
-    lLayer->GetDiffuseTextures()->GetIndexArray().SetCount(listTriangles.size());
+    lLayer->GetTextures(KFbxLayerElement::eDIFFUSE_TEXTURES)->GetIndexArray().SetCount(listTriangles.size());
     lLayer->GetMaterials()->GetIndexArray().SetCount(listTriangles.size());
 
     unsigned int i = 0;
@@ -597,12 +681,10 @@ void WriterNodeVisitor::buildFaces(const osg::Geode& geo,
         else
         {
             mesh->BeginPolygon(i);
-            lLayer->GetDiffuseTextures()->GetIndexArray().SetAt(i, it->first.material);
+            lLayer->GetTextures(KFbxLayerElement::eDIFFUSE_TEXTURES)->GetIndexArray().SetAt(i, it->first.material);
             lLayer->GetMaterials()->GetIndexArray().SetAt(i, it->first.material);
         }
-        mesh->AddPolygon(getMeshIndexForGeometryIndex(index_vert, it->first.t1, it->second));
-        mesh->AddPolygon(getMeshIndexForGeometryIndex(index_vert, it->first.t2, it->second));
-        mesh->AddPolygon(getMeshIndexForGeometryIndex(index_vert, it->first.t3, it->second));
+        addPolygon(mesh, index_vert, it->first, it->second);
         mesh->EndPolygon();
     }
     setControlPointAndNormalsAndUV(geo, index_vert, texcoords, mesh);
@@ -614,33 +696,23 @@ void WriterNodeVisitor::createListTriangle(const osg::Geometry* geo,
                                            unsigned int&        drawable_n)
 {
     unsigned int nbVertices = 0;
+    texcoords = false;
     {
-        if (geo->getVertexArray() && geo->getVertexArray()->getType() != osg::Array::Vec3ArrayType)
-        {
-            throw "Vertex array is not Vec3. Not implemented";        // TODO
-        }
-
-        const osg::Vec3Array* vecs = static_cast<const osg::Vec3Array*>(geo->getVertexArray());
+        const osg::Array * vecs = geo->getVertexArray();
         if (vecs)
         {
-            nbVertices = geo->getVertexArray()->getNumElements();
+            nbVertices = vecs->getNumElements();
+
             // Texture coords
-            if (geo->getTexCoordArray(0) && geo->getTexCoordArray(0)->getType() != osg::Array::Vec2ArrayType)
+            const osg::Array * texvec = geo->getTexCoordArray(0);
+            if (texvec)
             {
-                throw "Texture coords array is not Vec2. Not implemented";        // TODO
-            }
-
-            const osg::Vec2Array* texvecs = static_cast<const osg::Vec2Array*>(geo->getTexCoordArray(0));
-            if (texvecs)
-            {
-                unsigned int nb = geo->getTexCoordArray(0)->getNumElements();
-
-                if (nb != geo->getVertexArray()->getNumElements())
+                unsigned int nb = texvec->getNumElements();
+                if (nb == nbVertices) texcoords = true;
+                else
                 {
-                    throw "There are more/less texture coords than vertices!";
+                    OSG_WARN << "There are more/less texture coords than vertices! Ignoring texture coords.";
                 }
-
-                texcoords = true;
             }
         }
     }
@@ -649,10 +721,10 @@ void WriterNodeVisitor::createListTriangle(const osg::Geometry* geo,
 
     int material = processStateSet(_currentStateSet.get());   
 
-    for (unsigned int i = 0; i < geo->getNumPrimitiveSets(); ++i) //Fill the Triangle List
+    PrimitiveIndexWriter pif(geo, listTriangles, drawable_n, material);
+    for (unsigned int iPrimSet = 0; iPrimSet < geo->getNumPrimitiveSets(); ++iPrimSet) //Fill the Triangle List
     {
-        const osg::PrimitiveSet* ps = geo->getPrimitiveSet(i);
-        PrimitiveIndexWriter pif(geo, listTriangles, drawable_n, material);
+        const osg::PrimitiveSet* ps = geo->getPrimitiveSet(iPrimSet);
         const_cast<osg::PrimitiveSet*>(ps)->accept(pif);
     }
 }
@@ -663,19 +735,15 @@ void WriterNodeVisitor::apply(osg::Geode& node)
     KFbxNode* nodeFBX = KFbxNode::Create(_pSdkManager, node.getName().empty() ? "DefaultName" : node.getName().c_str());
     _curFbxNode->AddChild(nodeFBX);
     _curFbxNode = nodeFBX;
-    if (false)
-    {
-        KFbxProperty lProperty = KFbxProperty::Create(_curFbxNode, "nameGeode", DTString, "label2");
-        std::ostringstream oss;
-        oss << node.getName().c_str() << ".metaData";
-        lProperty.Set(new KString(oss.str().c_str()), eSTRING);
-    }
     unsigned int count = node.getNumDrawables();
     ListTriangle listTriangles;
     bool texcoords = false;
     for (MaterialMap::iterator it = _materialMap.begin(); it != _materialMap.end(); ++it)
         it->second.setIndex(-1);
     _lastMaterialIndex = 0;
+    if(node.getStateSet()){
+        pushStateSet(node.getStateSet());
+    }
     for (unsigned int i = 0; i < count; ++i)
     {
         const osg::Geometry* g = node.getDrawable(i)->asGeometry();
@@ -685,7 +753,10 @@ void WriterNodeVisitor::apply(osg::Geode& node)
             createListTriangle(g, listTriangles, texcoords, i);
             popStateSet(g->getStateSet());
         }
-    }   
+    }
+    if(node.getStateSet()){
+        popStateSet(node.getStateSet());
+    }
     if (count > 0)
     {
         buildFaces(node, listTriangles, texcoords);
@@ -702,13 +773,6 @@ void WriterNodeVisitor::apply(osg::Group& node)
     KFbxNode* nodeFBX = KFbxNode::Create(_pSdkManager, node.getName().empty() ? "DefaultName" : node.getName().c_str());
     _curFbxNode->AddChild(nodeFBX);
     _curFbxNode = nodeFBX;
-    if (false)
-    {
-        KFbxProperty lProperty = KFbxProperty::Create(_curFbxNode, "nameGeode", DTString, "label2");
-        std::ostringstream oss;
-        oss << node.getName().c_str() << ".metaData";
-        lProperty.Set(new KString(oss.str().c_str()), eSTRING);
-    }
     traverse(node);
     _curFbxNode = parent;
 }
@@ -718,13 +782,6 @@ void WriterNodeVisitor::apply(osg::MatrixTransform& node)
     KFbxNode* parent = _curFbxNode;
     _curFbxNode = KFbxNode::Create(_pSdkManager, node.getName().empty() ? "DefaultName" : node.getName().c_str());
     parent->AddChild(_curFbxNode);
-    if (false)
-    {
-        KFbxProperty lProperty = KFbxProperty::Create(_curFbxNode, "nameGeode", DTString, "label2");
-        std::ostringstream oss;
-        oss << node.getName().c_str() << ".metaData";
-        lProperty.Set(new KString(oss.str().c_str()), eSTRING);
-    }
 
     const osg::Matrix& matrix = node.getMatrix();
     osg::Vec3d pos, scl;

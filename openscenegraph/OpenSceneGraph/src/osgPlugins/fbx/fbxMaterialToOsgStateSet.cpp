@@ -14,16 +14,23 @@ static osg::Texture::WrapMode convertWrap(KFbxTexture::EWrapMode wrap)
 StateSetContent
 FbxMaterialToOsgStateSet::convert(const KFbxSurfaceMaterial* pFbxMat)
 {
-    KFbxMaterialMap::const_iterator it = _kFbxMaterialMap.find(pFbxMat);
-    if (it != _kFbxMaterialMap.end())
+    FbxMaterialMap::const_iterator it = _fbxMaterialMap.find(pFbxMat);
+    if (it != _fbxMaterialMap.end())
         return it->second;
     static int nbMat = 0;
+
     osg::ref_ptr<osg::Material> pOsgMat = new osg::Material;
-    osg::ref_ptr<osg::Texture2D> pOsgTex = NULL;
     pOsgMat->setName(pFbxMat->GetName());
+    
+    StateSetContent result;
+
+    result.material = pOsgMat;
+
+    fbxString shadingModel = pFbxMat->GetShadingModel().Get();
 
     const KFbxSurfaceLambert* pFbxLambert = dynamic_cast<const KFbxSurfaceLambert*>(pFbxMat);
 
+    // diffuse map...
     const KFbxProperty lProperty = pFbxMat->FindProperty(KFbxSurfaceMaterial::sDiffuse);
     if (lProperty.IsValid())
     {
@@ -33,13 +40,84 @@ FbxMaterialToOsgStateSet::convert(const KFbxSurfaceMaterial* pFbxMat)
             KFbxTexture* lTexture = KFbxCast<KFbxTexture>(lProperty.GetSrcObject(KFbxTexture::ClassId, lTextureIndex));
             if (lTexture)
             {
-                pOsgTex = fbxTextureToOsgTexture(lTexture);
+                result.diffuseTexture = fbxTextureToOsgTexture(lTexture);
+                result.diffuseChannel = lTexture->UVSet.Get();
+                result.diffuseScaleU = lTexture->GetScaleU();
+                result.diffuseScaleV = lTexture->GetScaleV();
             }
 
             //For now only allow 1 texture
             break;
         }
     }
+
+    // opacity map...
+    const KFbxProperty lOpacityProperty = pFbxMat->FindProperty(KFbxSurfaceMaterial::sTransparentColor);
+    if (lOpacityProperty.IsValid())
+    {
+        int lNbTex = lOpacityProperty.GetSrcObjectCount(KFbxTexture::ClassId);
+        for (int lTextureIndex = 0; lTextureIndex < lNbTex; lTextureIndex++)
+        {
+            KFbxTexture* lTexture = KFbxCast<KFbxTexture>(lOpacityProperty.GetSrcObject(KFbxTexture::ClassId, lTextureIndex));
+            if (lTexture)
+            {
+                // TODO: if texture image does NOT have an alpha channel, should it be added?
+
+                result.opacityTexture = fbxTextureToOsgTexture(lTexture);
+                result.opacityChannel = lTexture->UVSet.Get();
+                result.opacityScaleU = lTexture->GetScaleU();
+                result.opacityScaleV = lTexture->GetScaleV();
+            }
+
+            //For now only allow 1 texture
+            break;
+        }
+    }
+
+    // reflection map...
+    const KFbxProperty lReflectionProperty = pFbxMat->FindProperty(KFbxSurfaceMaterial::sReflection);
+    if (lReflectionProperty.IsValid())
+    {
+        int lNbTex = lReflectionProperty.GetSrcObjectCount(KFbxTexture::ClassId);
+        for (int lTextureIndex = 0; lTextureIndex < lNbTex; lTextureIndex++)
+        {
+            KFbxTexture* lTexture = KFbxCast<KFbxTexture>(lReflectionProperty.GetSrcObject(KFbxTexture::ClassId, lTextureIndex));
+            if (lTexture)
+            {
+                // support only spherical reflection maps...
+                if (KFbxTexture::eUMT_ENVIRONMENT == lTexture->GetMappingType())
+                {
+                    result.reflectionTexture = fbxTextureToOsgTexture(lTexture);
+                    result.reflectionChannel = lTexture->UVSet.Get();
+                }
+            }
+
+            //For now only allow 1 texture
+            break;
+        }
+    }
+
+    // emissive map...
+    const KFbxProperty lEmissiveProperty = pFbxMat->FindProperty(KFbxSurfaceMaterial::sEmissive);
+    if (lEmissiveProperty.IsValid())
+    {
+        int lNbTex = lEmissiveProperty.GetSrcObjectCount(KFbxTexture::ClassId);
+        for (int lTextureIndex = 0; lTextureIndex < lNbTex; lTextureIndex++)
+        {
+            KFbxTexture* lTexture = KFbxCast<KFbxTexture>(lEmissiveProperty.GetSrcObject(KFbxTexture::ClassId, lTextureIndex));
+            if (lTexture)
+            {
+                result.emissiveTexture = fbxTextureToOsgTexture(lTexture);
+                result.emissiveChannel = lTexture->UVSet.Get();
+                result.emissiveScaleU = lTexture->GetScaleU();
+                result.emissiveScaleV = lTexture->GetScaleV();
+            }
+
+            //For now only allow 1 texture
+            break;
+        }
+    }
+
     if (pFbxLambert)
     {
         fbxDouble3 color = pFbxLambert->GetDiffuseColor().Get();
@@ -78,10 +156,28 @@ FbxMaterialToOsgStateSet::convert(const KFbxSurfaceMaterial* pFbxMat)
 
             pOsgMat->setShininess(osg::Material::FRONT_AND_BACK,
                 static_cast<float>(pFbxPhong->GetShininess().Get()));
+
+            // get maps factors...
+            result.diffuseFactor = pFbxPhong->GetDiffuseFactor().Get();
+            result.reflectionFactor = pFbxPhong->GetReflectionFactor().Get();
+            result.opacityFactor = pFbxPhong->GetTransparencyFactor().Get();
+            // get more factors here...
         }
     }
-    StateSetContent result(pOsgMat.release(), pOsgTex.release());
-    _kFbxMaterialMap.insert(KFbxMaterialMap::value_type(pFbxMat, result));
+
+    if (_lightmapTextures)
+    {
+        // if using an emission map then adjust material properties accordingly...
+        if (result.emissiveTexture)
+        {
+            osg::Vec4 diffuse = pOsgMat->getDiffuse(osg::Material::FRONT_AND_BACK);
+            pOsgMat->setEmission(osg::Material::FRONT_AND_BACK, diffuse);
+            pOsgMat->setDiffuse(osg::Material::FRONT_AND_BACK, osg::Vec4(0,0,0,diffuse.a()));
+            pOsgMat->setAmbient(osg::Material::FRONT_AND_BACK, osg::Vec4(0,0,0,diffuse.a()));
+        }
+    }
+
+    _fbxMaterialMap.insert(FbxMaterialMap::value_type(pFbxMat, result));
     return result;
 }
 
@@ -104,7 +200,7 @@ FbxMaterialToOsgStateSet::fbxTextureToOsgTexture(const KFbxTexture* fbx)
         pOsgTex->setWrap(osg::Texture2D::WRAP_S, convertWrap(fbx->GetWrapModeU()));
         pOsgTex->setWrap(osg::Texture2D::WRAP_T, convertWrap(fbx->GetWrapModeV()));
         _imageMap.insert(std::make_pair(fbx->GetFileName(), pOsgTex.get()));
-        return pOsgTex.release();
+        return pOsgTex;
     }
     else
     {
@@ -115,9 +211,9 @@ FbxMaterialToOsgStateSet::fbxTextureToOsgTexture(const KFbxTexture* fbx)
 void FbxMaterialToOsgStateSet::checkInvertTransparency()
 {
     int zeroAlpha = 0, oneAlpha = 0;
-    for (KFbxMaterialMap::const_iterator it = _kFbxMaterialMap.begin(); it != _kFbxMaterialMap.end(); ++it)
+    for (FbxMaterialMap::const_iterator it = _fbxMaterialMap.begin(); it != _fbxMaterialMap.end(); ++it)
     {
-        const osg::Material* pMaterial = it->second.first;
+        const osg::Material* pMaterial = it->second.material.get();
         float alpha = pMaterial->getDiffuse(osg::Material::FRONT).a();
         if (alpha > 0.999f)
         {
@@ -133,9 +229,9 @@ void FbxMaterialToOsgStateSet::checkInvertTransparency()
     {
         //Transparency values seem to be back to front so invert them.
 
-        for (KFbxMaterialMap::const_iterator it = _kFbxMaterialMap.begin(); it != _kFbxMaterialMap.end(); ++it)
+        for (FbxMaterialMap::const_iterator it = _fbxMaterialMap.begin(); it != _fbxMaterialMap.end(); ++it)
         {
-            osg::Material* pMaterial = it->second.first;
+            osg::Material* pMaterial = it->second.material.get();
             osg::Vec4 diffuse = pMaterial->getDiffuse(osg::Material::FRONT);
             diffuse.a() = 1.0f - diffuse.a();
             pMaterial->setDiffuse(osg::Material::FRONT_AND_BACK, diffuse);

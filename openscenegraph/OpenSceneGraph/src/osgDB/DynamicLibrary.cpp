@@ -27,7 +27,7 @@
 #include <mach-o/dyld.h>
 #else // all other unix
 #include <unistd.h>
-#ifdef __hpux__
+#ifdef __hpux
 // Although HP-UX has dlopen() it is broken! We therefore need to stick
 // to shl_load()/shl_unload()/shl_findsym()
 #include <dl.h>
@@ -38,31 +38,32 @@
 #endif
 
 #include <osg/Notify>
+#include <osg/GLExtensions>
 
 #include <osgDB/DynamicLibrary>
 #include <osgDB/FileUtils>
 #include <osgDB/FileNameUtils>
+#include <osgDB/ConvertUTF>
 
-using namespace osg;
 using namespace osgDB;
 
 DynamicLibrary::DynamicLibrary(const std::string& name, HANDLE handle)
 {
     _name = name;
     _handle = handle;
-    osg::notify(osg::INFO)<<"Opened DynamicLibrary "<<_name<<std::endl;
+    OSG_INFO<<"Opened DynamicLibrary "<<_name<<std::endl;
 }
 
 DynamicLibrary::~DynamicLibrary()
 {
     if (_handle)
     {
-        osg::notify(osg::INFO)<<"Closing DynamicLibrary "<<_name<<std::endl;
+        OSG_INFO<<"Closing DynamicLibrary "<<_name<<std::endl;
 #if defined(WIN32) && !defined(__CYGWIN__)
         FreeLibrary((HMODULE)_handle);
 #elif defined(__APPLE__) && defined(APPLE_PRE_10_3)
         NSUnLinkModule(static_cast<NSModule>(_handle), FALSE);
-#elif defined(__hpux__)
+#elif defined(__hpux)
         // fortunately, shl_t is a pointer
         shl_unload (static_cast<shl_t>(_handle));
 #else // other unix
@@ -83,7 +84,7 @@ DynamicLibrary* DynamicLibrary::loadLibrary(const std::string& libraryName)
     if (handle) return new DynamicLibrary(libraryName,handle);
 
     // else no lib found so report errors.
-    notify(INFO) << "DynamicLibrary::failed loading \""<<libraryName<<"\""<<std::endl;
+    OSG_INFO << "DynamicLibrary::failed loading \""<<libraryName<<"\""<<std::endl;
 
     return NULL;
 }
@@ -93,7 +94,11 @@ DynamicLibrary::HANDLE DynamicLibrary::getLibraryHandle( const std::string& libr
     HANDLE handle = NULL;
 
 #if defined(WIN32) && !defined(__CYGWIN__)
+#ifdef OSG_USE_UTF8_FILENAME
+    handle = LoadLibraryW(  convertUTF8toUTF16(libraryName).c_str() );
+#else
     handle = LoadLibrary( libraryName.c_str() );
+#endif
 #elif defined(__APPLE__) && defined(APPLE_PRE_10_3)
     NSObjectFileImage image;
     // NSModule os_handle = NULL;
@@ -102,7 +107,7 @@ DynamicLibrary::HANDLE DynamicLibrary::getLibraryHandle( const std::string& libr
         handle = NSLinkModule(image, libraryName.c_str(), TRUE);
         NSDestroyObjectFileImage(image);
     }
-#elif defined(__hpux__)
+#elif defined(__hpux)
     // BIND_FIRST is neccessary for some reason
     handle = shl_load ( libraryName.c_str(), BIND_DEFERRED|BIND_FIRST|BIND_VERBOSE, 0);
     return handle;
@@ -121,13 +126,13 @@ DynamicLibrary::HANDLE DynamicLibrary::getLibraryHandle( const std::string& libr
     {
         if (fileExists(localLibraryName))
         {
-            notify(WARN) << "Warning: dynamic library '" << libraryName << "' exists, but an error occurred while trying to open it:" << std::endl;
-            notify(WARN) << dlerror() << std::endl;
+            OSG_WARN << "Warning: dynamic library '" << libraryName << "' exists, but an error occurred while trying to open it:" << std::endl;
+            OSG_WARN << dlerror() << std::endl;
         }
         else
         {
-            notify(INFO) << "Warning: dynamic library '" << libraryName << "' does not exist (or isn't readable):" << std::endl;
-            notify(INFO) << dlerror() << std::endl;
+            OSG_INFO << "Warning: dynamic library '" << libraryName << "' does not exist (or isn't readable):" << std::endl;
+            OSG_INFO << dlerror() << std::endl;
         }
     }
 #endif
@@ -138,15 +143,14 @@ DynamicLibrary::PROC_ADDRESS DynamicLibrary::getProcAddress(const std::string& p
 {
     if (_handle==NULL) return NULL;
 #if defined(WIN32) && !defined(__CYGWIN__)
-    return (DynamicLibrary::PROC_ADDRESS)GetProcAddress( (HMODULE)_handle,
-                                                         procName.c_str() );
+    return osg::convertPointerType<DynamicLibrary::PROC_ADDRESS, FARPROC>( GetProcAddress( (HMODULE)_handle, procName.c_str() ) );
 #elif defined(__APPLE__) && defined(APPLE_PRE_10_3)
     std::string temp("_");
     NSSymbol symbol;
     temp += procName;   // Mac OS X prepends an underscore on function names
     symbol = NSLookupSymbolInModule(static_cast<NSModule>(_handle), temp.c_str());
     return NSAddressOfSymbol(symbol);
-#elif defined(__hpux__)
+#elif defined(__hpux)
     void* result = NULL;
     if (shl_findsym (reinterpret_cast<shl_t*>(&_handle), procName.c_str(), TYPE_PROCEDURE, result) == 0)
     {
@@ -154,15 +158,15 @@ DynamicLibrary::PROC_ADDRESS DynamicLibrary::getProcAddress(const std::string& p
     }
     else
     {
-        notify(WARN) << "DynamicLibrary::failed looking up " << procName << std::endl;
-        notify(WARN) << "DynamicLibrary::error " << strerror(errno) << std::endl;
+        OSG_WARN << "DynamicLibrary::failed looking up " << procName << std::endl;
+        OSG_WARN << "DynamicLibrary::error " << strerror(errno) << std::endl;
         return NULL;
     }
 #else // other unix
     void* sym = dlsym( _handle,  procName.c_str() );
     if (!sym) {
-        notify(WARN) << "DynamicLibrary::failed looking up " << procName << std::endl;
-        notify(WARN) << "DynamicLibrary::error " << dlerror() << std::endl;
+        OSG_WARN << "DynamicLibrary::failed looking up " << procName << std::endl;
+        OSG_WARN << "DynamicLibrary::error " << dlerror() << std::endl;
     }
     return sym;
 #endif

@@ -18,6 +18,13 @@
 #include <osg/StateAttribute>
 #include <osg/Vec4>
 
+#ifndef OSG_GL_FIXED_FUNCTION_AVAILABLE
+    #define GL_MODULATE         0x2100
+    #define GL_ADD              0x0104
+    #define GL_MODULATE         0x2100
+    #define GL_DECAL            0x2101
+#endif
+
 namespace osg {
 
 /** TexEnv encapsulates the OpenGL glTexEnv (texture environment) state.
@@ -51,7 +58,7 @@ class OSG_EXPORT TexEnv : public StateAttribute
         virtual int compare(const StateAttribute& sa) const
         {
             // Check for equal types, then create the rhs variable
-            // used by the COMPARE_StateAttribute_Paramter macros below.
+            // used by the COMPARE_StateAttribute_Parameter macros below.
             COMPARE_StateAttribute_Types(TexEnv,sa)
 
             // Compare each parameter in turn against the rhs.

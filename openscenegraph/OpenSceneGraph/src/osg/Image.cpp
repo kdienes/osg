@@ -20,9 +20,11 @@
 #include <osg/Geode>
 #include <osg/Geometry>
 #include <osg/StateSet>
+#include <osg/Texture1D>
 #include <osg/Texture2D>
 #include <osg/Texture3D>
 #include <osg/Texture2DArray>
+#include <osg/Light>
 
 #include <string.h>
 #include <stdlib.h>
@@ -32,8 +34,22 @@
 using namespace osg;
 using namespace std;
 
+void Image::UpdateCallback::operator () (osg::StateAttribute* attr, osg::NodeVisitor* nv)
+{
+    osg::Texture* texture = attr ? attr->asTexture() : 0;
+
+    // OSG_NOTICE<<"ImageSequence::UpdateCallback::"<<texture<<std::endl;
+    if (texture)
+    {
+        for(unsigned int i=0; i<texture->getNumImages(); ++i)
+        {
+            texture->getImage(i)->update(nv);
+        }
+    }
+}
+
 Image::Image()
-    :Object(true),
+    :BufferData(),
     _fileName(""),
     _writeHint(NO_PREFERENCE),
     _origin(BOTTOM_LEFT),
@@ -44,14 +60,13 @@ Image::Image()
     _packing(4),
     _pixelAspectRatio(1.0),
     _allocationMode(USE_NEW_DELETE),
-    _data(0L),
-    _modifiedCount(0)
+    _data(0L)
 {
     setDataVariance(STATIC); 
 }
 
 Image::Image(const Image& image,const CopyOp& copyop):
-    Object(image,copyop),
+    BufferData(image,copyop),
     _fileName(image._fileName),
     _writeHint(image._writeHint),
     _origin(image._origin),
@@ -62,7 +77,6 @@ Image::Image(const Image& image,const CopyOp& copyop):
     _packing(image._packing),
     _pixelAspectRatio(image._pixelAspectRatio),
     _data(0L),
-    _modifiedCount(image._modifiedCount),
     _mipmapData(image._mipmapData)
 {
     if (image._data)
@@ -196,7 +210,7 @@ GLenum Image::computePixelFormat(GLenum format)
         case(GL_INTENSITY8UI_EXT):
         case(GL_INTENSITY16UI_EXT):
         case(GL_INTENSITY32UI_EXT):
-            notify(WARN)<<"Image::computePixelFormat("<<std::hex<<format<<std::dec<<") intensity pixel format is not correctly specified, so assume GL_LUMINANCE_INTEGER."<<std::endl;            
+            OSG_WARN<<"Image::computePixelFormat("<<std::hex<<format<<std::dec<<") intensity pixel format is not correctly specified, so assume GL_LUMINANCE_INTEGER."<<std::endl;            
             return GL_LUMINANCE_INTEGER_EXT;
         case(GL_LUMINANCE_ALPHA8I_EXT):
         case(GL_LUMINANCE_ALPHA16I_EXT):
@@ -275,7 +289,7 @@ GLenum Image::computeFormatDataType(GLenum pixelFormat)
 
         default: 
         {
-            notify(WARN)<<"error computeFormatType = "<<std::hex<<pixelFormat<<std::dec<<std::endl;
+            OSG_WARN<<"error computeFormatType = "<<std::hex<<pixelFormat<<std::dec<<std::endl;
             return 0;
         }
     }
@@ -289,6 +303,14 @@ unsigned int Image::computeNumComponents(GLenum pixelFormat)
         case(GL_COMPRESSED_RGBA_S3TC_DXT1_EXT): return 4;
         case(GL_COMPRESSED_RGBA_S3TC_DXT3_EXT): return 4;
         case(GL_COMPRESSED_RGBA_S3TC_DXT5_EXT): return 4;
+        case(GL_COMPRESSED_SIGNED_RED_RGTC1_EXT): return 1;
+        case(GL_COMPRESSED_RED_RGTC1_EXT):   return 1;
+        case(GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT): return 2;
+        case(GL_COMPRESSED_RED_GREEN_RGTC2_EXT): return 2;    
+        case(GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG): return 3;
+        case(GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG): return 3;
+        case(GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG): return 4;
+        case(GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG): return 4;
         case(GL_COLOR_INDEX): return 1;
         case(GL_STENCIL_INDEX): return 1;
         case(GL_DEPTH_COMPONENT): return 1;
@@ -377,7 +399,7 @@ unsigned int Image::computeNumComponents(GLenum pixelFormat)
 
         default:
         {
-            notify(WARN)<<"error pixelFormat = "<<std::hex<<pixelFormat<<std::dec<<std::endl;
+            OSG_WARN<<"error pixelFormat = "<<std::hex<<pixelFormat<<std::dec<<std::endl;
             return 0;
         }
     }        
@@ -393,6 +415,17 @@ unsigned int Image::computePixelSizeInBits(GLenum format,GLenum type)
         case(GL_COMPRESSED_RGBA_S3TC_DXT1_EXT): return 4;
         case(GL_COMPRESSED_RGBA_S3TC_DXT3_EXT): return 8;
         case(GL_COMPRESSED_RGBA_S3TC_DXT5_EXT): return 8;
+
+        case(GL_COMPRESSED_SIGNED_RED_RGTC1_EXT): return 4;
+        case(GL_COMPRESSED_RED_RGTC1_EXT):   return 4;
+        case(GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT): return 8;
+        case(GL_COMPRESSED_RED_GREEN_RGTC2_EXT): return 8;
+
+        case(GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG): return 4;
+        case(GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG): return 2;
+        case(GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG): return 4;
+        case(GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG): return 2;
+        
         default: break;
     }
 
@@ -414,7 +447,7 @@ unsigned int Image::computePixelSizeInBits(GLenum format,GLenum type)
         case(GL_COMPRESSED_INTENSITY):
         case(GL_COMPRESSED_RGB):
         case(GL_COMPRESSED_RGBA):
-            notify(WARN)<<"Image::computePixelSizeInBits(format,type) : cannot compute correct size of compressed format ("<<format<<") returning 0."<<std::endl;
+            OSG_WARN<<"Image::computePixelSizeInBits(format,type) : cannot compute correct size of compressed format ("<<format<<") returning 0."<<std::endl;
             return 0;
         default: break;
     }
@@ -471,7 +504,7 @@ unsigned int Image::computePixelSizeInBits(GLenum format,GLenum type)
         case(GL_UNSIGNED_INT_2_10_10_10_REV): return 32;
         default: 
         {
-            notify(WARN)<<"error type = "<<type<<std::endl;
+            OSG_WARN<<"error type = "<<type<<std::endl;
             return 0;
         }
     }    
@@ -483,7 +516,7 @@ unsigned int Image::computeRowWidthInBytes(int width,GLenum pixelFormat,GLenum t
     unsigned int pixelSize = computePixelSizeInBits(pixelFormat,type);
     int widthInBits = width*pixelSize;
     int packingInBits = packing*8;
-    //notify(INFO) << "width="<<width<<" pixelSize="<<pixelSize<<"  width in bit="<<widthInBits<<" packingInBits="<<packingInBits<<" widthInBits%packingInBits="<<widthInBits%packingInBits<<std::endl;
+    //OSG_INFO << "width="<<width<<" pixelSize="<<pixelSize<<"  width in bit="<<widthInBits<<" packingInBits="<<packingInBits<<" widthInBits%packingInBits="<<widthInBits%packingInBits<<std::endl;
     return (widthInBits/packingInBits + ((widthInBits%packingInBits)?1:0))*packing;
 }
 
@@ -507,6 +540,34 @@ int Image::computeNumberOfMipmapLevels(int s,int t, int r)
     int w = maximum(s, t);
     w = maximum(w, r);
     return 1 + static_cast<int>(floor(logf(w)/logf(2.0f)));
+}
+
+bool Image::isCompressed() const
+{
+    switch(_pixelFormat)
+    {
+        case(GL_COMPRESSED_ALPHA_ARB):
+        case(GL_COMPRESSED_INTENSITY_ARB):
+        case(GL_COMPRESSED_LUMINANCE_ALPHA_ARB):
+        case(GL_COMPRESSED_LUMINANCE_ARB):
+        case(GL_COMPRESSED_RGBA_ARB):
+        case(GL_COMPRESSED_RGB_ARB):
+        case(GL_COMPRESSED_RGB_S3TC_DXT1_EXT):
+        case(GL_COMPRESSED_RGBA_S3TC_DXT1_EXT):
+        case(GL_COMPRESSED_RGBA_S3TC_DXT3_EXT):
+        case(GL_COMPRESSED_RGBA_S3TC_DXT5_EXT):
+        case(GL_COMPRESSED_SIGNED_RED_RGTC1_EXT):
+        case(GL_COMPRESSED_RED_RGTC1_EXT):
+        case(GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT):
+        case(GL_COMPRESSED_RED_GREEN_RGTC2_EXT):
+        case(GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG): 
+        case(GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG):
+        case(GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG):
+        case(GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG):
+            return true;
+        default:
+            return false;
+    }
 }
 
 unsigned int Image::getTotalSizeInBytesIncludingMipmaps() const
@@ -545,10 +606,18 @@ unsigned int Image::getTotalSizeInBytesIncludingMipmaps() const
         case(GL_COMPRESSED_RGBA_S3TC_DXT5_EXT):
            sizeOfLastMipMap = maximum(sizeOfLastMipMap, 16u); // block size of 16
            break;
+        case(GL_COMPRESSED_SIGNED_RED_RGTC1_EXT):
+        case(GL_COMPRESSED_RED_RGTC1_EXT):
+            sizeOfLastMipMap = maximum(sizeOfLastMipMap, 8u); // block size of 8
+            break;
+        case(GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT):
+        case(GL_COMPRESSED_RED_GREEN_RGTC2_EXT):
+            sizeOfLastMipMap = maximum(sizeOfLastMipMap, 16u); // block size of 8
+            break;
         default: break;
    }
 
-   // notify(INFO)<<"sizeOfLastMipMap="<<sizeOfLastMipMap<<"\ts="<<s<<"\tt="<<t<<"\tr"<<r<<std::endl;                  
+   // OSG_INFO<<"sizeOfLastMipMap="<<sizeOfLastMipMap<<"\ts="<<s<<"\tt="<<t<<"\tr"<<r<<std::endl;                  
 
    return maxValue+sizeOfLastMipMap;
 
@@ -574,7 +643,7 @@ void Image::setPixelFormat(GLenum pixelFormat)
     }
     else
     {
-        notify(WARN)<<"Image::setPixelFormat(..) - warning, attempt to reset the pixel format with a different number of components."<<std::endl;
+        OSG_WARN<<"Image::setPixelFormat(..) - warning, attempt to reset the pixel format with a different number of components."<<std::endl;
     }
 }
 
@@ -589,7 +658,7 @@ void Image::setDataType(GLenum dataType)
     }
     else
     {
-        notify(WARN)<<"Image::setDataType(..) - warning, attempt to reset the data type not permitted."<<std::endl;
+        OSG_WARN<<"Image::setDataType(..) - warning, attempt to reset the data type not permitted."<<std::endl;
     }
 }
 
@@ -630,7 +699,7 @@ void Image::allocateImage(int s,int t,int r,
     else
     {
     
-        // throw exception?? not for now, will simply set values to 0.
+        // failed to allocate memory, for now, will simply set values to 0.
         _s = 0;
         _t = 0;
         _r = 0;
@@ -684,26 +753,23 @@ void Image::readPixels(int x,int y,int width,int height,
 
 void Image::readImageFromCurrentTexture(unsigned int contextID, bool copyMipMapsIfAvailable, GLenum type)
 {
-    // osg::notify(osg::NOTICE)<<"Image::readImageFromCurrentTexture()"<<std::endl;
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE)
+    // OSG_NOTICE<<"Image::readImageFromCurrentTexture()"<<std::endl;
 
     const osg::Texture::Extensions* extensions = osg::Texture::getExtensions(contextID,true);
     const osg::Texture3D::Extensions* extensions3D = osg::Texture3D::getExtensions(contextID,true);
     const osg::Texture2DArray::Extensions* extensions2DArray = osg::Texture2DArray::getExtensions(contextID,true);
 
     
-    GLboolean binding1D, binding2D, binding3D, binding2DArray;
+    GLboolean binding1D = GL_FALSE, binding2D = GL_FALSE, binding3D = GL_FALSE, binding2DArray = GL_FALSE;
+
     glGetBooleanv(GL_TEXTURE_BINDING_1D, &binding1D);
     glGetBooleanv(GL_TEXTURE_BINDING_2D, &binding2D);
     glGetBooleanv(GL_TEXTURE_BINDING_3D, &binding3D);
-    
-    
+
     if (extensions2DArray->isTexture2DArraySupported())
     {
         glGetBooleanv(GL_TEXTURE_BINDING_2D_ARRAY_EXT, &binding2DArray);
-    }
-    else
-    {
-        binding2DArray = GL_FALSE;
     }
 
     GLenum textureMode = binding1D ? GL_TEXTURE_1D : binding2D ? GL_TEXTURE_2D : binding3D ? GL_TEXTURE_3D : binding2DArray ? GL_TEXTURE_2D_ARRAY_EXT : 0;
@@ -724,7 +790,7 @@ void Image::readImageFromCurrentTexture(unsigned int contextID, bool copyMipMaps
             glGetTexLevelParameteriv(textureMode, numMipMaps, GL_TEXTURE_WIDTH, &width);
             glGetTexLevelParameteriv(textureMode, numMipMaps, GL_TEXTURE_HEIGHT, &height);
             glGetTexLevelParameteriv(textureMode, numMipMaps, GL_TEXTURE_DEPTH, &depth);
-            // osg::notify(osg::NOTICE)<<"   numMipMaps="<<numMipMaps<<" width="<<width<<" height="<<height<<" depth="<<depth<<std::endl;
+            // OSG_NOTICE<<"   numMipMaps="<<numMipMaps<<" width="<<width<<" height="<<height<<" depth="<<depth<<std::endl;
             if (width==0 || height==0 || depth==0) break;
         }
     }
@@ -733,7 +799,7 @@ void Image::readImageFromCurrentTexture(unsigned int contextID, bool copyMipMaps
         numMipMaps = 1;
     }
     
-    // osg::notify(osg::NOTICE)<<"Image::readImageFromCurrentTexture() : numMipMaps = "<<numMipMaps<<std::endl;
+    // OSG_NOTICE<<"Image::readImageFromCurrentTexture() : numMipMaps = "<<numMipMaps<<std::endl;
 
         
     GLint compressed = 0;
@@ -784,7 +850,7 @@ void Image::readImageFromCurrentTexture(unsigned int contextID, bool copyMipMaps
         unsigned char* data = new unsigned char[total_size];
         if (!data)
         {
-            osg::notify(osg::WARN)<<"Warning: Image::readImageFromCurrentTexture(..) out of memory, now image read."<<std::endl;
+            OSG_WARN<<"Warning: Image::readImageFromCurrentTexture(..) out of memory, now image read."<<std::endl;
             return; 
         }
 
@@ -846,7 +912,7 @@ void Image::readImageFromCurrentTexture(unsigned int contextID, bool copyMipMaps
         unsigned char* data = new unsigned char[total_size];
         if (!data)
         {
-            osg::notify(osg::WARN)<<"Warning: Image::readImageFromCurrentTexture(..) out of memory, now image read."<<std::endl;
+            OSG_WARN<<"Warning: Image::readImageFromCurrentTexture(..) out of memory, now image read."<<std::endl;
             return; 
         }
 
@@ -875,8 +941,10 @@ void Image::readImageFromCurrentTexture(unsigned int contextID, bool copyMipMaps
 
         dirty();
     }    
+#else
+    OSG_NOTICE<<"Warning: Image::readImageFromCurrentTexture() not supported."<<std::endl;
+#endif
 }
-
 
 void Image::scaleImage(int s,int t,int r, GLenum newDataType)
 {
@@ -884,17 +952,15 @@ void Image::scaleImage(int s,int t,int r, GLenum newDataType)
 
     if (_data==NULL)
     {
-        notify(WARN) << "Error Image::scaleImage() do not succeed : cannot scale NULL image."<<std::endl;
+        OSG_WARN << "Error Image::scaleImage() do not succeed : cannot scale NULL image."<<std::endl;
         return;
     }
 
     if (_r!=1 || r!=1)
     {
-        notify(WARN) << "Error Image::scaleImage() do not succeed : scaling of volumes not implemented."<<std::endl;
+        OSG_WARN << "Error Image::scaleImage() do not succeed : scaling of volumes not implemented."<<std::endl;
         return;
     }
-
-    
 
     unsigned int newTotalSize = computeRowWidthInBytes(s,_pixelFormat,newDataType,_packing)*t;
 
@@ -903,14 +969,15 @@ void Image::scaleImage(int s,int t,int r, GLenum newDataType)
     if (!newData)
     {
         // should we throw an exception???  Just return for time being.
-        notify(FATAL) << "Error Image::scaleImage() do not succeed : out of memory."<<newTotalSize<<std::endl;
+        OSG_FATAL << "Error Image::scaleImage() do not succeed : out of memory."<<newTotalSize<<std::endl;
         return;
     }
 
-    glPixelStorei(GL_PACK_ALIGNMENT,_packing);
-    glPixelStorei(GL_UNPACK_ALIGNMENT,_packing);
+    PixelStorageModes psm;
+    psm.pack_alignment = _packing;
+    psm.unpack_alignment = _packing;
 
-    GLint status = gluScaleImage(_pixelFormat,
+    GLint status = gluScaleImage(&psm, _pixelFormat,
         _s,
         _t,
         _dataType,
@@ -931,52 +998,52 @@ void Image::scaleImage(int s,int t,int r, GLenum newDataType)
     }
     else
     {
-       delete [] newData;
+        delete [] newData;
 
-        notify(WARN) << "Error Image::scaleImage() did not succeed : errorString = "<<gluErrorString((GLenum)status)<<std::endl;
+        OSG_WARN << "Error Image::scaleImage() did not succeed : errorString = "<< gluErrorString((GLenum)status) << ". The rendering context may be invalid." << std::endl;
     }
-    
+
     dirty();
 }
 
 void Image::copySubImage(int s_offset, int t_offset, int r_offset, const osg::Image* source)
 {
     if (!source) return;
-    if (s_offset<0 || t_offset<0 || r_offset<0) 
+    if (s_offset<0 || t_offset<0 || r_offset<0)
     {
-        notify(WARN)<<"Warning: negative offsets passed to Image::copySubImage(..) not supported, operation ignored."<<std::endl;
+        OSG_WARN<<"Warning: negative offsets passed to Image::copySubImage(..) not supported, operation ignored."<<std::endl;
         return;
     }
-    
+
     if (!_data)
     {
-        notify(INFO)<<"allocating image"<<endl;
+        OSG_INFO<<"allocating image"<<endl;
         allocateImage(s_offset+source->s(),t_offset+source->t(),r_offset+source->r(),
                     source->getPixelFormat(),source->getDataType(),
                     source->getPacking());
     }
-    
+
     if (s_offset>=_s || t_offset>=_t  || r_offset>=_r)
     {
-        notify(WARN)<<"Warning: offsets passed to Image::copySubImage(..) outside destination image, operation ignored."<<std::endl;
+        OSG_WARN<<"Warning: offsets passed to Image::copySubImage(..) outside destination image, operation ignored."<<std::endl;
         return;
     }
-    
-    
+
+
     if (_pixelFormat != source->getPixelFormat())
     {
-        notify(WARN)<<"Warning: image with an incompatible pixel formats passed to Image::copySubImage(..), operation ignored."<<std::endl;
+        OSG_WARN<<"Warning: image with an incompatible pixel formats passed to Image::copySubImage(..), operation ignored."<<std::endl;
         return;
     }
 
     void* data_destination = data(s_offset,t_offset,r_offset);
-    
-    glPixelStorei(GL_PACK_ALIGNMENT,source->getPacking());
-    glPixelStorei(GL_PACK_ROW_LENGTH,_s);
 
-    glPixelStorei(GL_UNPACK_ALIGNMENT,_packing);
-    
-    GLint status = gluScaleImage(_pixelFormat,
+    PixelStorageModes psm;
+    psm.pack_alignment = _packing;
+    psm.pack_row_length = _s;
+    psm.unpack_alignment = _packing;
+
+    GLint status = gluScaleImage(&psm, _pixelFormat,
         source->s(),
         source->t(),
         source->getDataType(),
@@ -990,17 +1057,15 @@ void Image::copySubImage(int s_offset, int t_offset, int r_offset, const osg::Im
 
     if (status!=0)
     {
-        notify(WARN) << "Error Image::scaleImage() do not succeed : errorString = "<<gluErrorString((GLenum)status)<<std::endl;
+        OSG_WARN << "Error Image::scaleImage() did not succeed : errorString = "<< gluErrorString((GLenum)status) << ". The rendering context may be invalid." << std::endl;
     }
-
 }
-
 
 void Image::flipHorizontal()
 {
     if (_data==NULL)
     {
-        notify(WARN) << "Error Image::flipHorizontal() did not succeed : cannot flip NULL image."<<std::endl;
+        OSG_WARN << "Error Image::flipHorizontal() did not succeed : cannot flip NULL image."<<std::endl;
         return;
     }
 
@@ -1031,7 +1096,7 @@ void Image::flipHorizontal()
     }
     else
     {
-        notify(WARN) << "Error Image::flipHorizontal() did not succeed : cannot flip mipmapped image."<<std::endl;
+        OSG_WARN << "Error Image::flipHorizontal() did not succeed : cannot flip mipmapped image."<<std::endl;
         return;
     }
         
@@ -1057,13 +1122,13 @@ void Image::flipVertical()
 {
     if (_data==NULL)
     {
-        notify(WARN) << "Error Image::flipVertical() do not succeed : cannot flip NULL image."<<std::endl;
+        OSG_WARN << "Error Image::flipVertical() do not succeed : cannot flip NULL image."<<std::endl;
         return;
     }
 
     if (!_mipmapData.empty() && _r>1)
     {
-        notify(WARN) << "Error Image::flipVertical() do not succeed : flipping of mipmap 3d textures not yet supported."<<std::endl;
+        OSG_WARN << "Error Image::flipVertical() do not succeed : flipping of mipmap 3d textures not yet supported."<<std::endl;
         return;
     }
 
@@ -1134,8 +1199,8 @@ void Image::ensureValidSizeForTexturing(GLint maxTextureSize)
     
     if (new_s!=_s || new_t!=_t)
     {
-        if (!_fileName.empty()) notify(NOTICE) << "Scaling image '"<<_fileName<<"' from ("<<_s<<","<<_t<<") to ("<<new_s<<","<<new_t<<")"<<std::endl;
-        else notify(NOTICE) << "Scaling image from ("<<_s<<","<<_t<<") to ("<<new_s<<","<<new_t<<")"<<std::endl;
+        if (!_fileName.empty()) { OSG_NOTICE << "Scaling image '"<<_fileName<<"' from ("<<_s<<","<<_t<<") to ("<<new_s<<","<<new_t<<")"<<std::endl; }
+        else { OSG_NOTICE << "Scaling image from ("<<_s<<","<<_t<<") to ("<<new_s<<","<<new_t<<")"<<std::endl; }
 
         scaleImage(new_s,new_t,_r);
     }
@@ -1295,6 +1360,9 @@ Geode* osg::createGeodeForImage(osg::Image* image,float s,float t)
             float y = 1.0;
             float x = y*(s/t);
 
+            float texcoord_y_b = (image->getOrigin() == osg::Image::BOTTOM_LEFT) ? 0.0f : 1.0f;
+            float texcoord_y_t = (image->getOrigin() == osg::Image::BOTTOM_LEFT) ? 1.0f : 0.0f;
+
             // set up the texture.
 
 #if 0
@@ -1303,14 +1371,14 @@ Geode* osg::createGeodeForImage(osg::Image* image,float s,float t)
             texture->setFilter(osg::Texture::MAG_FILTER,osg::Texture::LINEAR);
             //texture->setResizeNonPowerOfTwoHint(false);
             float texcoord_x = image->s();
-            float texcoord_y = image->t();
+            texcoord_y_b *= image->t();
+            texcoord_y_t *= image->t();
 #else
             osg::Texture2D* texture = new osg::Texture2D;
             texture->setFilter(osg::Texture::MIN_FILTER,osg::Texture::LINEAR);
             texture->setFilter(osg::Texture::MAG_FILTER,osg::Texture::LINEAR);
             texture->setResizeNonPowerOfTwoHint(false);
             float texcoord_x = 1.0f;
-            float texcoord_y = 1.0f;
 #endif
             texture->setImage(image);
 
@@ -1332,10 +1400,10 @@ Geode* osg::createGeodeForImage(osg::Image* image,float s,float t)
             geom->setVertexArray(coords);
 
             Vec2Array* tcoords = new Vec2Array(4);
-            (*tcoords)[0].set(0.0f*texcoord_x,1.0f*texcoord_y);
-            (*tcoords)[1].set(0.0f*texcoord_x,0.0f*texcoord_y);
-            (*tcoords)[2].set(1.0f*texcoord_x,0.0f*texcoord_y);
-            (*tcoords)[3].set(1.0f*texcoord_x,1.0f*texcoord_y);
+            (*tcoords)[0].set(0.0f*texcoord_x,texcoord_y_t);
+            (*tcoords)[1].set(0.0f*texcoord_x,texcoord_y_b);
+            (*tcoords)[2].set(1.0f*texcoord_x,texcoord_y_b);
+            (*tcoords)[3].set(1.0f*texcoord_x,texcoord_y_t);
             geom->setTexCoordArray(0,tcoords);
 
             osg::Vec4Array* colours = new osg::Vec4Array(1);
@@ -1368,6 +1436,7 @@ Vec4 _readColor(GLenum pixelFormat, T* data,float scale)
 {
     switch(pixelFormat)
     {
+        case(GL_DEPTH_COMPONENT):   //intentionally fall through and execute the code for GL_LUMINANCE
         case(GL_LUMINANCE):         { float l = float(*data++)*scale; return Vec4(l, l, l, 1.0f); }
         case(GL_ALPHA):             { float a = float(*data++)*scale; return Vec4(1.0f, 1.0f, 1.0f, a); }
         case(GL_LUMINANCE_ALPHA):   { float l = float(*data++)*scale; float a = float(*data++)*scale; return Vec4(l,l,l,a); }
@@ -1401,6 +1470,6 @@ Vec4 Image::getColor(const Vec3& texcoord) const
     int s = int(texcoord.x()*float(_s-1)) % _s;
     int t = int(texcoord.y()*float(_t-1)) % _t;
     int r = int(texcoord.z()*float(_r-1)) % _r;
-    //osg::notify(osg::NOTICE)<<"getColor("<<texcoord<<")="<<getColor(s,t,r)<<std::endl;
+    //OSG_NOTICE<<"getColor("<<texcoord<<")="<<getColor(s,t,r)<<std::endl;
     return getColor(s,t,r);
 }

@@ -45,22 +45,22 @@ class OSGMANIPULATOR_EXPORT AntiSquish: public osg::MatrixTransform
         virtual bool isSameKindAs(const osg::Object* obj) const { return dynamic_cast<const AntiSquish *>(obj)!=NULL; }
 
         void setPivot(const osg::Vec3d& pvt)
-               {
+        {
             _pivot = pvt;
             _usePivot = true; 
             _dirty = true;
         }
 
-        const osg::Vec3d& getPivot() { return _pivot; }
+        const osg::Vec3d& getPivot() const { return _pivot; }
 
         void setPosition(const osg::Vec3d& pos)
-               {
+        {
             _position = pos;
             _usePosition = true; 
             _dirty = true;
         }
 
-        const osg::Vec3d& getPosition() { return _position; }
+        const osg::Vec3d& getPosition() const { return _position; }
                     
         virtual ~AntiSquish();
 

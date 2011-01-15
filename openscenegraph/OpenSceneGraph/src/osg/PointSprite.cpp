@@ -36,7 +36,7 @@ int PointSprite::compare(const StateAttribute& sa) const
 
     COMPARE_StateAttribute_Parameter(_coordOriginMode)
 
-    return 0; // passed all the above comparison macro's, must be equal.
+    return 0; // passed all the above comparison macros, must be equal.
 }
 
 
@@ -51,6 +51,10 @@ bool PointSprite::checkValidityOfAssociatedModes(osg::State& state) const
 
 void PointSprite::apply(osg::State& state) const
 {
+#if defined( OSG_GL3_AVAILABLE )
+    const Point::Extensions* extensions = Point::getExtensions(state.getContextID(),true);
+    extensions->glPointParameteri(GL_POINT_SPRITE_COORD_ORIGIN,_coordOriginMode);
+#elif defined( OSG_GL_FIXED_FUNCTION_AVAILABLE )
     if(!isPointSpriteSupported(state.getContextID())) return;
 
     glTexEnvi(GL_POINT_SPRITE_ARB, GL_COORD_REPLACE_ARB, 1);
@@ -59,6 +63,9 @@ void PointSprite::apply(osg::State& state) const
 
     if (extensions->isPointSpriteCoordOriginSupported())
         extensions->glPointParameteri(GL_POINT_SPRITE_COORD_ORIGIN,_coordOriginMode);
+#else
+    OSG_NOTICE<<"Warning: PointSprite::apply(State&) - not supported."<<std::endl;
+#endif
 }
 
 struct IntializedSupportedPair
@@ -79,7 +86,7 @@ bool PointSprite::isPointSpriteSupported(unsigned int contextID)
     if (!s_extensions[contextID].initialized)
     {
         s_extensions[contextID].initialized = true;
-        s_extensions[contextID].supported = isGLExtensionSupported(contextID, "GL_ARB_point_sprite") || isGLExtensionSupported(contextID, "GL_NV_point_sprite");
+        s_extensions[contextID].supported = OSG_GL3_FEATURES || isGLExtensionSupported(contextID, "GL_ARB_point_sprite") || isGLExtensionSupported(contextID, "GL_NV_point_sprite");
     }
 
     return s_extensions[contextID].supported;

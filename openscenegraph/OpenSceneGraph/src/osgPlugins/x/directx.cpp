@@ -1,7 +1,7 @@
 // -*-c++-*-
 
 /*
- * $Id: directx.cpp 9124 2008-11-07 15:08:08Z robert $
+ * $Id: directx.cpp 11545 2010-05-28 17:12:55Z robert $
  *
  * Loader for DirectX .x files.
  * Copyright (c)2002-2006 Ulrich Hertlein <u.hertlein@sandbox.de>
@@ -59,20 +59,21 @@ void Object::clear()
     _meshes.clear();
 }
 
-bool Object::load(const char* filename)
+bool Object::load(std::istream& fin)
 {
-    if (!filename)
+    // read header
+    char buf[256];
+    if (fin.getline(buf, sizeof(buf)) == 0) {
+        OSG_WARN << "Failed to read DirectX header\n";
         return false;
-
-    osgDB::ifstream fin(filename);
-    if (fin.bad()) {
-        osg::notify(osg::WARN) << "Object::load: Unable to open: " << filename << endl;
+    }
+    if (strstr(buf, "xof") == 0) {
+        OSG_WARN << "No 'xof' found in DirectX header\n";
         return false;
     }
 
+    // read sections
     parseSection(fin);
-    fin.close();
-
     return true;
 }
 
@@ -107,7 +108,7 @@ Material * Object::findMaterial(const std::string & name)
  **********************************************************************/
 
 // Parse section
-void Object::parseSection(ifstream& fin)
+void Object::parseSection(std::istream& fin)
 {
     char buf[256];
     vector<string> token;
@@ -131,6 +132,7 @@ void Object::parseSection(ifstream& fin)
                 Mesh * mesh = new Mesh(this);
                 _meshes.push_back(mesh);
                 mesh->parseMesh(fin);
+                OSG_INFO << "Mesh " << (token.size()>1?token[1]:"") << endl;
             }
             else if (token[0] == "Material") {
                 //
@@ -144,19 +146,16 @@ void Object::parseSection(ifstream& fin)
                 }
                 parseMaterial(fin, mm);
                 _globalMaterials.push_back(mm);
+                OSG_INFO << "Material " << (token.size()>1?token[1]:"") << endl;
             }
             else if (token[0] == "Frame") {
-                parseFrame(fin);
+                //parseFrame(fin);
+                parseSection(fin);
             }
             else {
-                //cerr << "!!! Begin section " << token[0] << endl;
+                OSG_DEBUG << "!!! Begin section " << token[0] << endl;
                 parseSection(fin);
             }
         }
     }
-}
-
-// Parse frame
-void Object::parseFrame(ifstream& /*fin*/)
-{
 }

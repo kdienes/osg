@@ -22,6 +22,19 @@
 #  define SEEK_SET 0
 #endif
 
+#if defined(OSG_GLES1_AVAILABLE) || defined(OSG_GLES2_AVAILABLE)
+    #define GL_BITMAP               0x1A00
+    #define GL_RED                  0x1903
+    #define GL_GREEN                0x1904
+    #define GL_BLUE                 0x1905
+    #define GL_COLOR_INDEX          0x1900
+#endif
+
+#if defined(OSG_GL3_AVAILABLE)
+    #define GL_BITMAP               0x1A00
+    #define GL_COLOR_INDEX          0x1900
+#endif
+
 using namespace osg;
 
 
@@ -150,7 +163,7 @@ static rawImageRec *RawImageOpen(std::istream& fin)
     raw = new rawImageRec;
     if (raw == NULL)
     {
-        notify(WARN)<< "Out of memory!"<< std::endl;
+        OSG_WARN<< "Out of memory!"<< std::endl;
         return NULL;
     }
 
@@ -184,7 +197,7 @@ static rawImageRec *RawImageOpen(std::istream& fin)
     raw->tmp = new unsigned char [raw->sizeX*256*raw->bpc];
     if (raw->tmp == NULL )
     {
-        notify(FATAL)<< "Out of memory!"<< std::endl;
+        OSG_FATAL<< "Out of memory!"<< std::endl;
         RawImageClose(raw);
         return NULL;
     }
@@ -193,7 +206,7 @@ static rawImageRec *RawImageOpen(std::istream& fin)
     {
         if( (raw->tmpR = new unsigned char [raw->sizeX*raw->bpc]) == NULL )
         {
-            notify(FATAL)<< "Out of memory!"<< std::endl;
+            OSG_FATAL<< "Out of memory!"<< std::endl;
             RawImageClose(raw);
             return NULL;
         }
@@ -202,7 +215,7 @@ static rawImageRec *RawImageOpen(std::istream& fin)
     {
         if( (raw->tmpG = new unsigned char [raw->sizeX*raw->bpc]) == NULL )
         {
-            notify(FATAL)<< "Out of memory!"<< std::endl;
+            OSG_FATAL<< "Out of memory!"<< std::endl;
             RawImageClose(raw);
             return NULL;
         }
@@ -211,7 +224,7 @@ static rawImageRec *RawImageOpen(std::istream& fin)
     {
         if( (raw->tmpB = new unsigned char [raw->sizeX*raw->bpc]) == NULL )
         {
-            notify(FATAL)<< "Out of memory!"<< std::endl;
+            OSG_FATAL<< "Out of memory!"<< std::endl;
             RawImageClose(raw);
             return NULL;
         }
@@ -220,7 +233,7 @@ static rawImageRec *RawImageOpen(std::istream& fin)
     {
         if( (raw->tmpA = new unsigned char [raw->sizeX*raw->bpc]) == NULL )
         {
-            notify(FATAL)<< "Out of memory!"<< std::endl;
+            OSG_FATAL<< "Out of memory!"<< std::endl;
             RawImageClose(raw);
             return NULL;
         }
@@ -231,14 +244,14 @@ static rawImageRec *RawImageOpen(std::istream& fin)
         unsigned int ybyz = raw->sizeY * raw->sizeZ;
         if ( (raw->rowStart = new GLuint [ybyz]) == NULL )
         {
-            notify(FATAL)<< "Out of memory!"<< std::endl;
+            OSG_FATAL<< "Out of memory!"<< std::endl;
             RawImageClose(raw);
             return NULL;
         }
 
         if ( (raw->rowSize = new GLint [ybyz]) == NULL )
         {
-            notify(FATAL)<< "Out of memory!"<< std::endl;
+            OSG_FATAL<< "Out of memory!"<< std::endl;
             RawImageClose(raw);
             return NULL;
         }
@@ -289,9 +302,9 @@ static void RawImageGetRow(rawImageRec *raw, unsigned char *buf, int y, int z)
             count = (int)(pixel & 0x7F);
             
             // limit the count value to the remiaing row size
-            if (oPtr + count*raw->bpc > buf + raw->sizeX*raw->bpc)
+            if (raw->sizeX*raw->bpc <= (oPtr - buf))
             {
-                count = ( (buf + raw->sizeX*raw->bpc) - oPtr ) / raw->bpc;
+                count = raw->sizeX - (oPtr - buf) / raw->bpc;
             }
                 
             if (count<=0)
@@ -374,10 +387,10 @@ static void RawImageGetData(rawImageRec *raw, unsigned char **data )
 
     // byte aligned.
     
-    osg::notify(osg::INFO)<<"raw->sizeX = "<<raw->sizeX<<std::endl;
-    osg::notify(osg::INFO)<<"raw->sizeY = "<<raw->sizeY<<std::endl;
-    osg::notify(osg::INFO)<<"raw->sizeZ = "<<raw->sizeZ<<std::endl;
-    osg::notify(osg::INFO)<<"raw->bpc = "<<raw->bpc<<std::endl;
+    OSG_INFO<<"raw->sizeX = "<<raw->sizeX<<std::endl;
+    OSG_INFO<<"raw->sizeY = "<<raw->sizeY<<std::endl;
+    OSG_INFO<<"raw->sizeZ = "<<raw->sizeZ<<std::endl;
+    OSG_INFO<<"raw->bpc = "<<raw->bpc<<std::endl;
     
     *data = new unsigned char [(raw->sizeX)*(raw->sizeY)*(raw->sizeZ)*(raw->bpc)];
 
@@ -496,7 +509,7 @@ class ReaderWriterRGB : public osgDB::ReaderWriter
                 data,
                 osg::Image::USE_NEW_DELETE);
 
-            notify(INFO) << "image read ok "<<s<<"  "<<t<< std::endl;
+            OSG_INFO << "image read ok "<<s<<"  "<<t<< std::endl;
             return image;
         }
 

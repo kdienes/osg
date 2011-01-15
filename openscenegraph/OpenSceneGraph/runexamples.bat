@@ -25,7 +25,7 @@ echo osgcallback
 osgcallback
 
 echo osgcatch
-osgcatch
+# osgcatch
 
 echo osgclip
 osgclip
@@ -41,6 +41,9 @@ osgforest
 
 echo osgfxbrowser
 osgfxbrowser
+
+echo osgoutline cow.osg
+osgoutline cow.osg
 
 echo osggeometry
 osggeometry

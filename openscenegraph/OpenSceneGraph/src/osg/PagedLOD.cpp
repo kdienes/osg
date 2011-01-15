@@ -54,13 +54,16 @@ PagedLOD::PagedLOD()
     _centerMode = USER_DEFINED_CENTER;
     _radius = -1;
     _numChildrenThatCannotBeExpired = 0;
+    _disableExternalChildrenPaging = false;
 }
 
 PagedLOD::PagedLOD(const PagedLOD& plod,const CopyOp& copyop):
     LOD(plod,copyop),
+    _databaseOptions(plod._databaseOptions),
     _databasePath(plod._databasePath),
     _frameNumberOfLastTraversal(plod._frameNumberOfLastTraversal),
     _numChildrenThatCannotBeExpired(plod._numChildrenThatCannotBeExpired),
+    _disableExternalChildrenPaging(plod._disableExternalChildrenPaging),
     _perRangeDataList(plod._perRangeDataList)
 {
 }
@@ -197,7 +200,9 @@ void PagedLOD::traverse(NodeVisitor& nv)
                 }
 
                 // now request the loading of the next unloaded child.
-                if (nv.getDatabaseRequestHandler() && numChildren<_perRangeDataList.size())
+                if (!_disableExternalChildrenPaging &&
+                    nv.getDatabaseRequestHandler() &&
+                    numChildren<_perRangeDataList.size())
                 {
                     // compute priority from where abouts in the required range the distance falls.
                     float priority = (_rangeList[numChildren].second-required_range)/(_rangeList[numChildren].second-_rangeList[numChildren].first);
@@ -213,15 +218,14 @@ void PagedLOD::traverse(NodeVisitor& nv)
 
                     if (_databasePath.empty())
                     {
-                        nv.getDatabaseRequestHandler()->requestNodeFile(_perRangeDataList[numChildren]._filename,this,priority,nv.getFrameStamp(), _perRangeDataList[numChildren]._databaseRequest);
+                        nv.getDatabaseRequestHandler()->requestNodeFile(_perRangeDataList[numChildren]._filename,this,priority,nv.getFrameStamp(), _perRangeDataList[numChildren]._databaseRequest, _databaseOptions.get());
                     }
                     else
                     {
                         // prepend the databasePath to the child's filename.
-                        nv.getDatabaseRequestHandler()->requestNodeFile(_databasePath+_perRangeDataList[numChildren]._filename,this,priority,nv.getFrameStamp(), _perRangeDataList[numChildren]._databaseRequest);
+                        nv.getDatabaseRequestHandler()->requestNodeFile(_databasePath+_perRangeDataList[numChildren]._filename,this,priority,nv.getFrameStamp(), _perRangeDataList[numChildren]._databaseRequest, _databaseOptions.get());
                     }
                 }
-
 
             }
 

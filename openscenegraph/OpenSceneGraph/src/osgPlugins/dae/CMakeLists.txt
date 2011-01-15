@@ -2,10 +2,13 @@ INCLUDE_DIRECTORIES( ${COLLADA_INCLUDE_DIR} ${COLLADA_INCLUDE_DIR}/1.4)
 
 SET(TARGET_SRC
     daeReader.cpp
+    daeRAnimations.cpp
     daeRGeometry.cpp
     daeRMaterials.cpp
     daeRSceneObjects.cpp
+    daeRSkinning.cpp
     daeRTransforms.cpp
+    daeWAnimations.cpp
     daeWGeometry.cpp
     daeWMaterials.cpp
     daeWriter.cpp

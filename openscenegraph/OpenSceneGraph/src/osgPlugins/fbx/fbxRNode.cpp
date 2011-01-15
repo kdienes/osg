@@ -16,6 +16,7 @@
 #include <osgAnimation/Skeleton>
 #include <osgAnimation/StackedMatrixElement>
 #include <osgAnimation/StackedQuaternionElement>
+#include <osgAnimation/StackedRotateAxisElement>
 #include <osgAnimation/StackedScaleElement>
 #include <osgAnimation/StackedTranslateElement>
 #include <osgAnimation/UpdateBone>
@@ -25,12 +26,7 @@
 #endif
 #include <fbxsdk.h>
 
-#include "fbxRAnimation.h"
-#include "fbxRCamera.h"
-#include "fbxRLight.h"
-#include "fbxRMesh.h"
-#include "fbxRNode.h"
-#include "fbxMaterialToOsgStateSet.h"
+#include "fbxReader.h"
 
 osg::Quat makeQuat(const fbxDouble3& degrees, ERotationOrder fbxRotOrder)
 {
@@ -78,7 +74,7 @@ osg::Quat makeQuat(const fbxDouble3& degrees, ERotationOrder fbxRotOrder)
             return quat;
         }
     default:
-        osg::notify(osg::WARN) << "Invalid FBX rotation mode." << std::endl;
+        OSG_WARN << "Invalid FBX rotation mode." << std::endl;
         return osg::Quat();
     }
 }
@@ -173,27 +169,88 @@ void readTranslationElement(KFbxTypedProperty<fbxDouble3>& prop,
     }
 }
 
+void getRotationOrder(ERotationOrder fbxRotOrder, int order[/*3*/])
+{
+    switch (fbxRotOrder)
+    {
+    case eEULER_XZY:
+        order[0] = 0; order[1] = 2; order[2] = 1;
+        break;
+    case eEULER_YZX:
+        order[0] = 1; order[1] = 2; order[2] = 0;
+        break;
+    case eEULER_YXZ:
+        order[0] = 1; order[1] = 0; order[2] = 2;
+        break;
+    case eEULER_ZXY:
+        order[0] = 2; order[1] = 0; order[2] = 1;
+        break;
+    case eEULER_ZYX:
+        order[0] = 2; order[1] = 1; order[2] = 0;
+        break;
+    default:
+        order[0] = 0; order[1] = 1; order[2] = 2;
+    }
+}
+
 void readRotationElement(KFbxTypedProperty<fbxDouble3>& prop,
                          ERotationOrder fbxRotOrder,
+                         bool quatInterpolate,
                          osgAnimation::UpdateMatrixTransform* pUpdate,
                          osg::Matrix& staticTransform)
 {
-    osg::Quat quat = makeQuat(prop.Get(), fbxRotOrder);
-
     if (prop.GetKFCurve(KFCURVENODE_R_X) ||
         prop.GetKFCurve(KFCURVENODE_R_Y) ||
         prop.GetKFCurve(KFCURVENODE_R_Z))
     {
-        if (!staticTransform.isIdentity())
+        if (quatInterpolate)
         {
-            pUpdate->getStackedTransforms().push_back(new osgAnimation::StackedMatrixElement(staticTransform));
-            staticTransform.makeIdentity();
+            if (!staticTransform.isIdentity())
+            {
+                pUpdate->getStackedTransforms().push_back(
+                    new osgAnimation::StackedMatrixElement(staticTransform));
+                staticTransform.makeIdentity();
+            }
+            pUpdate->getStackedTransforms().push_back(new osgAnimation::StackedQuaternionElement(
+                "quaternion", makeQuat(prop.Get(), fbxRotOrder)));
         }
-        pUpdate->getStackedTransforms().push_back(new osgAnimation::StackedQuaternionElement("quaternion", quat));
+        else
+        {
+            char* curveNames[3] = {KFCURVENODE_R_X, KFCURVENODE_R_Y, KFCURVENODE_R_Z};
+            osg::Vec3 axes[3] = {osg::Vec3(1,0,0), osg::Vec3(0,1,0), osg::Vec3(0,0,1)};
+
+            fbxDouble3 fbxPropValue = prop.Get();
+            fbxPropValue[0] = osg::DegreesToRadians(fbxPropValue[0]);
+            fbxPropValue[1] = osg::DegreesToRadians(fbxPropValue[1]);
+            fbxPropValue[2] = osg::DegreesToRadians(fbxPropValue[2]);
+
+            int order[3] = {0, 1, 2};
+            getRotationOrder(fbxRotOrder, order);
+
+            for (int i = 0; i < 3; ++i)
+            {
+                int j = order[2-i];
+                if (prop.GetKFCurve(curveNames[j]))
+                {
+                    if (!staticTransform.isIdentity())
+                    {
+                        pUpdate->getStackedTransforms().push_back(new osgAnimation::StackedMatrixElement(staticTransform));
+                        staticTransform.makeIdentity();
+                    }
+
+                    pUpdate->getStackedTransforms().push_back(new osgAnimation::StackedRotateAxisElement(
+                        std::string("rotate") + curveNames[j], axes[j], fbxPropValue[j]));
+                }
+                else
+                {
+                    staticTransform.preMultRotate(osg::Quat(fbxPropValue[j], axes[j]));
+                }
+            }
+        }
     }
     else
     {
-        staticTransform.preMultRotate(quat);
+        staticTransform.preMultRotate(makeQuat(prop.Get(), fbxRotOrder));
     }
 }
 
@@ -249,7 +306,9 @@ void readUpdateMatrixTransform(osgAnimation::UpdateMatrixTransform* pUpdate, KFb
         staticTransform.preMultRotate(makeQuat(pNode->PreRotation.Get(), fbxRotOrder));
     }
 
-    readRotationElement(pNode->LclRotation, fbxRotOrder, pUpdate, staticTransform);
+    readRotationElement(pNode->LclRotation, fbxRotOrder,
+        pNode->QuaternionInterpolate.IsValid() && pNode->QuaternionInterpolate.Get(),
+        pUpdate, staticTransform);
 
     if (rotationActive)
     {
@@ -317,24 +376,29 @@ osg::Group* createGroupNode(KFbxSdkManager& pSdkManager, KFbxNode* pNode,
     }
 }
 
-osgDB::ReaderWriter::ReadResult readFbxNode(
-    KFbxSdkManager& pSdkManager, KFbxNode* pNode,
-    osg::ref_ptr<osgAnimation::AnimationManagerBase>& pAnimationManager,
-    bool& bIsBone, int& nLightCount,
-    FbxMaterialToOsgStateSet& fbxMaterialToOsgStateSet,
-    std::map<KFbxNode*, osg::Node*>& nodeMap,
-    BindMatrixMap& boneBindMatrices,
-    const std::set<const KFbxNode*>& fbxSkeletons,
-    std::map<KFbxNode*, osgAnimation::Skeleton*>& skeletonMap,
-    const osgDB::ReaderWriter::Options* options)
+osgDB::ReaderWriter::ReadResult OsgFbxReader::readFbxNode(
+    KFbxNode* pNode,
+    bool& bIsBone, int& nLightCount)
 {
     if (KFbxNodeAttribute* lNodeAttribute = pNode->GetNodeAttribute())
     {
-        if (lNodeAttribute->GetAttributeType() == KFbxNodeAttribute::eNURB ||
-            lNodeAttribute->GetAttributeType() == KFbxNodeAttribute::ePATCH)
+        KFbxNodeAttribute::EAttributeType attrType = lNodeAttribute->GetAttributeType();
+        switch (attrType)
         {
-            KFbxGeometryConverter lConverter(&pSdkManager);
-            lConverter.TriangulateInPlace(pNode);
+        case KFbxNodeAttribute::eNURB:
+        case KFbxNodeAttribute::ePATCH:
+        case KFbxNodeAttribute::eNURBS_CURVE:
+        case KFbxNodeAttribute::eNURBS_SURFACE:
+            {
+                KFbxGeometryConverter lConverter(&pSdkManager);
+                if (!lConverter.TriangulateInPlace(pNode))
+                {
+                    OSG_WARN << "Unable to triangulate FBX NURBS " << pNode->GetName() << std::endl;
+                }
+            }
+            break;
+        default:
+            break;
         }
     }
 
@@ -381,9 +445,7 @@ osgDB::ReaderWriter::ReadResult readFbxNode(
 
         bool bChildIsBone = false;
         osgDB::ReaderWriter::ReadResult childResult = readFbxNode(
-            pSdkManager, pChildNode, pAnimationManager,
-            bChildIsBone, nLightCount, fbxMaterialToOsgStateSet, nodeMap,
-            boneBindMatrices, fbxSkeletons, skeletonMap, options);
+            pChildNode, bChildIsBone, nLightCount);
         if (childResult.error())
         {
             return childResult;
@@ -402,7 +464,7 @@ osgDB::ReaderWriter::ReadResult readFbxNode(
         }
     }
 
-    std::string animName = readFbxAnimation(pNode, pAnimationManager, pNode->GetName());
+    std::string animName = readFbxAnimation(pNode, pNode->GetName());
 
     osg::Matrix localMatrix;
     makeLocalMatrix(pNode, localMatrix);
@@ -414,25 +476,10 @@ osgDB::ReaderWriter::ReadResult readFbxNode(
 
     switch (lAttributeType)
     {
-    case KFbxNodeAttribute::eUNIDENTIFIED:
-        if (bLocalMatrixIdentity && children.size() + skeletal.size() == 1)
-        {
-            if (children.size() == 1)
-            {
-                return osgDB::ReaderWriter::ReadResult(children.front().get());
-            }
-            else
-            {
-                return osgDB::ReaderWriter::ReadResult(skeletal.front().get());
-            }
-        }
-        break;
     case KFbxNodeAttribute::eMESH:
         {
             size_t bindMatrixCount = boneBindMatrices.size();
-            osgDB::ReaderWriter::ReadResult meshRes = readFbxMesh(pSdkManager,
-                pNode, pAnimationManager, stateSetList, boneBindMatrices,
-                fbxSkeletons, skeletonMap);
+            osgDB::ReaderWriter::ReadResult meshRes = readFbxMesh(pNode, stateSetList);
             if (meshRes.error())
             {
                 return meshRes;

@@ -20,8 +20,10 @@
 
 #include <osgDB/FileNameUtils>
 
+#include <osg/Version>
 #include <osg/Geometry>
 #include <osg/TexMat>
+#include <osg/Texture2D>
 #include <osg/TextureRectangle>
 #include <osg/io_utils>
 
@@ -100,6 +102,8 @@ bool WindowSizeHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIActio
                 {
                     toggleFullscreen(*itr);
                 }
+
+                aa.requestRedraw();
                 return true;
             }
             else if (_changeWindowedResolution == true && ea.getKey() == _keyEventWindowedResolutionUp)
@@ -114,6 +118,8 @@ bool WindowSizeHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIActio
                 {
                     changeWindowedResolution(*itr, true);
                 }
+
+                aa.requestRedraw();
                 return true;
             }
             else if (_changeWindowedResolution == true && ea.getKey() == _keyEventWindowedResolutionDown)
@@ -128,6 +134,8 @@ bool WindowSizeHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIActio
                 {
                     changeWindowedResolution(*itr, false);
                 }
+
+                aa.requestRedraw();
                 return true;
             }
             break;
@@ -144,7 +152,7 @@ void WindowSizeHandler::toggleFullscreen(osgViewer::GraphicsWindow *window)
 
     if (wsi == NULL) 
     {
-        osg::notify(osg::NOTICE) << "Error, no WindowSystemInterface available, cannot toggle window fullscreen." << std::endl;
+        OSG_NOTICE << "Error, no WindowSystemInterface available, cannot toggle window fullscreen." << std::endl;
         return;
     }
 
@@ -173,7 +181,7 @@ void WindowSizeHandler::toggleFullscreen(osgViewer::GraphicsWindow *window)
         resolution = _resolutionList[_currentResolutionIndex];
         window->setWindowDecoration(true);
         window->setWindowRectangle((screenWidth - (int)resolution.x()) / 2, (screenHeight - (int)resolution.y()) / 2, (int)resolution.x(), (int)resolution.y());
-        osg::notify(osg::INFO) << "Screen resolution = " << (int)resolution.x() << "x" << (int)resolution.y() << std::endl;  
+        OSG_INFO << "Screen resolution = " << (int)resolution.x() << "x" << (int)resolution.y() << std::endl;
     }
     else
     {
@@ -190,7 +198,7 @@ void WindowSizeHandler::changeWindowedResolution(osgViewer::GraphicsWindow *wind
 
     if (wsi == NULL) 
     {
-        osg::notify(osg::NOTICE) << "Error, no WindowSystemInterface available, cannot toggle window fullscreen." << std::endl;
+        OSG_NOTICE << "Error, no WindowSystemInterface available, cannot toggle window fullscreen." << std::endl;
         return;
     }
 
@@ -245,7 +253,7 @@ void WindowSizeHandler::changeWindowedResolution(osgViewer::GraphicsWindow *wind
         resolution = _resolutionList[_currentResolutionIndex];
         window->setWindowDecoration(true);
         window->setWindowRectangle((screenWidth - (int)resolution.x()) / 2, (screenHeight - (int)resolution.y()) / 2, (int)resolution.x(), (int)resolution.y());
-        osg::notify(osg::INFO) << "Screen resolution = " << (int)resolution.x() << "x" << (int)resolution.y() << std::endl;  
+        OSG_INFO << "Screen resolution = " << (int)resolution.x() << "x" << (int)resolution.y() << std::endl;
 
         window->grabFocusIfPointerInWindow();
     }
@@ -317,37 +325,40 @@ bool ThreadingHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIAction
 
             if (_changeThreadingModel == true && ea.getKey() == _keyEventChangeThreadingModel && delta > 1.0)
             {
+
                 _tickOrLastKeyPress = osg::Timer::instance()->tick();
 
                 switch(viewerBase->getThreadingModel())
                 {
                 case(osgViewer::ViewerBase::SingleThreaded):
                     viewerBase->setThreadingModel(osgViewer::ViewerBase::CullDrawThreadPerContext);
-                    osg::notify(osg::NOTICE)<<"Threading model 'CullDrawThreadPerContext' selected."<<std::endl;
+                    OSG_NOTICE<<"Threading model 'CullDrawThreadPerContext' selected."<<std::endl;
                     break;
                 case(osgViewer::ViewerBase::CullDrawThreadPerContext):
                     viewerBase->setThreadingModel(osgViewer::ViewerBase::DrawThreadPerContext);
-                    osg::notify(osg::NOTICE)<<"Threading model 'DrawThreadPerContext' selected."<<std::endl;
+                    OSG_NOTICE<<"Threading model 'DrawThreadPerContext' selected."<<std::endl;
                     break;
                 case(osgViewer::ViewerBase::DrawThreadPerContext):
                     viewerBase->setThreadingModel(osgViewer::ViewerBase::CullThreadPerCameraDrawThreadPerContext);
-                    osg::notify(osg::NOTICE)<<"Threading model 'CullThreadPerCameraDrawThreadPerContext' selected."<<std::endl;
+                    OSG_NOTICE<<"Threading model 'CullThreadPerCameraDrawThreadPerContext' selected."<<std::endl;
                     break;
                 case(osgViewer::ViewerBase::CullThreadPerCameraDrawThreadPerContext):
                     viewerBase->setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
-                    osg::notify(osg::NOTICE)<<"Threading model 'SingleThreaded' selected."<<std::endl;
+                    OSG_NOTICE<<"Threading model 'SingleThreaded' selected."<<std::endl;
                     break;
 #if 1                    
                 case(osgViewer::ViewerBase::AutomaticSelection):
                     viewerBase->setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
-                    osg::notify(osg::NOTICE)<<"Threading model 'SingleThreaded' selected."<<std::endl;
+                    OSG_NOTICE<<"Threading model 'SingleThreaded' selected."<<std::endl;
 #else                    
                 case(osgViewer::ViewerBase::AutomaticSelection):
                     viewerBase->setThreadingModel(viewer->suggestBestThreadingModel());
-                    osg::notify(osg::NOTICE)<<"Threading model 'AutomaticSelection' selected."<<std::endl;
+                    OSG_NOTICE<<"Threading model 'AutomaticSelection' selected."<<std::endl;
 #endif
                     break;
                 }
+
+                aa.requestRedraw();
                 return true;
             }
             if (viewer && _changeEndBarrierPosition == true && ea.getKey() == _keyEventChangeEndBarrierPosition)
@@ -356,13 +367,15 @@ bool ThreadingHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIAction
                 {
                 case(osgViewer::Viewer::BeforeSwapBuffers):
                     viewer->setEndBarrierPosition(osgViewer::Viewer::AfterSwapBuffers);
-                    osg::notify(osg::NOTICE)<<"Threading model 'AfterSwapBuffers' selected."<<std::endl;
+                    OSG_NOTICE<<"Threading model 'AfterSwapBuffers' selected."<<std::endl;
                     break;
                 case(osgViewer::Viewer::AfterSwapBuffers):
                     viewer->setEndBarrierPosition(osgViewer::Viewer::BeforeSwapBuffers);
-                    osg::notify(osg::NOTICE)<<"Threading model 'BeforeSwapBuffers' selected."<<std::endl;
+                    OSG_NOTICE<<"Threading model 'BeforeSwapBuffers' selected."<<std::endl;
                     break;
                 }
+
+                aa.requestRedraw();
                 return true;
             }
             break;
@@ -469,7 +482,7 @@ bool RecordCameraPathHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GU
                         }
                         ss << "."<<osgDB::getFileExtension(_filename);
                         
-                        osg::notify(osg::NOTICE) << "Recording camera path to file " << ss.str() << std::endl;
+                        OSG_NOTICE << "Recording camera path to file " << ss.str() << std::endl;
                         _fout.open( ss.str().c_str() );
 
                         // make sure doubles are not trucated by default stream precision = 6
@@ -477,7 +490,7 @@ bool RecordCameraPathHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GU
                     }
                     else
                     {
-                        osg::notify(osg::NOTICE)<<"Recording camera path."<<std::endl;
+                        OSG_NOTICE<<"Recording camera path."<<std::endl;
                     }
                 }
 
@@ -510,7 +523,7 @@ bool RecordCameraPathHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GU
                     // In the future this will need to be written continuously, rather
                     // than all at once.
                     osgDB::ofstream out(_filename.c_str());
-                    osg::notify(osg::NOTICE)<<"Writing camera file: "<<_filename<<std::endl;
+                    OSG_NOTICE<<"Writing camera file: "<<_filename<<std::endl;
                     _animPath->write(out);
                     out.close();
                 }
@@ -523,7 +536,7 @@ bool RecordCameraPathHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GU
 
 
                     // If we successfully found our _filename file, set it and keep a copy
-                    // around of the original MatrixManipulator to restore later.
+                    // around of the original CameraManipulator to restore later.
                     if (_animPathManipulator.valid() && _animPathManipulator->valid())
                     {
                         _oldManipulator = view->getCameraManipulator();
@@ -574,16 +587,20 @@ bool LODScaleHandler::handle(const osgGA::GUIEventAdapter& ea, osgGA::GUIActionA
             if (ea.getKey() == _keyEventIncreaseLODScale)
             {
                 camera->setLODScale(camera->getLODScale()*1.1);
-                osg::notify(osg::NOTICE)<<"LODScale = "<<camera->getLODScale()<<std::endl;
+                OSG_NOTICE<<"LODScale = "<<camera->getLODScale()<<std::endl;
+
+                aa.requestRedraw();
                 return true;
             }
 
             else if (ea.getKey() == _keyEventDecreaseLODScale)
             {
                 camera->setLODScale(camera->getLODScale()/1.1);
-                osg::notify(osg::NOTICE)<<"LODScale = "<<camera->getLODScale()<<std::endl;
+                OSG_NOTICE<<"LODScale = "<<camera->getLODScale()<<std::endl;
+
+                aa.requestRedraw();
                 return true;
-            }        
+            }
 
             break;
         }
@@ -609,13 +626,115 @@ void LODScaleHandler::getUsage(osg::ApplicationUsage& usage) const
     }
 }
 
+InteractiveImageHandler::InteractiveImageHandler(osg::Image* image) :
+    _image(image),
+    _texture(0),
+    _fullscreen(false),
+    _camera(0)
+{
+}
+
+InteractiveImageHandler::InteractiveImageHandler(osg::Image* image, osg::Texture2D* texture, osg::Camera* camera) :
+    _image(image),
+    _texture(texture),
+    _fullscreen(true),
+    _camera(camera)
+{
+    if (_camera.valid() && _camera->getViewport())
+    {
+        // Send an initial resize event (with the same size) so the image can
+        // resize itself initially.
+        double width = _camera->getViewport()->width();
+        double height = _camera->getViewport()->height();
+
+        resize(width, height);
+    }
+}
+
+bool InteractiveImageHandler::computeIntersections(osgViewer::View* view, float x,float y, const osg::NodePath& nodePath, osgUtil::LineSegmentIntersector::Intersections& intersections,osg::Node::NodeMask traversalMask) const 
+{
+    float local_x, local_y = 0.0;
+    const osg::Camera* camera;
+    if (_fullscreen)
+    {
+        if (!_camera) return false;
+        camera = _camera.get();
+        local_x = x;
+        local_y = y;
+    }
+    else
+    {
+        if (!view->getCamera() || nodePath.empty()) return false;
+        camera = view->getCameraContainingPosition(x, y, local_x, local_y);
+        if (!camera) camera = view->getCamera();
+    }
+
+    osg::ref_ptr< osgUtil::LineSegmentIntersector > picker;
+    if (_fullscreen)
+    {
+        picker = new osgUtil::LineSegmentIntersector(osgUtil::Intersector::WINDOW, local_x, local_y);
+    }
+    else
+    {
+        osg::Matrixd matrix;
+        if (nodePath.size()>1)
+        {
+            osg::NodePath prunedNodePath(nodePath.begin(),nodePath.end()-1);
+            matrix = osg::computeLocalToWorld(prunedNodePath);
+        }
+
+        matrix.postMult(camera->getViewMatrix());
+        matrix.postMult(camera->getProjectionMatrix());
+
+        double zNear = -1.0;
+        double zFar = 1.0;
+        if (camera->getViewport())
+        {
+            matrix.postMult(camera->getViewport()->computeWindowMatrix());
+            zNear = 0.0;
+            zFar = 1.0;
+        }
+
+        osg::Matrixd inverse;
+        inverse.invert(matrix);
+
+        osg::Vec3d startVertex = osg::Vec3d(local_x,local_y,zNear) * inverse;
+        osg::Vec3d endVertex = osg::Vec3d(local_x,local_y,zFar) * inverse;
+
+        picker = new osgUtil::LineSegmentIntersector(osgUtil::Intersector::MODEL, startVertex, endVertex);
+    }
+
+    osgUtil::IntersectionVisitor iv(picker.get());
+    iv.setTraversalMask(traversalMask);
+
+    if (_fullscreen)
+    {
+        const_cast<osg::Camera*>(camera)->accept(iv);
+    }
+    else
+    {
+        nodePath.back()->accept(iv);
+    }
+
+    if (picker->containsIntersections())
+    {
+        intersections = picker->getIntersections();
+        return true;
+    }
+    else
+    {
+        intersections.clear();
+        return false;
+    }
+}
 
 bool InteractiveImageHandler::mousePosition(osgViewer::View* view, osg::NodeVisitor* nv, const osgGA::GUIEventAdapter& ea, int& x, int &y) const
 {
     osgUtil::LineSegmentIntersector::Intersections intersections;
     bool foundIntersection = view==0 ? false :
         (nv==0 ? view->computeIntersections(ea.getX(), ea.getY(), intersections) :
-                 view->computeIntersections(ea.getX(), ea.getY(), nv->getNodePath(), intersections));
+                 //view->computeIntersections(ea.getX(), ea.getY(), nv->getNodePath(), intersections));
+                 computeIntersections(view, ea.getX(), ea.getY(), nv->getNodePath(), intersections));
 
     if (foundIntersection)
     {
@@ -727,6 +846,16 @@ bool InteractiveImageHandler::handle(const osgGA::GUIEventAdapter& ea,osgGA::GUI
                 return _image->sendKeyEvent(ea.getKey(), ea.getEventType()==osgGA::GUIEventAdapter::KEYDOWN);
             }          
         }
+        case (osgGA::GUIEventAdapter::RESIZE):
+        {
+            if (_fullscreen && _camera.valid())
+            {
+                _camera->setViewport(0, 0, ea.getWindowWidth(), ea.getWindowHeight());
+
+                resize(ea.getWindowWidth(), ea.getWindowHeight());
+                return true;
+            }
+        }
 
         default:
             return false;
@@ -742,6 +871,19 @@ bool InteractiveImageHandler::cull(osg::NodeVisitor* nv, osg::Drawable*, osg::Re
     }
 
     return false;
+}
+
+void InteractiveImageHandler::resize(int width, int height)
+{
+    if (_image.valid())
+    {
+        _image->scaleImage(width, height, 1);
+    }
+
+    // Make sure the texture does not rescale the image because 
+    // it thinks it should still be the previous size...
+    if (_texture.valid())
+        _texture->setTextureSize(width, height);
 }
 
 }

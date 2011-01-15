@@ -79,16 +79,6 @@ void GLObjectsVisitor::apply(osg::Drawable& drawable)
         drawable.setUseDisplayList(true);
     }
 
-    if (_mode&COMPILE_DISPLAY_LISTS && _renderInfo.getState())
-    {
-        drawable.compileGLObjects(_renderInfo);
-    }
-
-    if (_mode&RELEASE_DISPLAY_LISTS)
-    {
-        drawable.releaseGLObjects(_renderInfo.getState());
-    }
-
     if (_mode&SWITCH_ON_VERTEX_BUFFER_OBJECTS)
     {
         drawable.setUseVertexBufferObjects(true);
@@ -97,6 +87,17 @@ void GLObjectsVisitor::apply(osg::Drawable& drawable)
     if (_mode&SWITCH_OFF_VERTEX_BUFFER_OBJECTS)
     {
         drawable.setUseVertexBufferObjects(false);
+    }
+
+    if (_mode&COMPILE_DISPLAY_LISTS && _renderInfo.getState() &&
+        (drawable.getUseDisplayList() || drawable.getUseVertexBufferObjects()))
+    {
+        drawable.compileGLObjects(_renderInfo);
+    }
+
+    if (_mode&RELEASE_DISPLAY_LISTS)
+    {
+        drawable.releaseGLObjects(_renderInfo.getState());
     }
 }
 
@@ -182,7 +183,7 @@ void GLObjectsOperation::operator () (osg::GraphicsContext* context)
 
     glObjectsVisitor.setState(context->getState());
     
-    // osg::notify(osg::NOTICE)<<"GLObjectsOperation::before <<<<<<<<<<<"<<std::endl;
+    // OSG_NOTICE<<"GLObjectsOperation::before <<<<<<<<<<<"<<std::endl;
     if (_subgraph.valid())
     {
         _subgraph->accept(glObjectsVisitor);
@@ -196,7 +197,7 @@ void GLObjectsOperation::operator () (osg::GraphicsContext* context)
             (*itr)->accept(glObjectsVisitor);
         }
     }
-    // osg::notify(osg::NOTICE)<<"GLObjectsOperation::after >>>>>>>>>>> "<<std::endl;
+    // OSG_NOTICE<<"GLObjectsOperation::after >>>>>>>>>>> "<<std::endl;
 }
 
 

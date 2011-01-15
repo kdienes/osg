@@ -4,7 +4,7 @@
 #include <osg/Image>
 #include <osg/GL>
 
-#ifdef _WIN32
+#if defined _WIN32 && !defined OSG_LIBRARY_STATIC
 //Make the half format work against openEXR libs 
 #define OPENEXR_DLL
 #endif
@@ -100,7 +100,7 @@ unsigned char *exr_load(std::istream& fin,
         RgbaInputFile rgbafile(inStream);
 
         Box2i dw = rgbafile.dataWindow();
-        RgbaChannels channels = rgbafile.channels();
+        /*RgbaChannels channels =*/ rgbafile.channels();
         (*width_ret) = width = dw.max.x - dw.min.x + 1;
         (*height_ret)=height = dw.max.y - dw.min.y + 1;
         (*dataType_ret) = GL_HALF_FLOAT_ARB;
@@ -203,7 +203,7 @@ public:
         std::string fileName = osgDB::findDataFile( file, options );
         if (fileName.empty()) return ReadResult::FILE_NOT_FOUND;
 
-        std::ifstream istream(fileName.c_str(), std::ios::in | std::ios::binary);
+        osgDB::ifstream istream(fileName.c_str(), std::ios::in | std::ios::binary);
         if(!istream) return ReadResult::FILE_NOT_HANDLED;
         
         ReadResult rr = readEXRStream(istream);
@@ -229,7 +229,7 @@ public:
         std::string ext = osgDB::getFileExtension(fileName);
         if (!acceptsExtension(ext)) return WriteResult::FILE_NOT_HANDLED;
 
-        std::ofstream fout(fileName.c_str(), std::ios::out | std::ios::binary);
+        osgDB::ofstream fout(fileName.c_str(), std::ios::out | std::ios::binary);
         if(!fout) return WriteResult::ERROR_IN_WRITING_FILE;
 
         bool success = writeEXRStream(img, fout, fileName);
@@ -246,11 +246,10 @@ protected:
     {
         bool writeOK = true;
 
-         //Obtain data from texture
-         int width = img.s();
-         int height = img.t();
-         unsigned int intenalTextureFormat = img.getInternalTextureFormat();
-         unsigned int pixelFormat = img.getPixelFormat();
+        //Obtain data from texture
+        int width = img.s();
+        int height = img.t();
+        unsigned int pixelFormat = img.getPixelFormat();
         int numComponents = img.computeNumComponents(pixelFormat);
         unsigned int dataType = img.getDataType();
 
@@ -361,8 +360,6 @@ protected:
         int s = width_ret;
         int t = height_ret;
         int r = 1;
-
-        int internalFormat = numComponents_ret;
 
         if (dataType_ret == GL_HALF_FLOAT_ARB)
         {

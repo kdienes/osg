@@ -1,11 +1,15 @@
 #include <sstream>
 #include <memory>
+#ifndef WIN32
+#include <strings.h>//for strncasecmp
+#endif
 
 #include <osg/Notify>
 #include <osg/MatrixTransform>
 #include <osg/Material>
 #include <osg/PositionAttitudeTransform>
 #include <osg/Texture2D>
+#include <osg/Version>
 #include <osgDB/ConvertUTF>
 #include <osgDB/FileNameUtils>
 #include <osgDB/FileUtils>
@@ -23,8 +27,7 @@
 #include <fbxsdk.h>
 
 #include "ReaderWriterFBX.h"
-#include "fbxRNode.h"
-#include "fbxMaterialToOsgStateSet.h"
+#include "fbxReader.h"
 #include "WriterNodeVisitor.h"
 
 /// Returns true if the given node is a basic root group with no special information.
@@ -92,7 +95,6 @@ public:
 
     ~CleanUpFbx()
     {
-        KFbxIOSettings::IOSettingsRef().FreeIOSettings();
         m_pSdkManager->Destroy();
     }
 };
@@ -180,14 +182,14 @@ void resolveBindMatrices(
                     }
                     else
                     {
-                        osg::notify(osg::WARN) << "No vertex influences found for \"" << osgBone.getName() << "\"" << std::endl;
+                        OSG_WARN << "No vertex influences found for \"" << osgBone.getName() << "\"" << std::endl;
                     }
                 }
             }
         }
         else
         {
-            osg::notify(osg::WARN) << "No bone found for \"" << fbxBone->GetName() << "\"" << std::endl;
+            OSG_WARN << "No bone found for \"" << fbxBone->GetName() << "\"" << std::endl;
             ++it;
         }
     }
@@ -214,6 +216,8 @@ ReaderWriterFBX::readNode(const std::string& filenameInit,
 
         CleanUpFbx cleanUpFbx(pSdkManager);
 
+        pSdkManager->SetIOSettings(KFbxIOSettings::Create(pSdkManager, IOSROOT));
+
         KFbxScene* pScene = KFbxScene::Create(pSdkManager, "");
 
         // The FBX SDK interprets the filename as UTF-8
@@ -223,14 +227,9 @@ ReaderWriterFBX::readNode(const std::string& filenameInit,
         std::string utf8filename(osgDB::convertStringFromCurrentCodePageToUTF8(filename));
 #endif
 
-        int fileFormat;
-        if (!pSdkManager->GetIOPluginRegistry()->DetectFileFormat(utf8filename.c_str(), fileFormat))
-        {
-            return ReadResult::FILE_NOT_HANDLED;
-        }
         KFbxImporter* lImporter = KFbxImporter::Create(pSdkManager, "");
 
-        if (!lImporter->Initialize(utf8filename.c_str(), fileFormat))
+        if (!lImporter->Initialize(utf8filename.c_str(), -1, pSdkManager->GetIOSettings()))
         {
             return std::string(lImporter->GetLastErrorString());
         }
@@ -259,6 +258,8 @@ ReaderWriterFBX::readNode(const std::string& filenameInit,
             pScene->SetCurrentTake(pScene->GetCurrentTakeName());
 
             bool useFbxRoot = false;
+            bool lightmapTextures = false;
+            bool tessellatePolygons = false;
             if (options)
             {
                 std::istringstream iss(options->getOptionString());
@@ -269,43 +270,87 @@ ReaderWriterFBX::readNode(const std::string& filenameInit,
                     {
                         useFbxRoot = true;
                     }
+                    if (opt == "LightmapTextures")
+                    {
+                        lightmapTextures = true;
+                    }
+					if (opt == "TessellatePolygons")
+					{
+						tessellatePolygons = true;
+					}
                 }
             }
 
-            osg::ref_ptr<osgAnimation::AnimationManagerBase> pAnimationManager;
             bool bIsBone = false;
             int nLightCount = 0;
             osg::ref_ptr<Options> localOptions = NULL;
             if (options)
-                localOptions = new osgDB::ReaderWriter::Options(*options);
+                localOptions = options->cloneOptions();
             else
-                localOptions = new osgDB::ReaderWriter::Options();
+                localOptions = new osgDB::Options();
             localOptions->setObjectCacheHint(osgDB::ReaderWriter::Options::CACHE_IMAGES);
 
             std::string filePath = osgDB::getFilePath(filename);
-            FbxMaterialToOsgStateSet fbxMaterialToOsgStateSet(filePath, localOptions.get());
+            FbxMaterialToOsgStateSet fbxMaterialToOsgStateSet(filePath, localOptions.get(), lightmapTextures);
 
             std::set<const KFbxNode*> fbxSkeletons;
             findLinkedFbxSkeletonNodes(pNode, fbxSkeletons);
 
-            std::map<KFbxNode*, osg::Node*> nodeMap;
-            BindMatrixMap boneBindMatrices;
-            std::map<KFbxNode*, osgAnimation::Skeleton*> skeletonMap;
-            ReadResult res = readFbxNode(*pSdkManager, pNode, pAnimationManager,
-                bIsBone, nLightCount, fbxMaterialToOsgStateSet, nodeMap,
-                boneBindMatrices, fbxSkeletons, skeletonMap, localOptions.get());
+            OsgFbxReader::AuthoringTool authoringTool = OsgFbxReader::UNKNOWN;
+            if (KFbxDocumentInfo* pDocInfo = pScene->GetDocumentInfo())
+            {
+                struct ToolName
+                {
+                    const char* name;
+                    OsgFbxReader::AuthoringTool tool;
+                };
+
+                ToolName authoringTools[] = {
+                    {"OpenSceneGraph", OsgFbxReader::OPENSCENEGRAPH},
+                    {"3ds Max", OsgFbxReader::AUTODESK_3DSTUDIO_MAX}
+                };
+
+                fbxString appName = pDocInfo->LastSaved_ApplicationName.Get();
+
+                for (int i = 0; i < sizeof(authoringTools) / sizeof(authoringTools[0]); ++i)
+                {
+                    if (0 ==
+#ifdef WIN32
+                        _strnicmp
+#else
+                        strncasecmp
+#endif
+                        (appName, authoringTools[i].name, strlen(authoringTools[i].name)))
+                    {
+                        authoringTool = authoringTools[i].tool;
+                        break;
+                    }
+                }
+            }
+
+
+            OsgFbxReader reader(*pSdkManager,
+                *pScene,
+                fbxMaterialToOsgStateSet,
+                fbxSkeletons,
+                *localOptions,
+                authoringTool,
+                lightmapTextures,
+				tessellatePolygons);
+
+            ReadResult res = reader.readFbxNode(pNode, bIsBone, nLightCount);
 
             if (res.success())
             {
                 fbxMaterialToOsgStateSet.checkInvertTransparency();
 
-                resolveBindMatrices(*res.getNode(), boneBindMatrices, nodeMap);
+                resolveBindMatrices(*res.getNode(), reader.boneBindMatrices, reader.nodeMap);
 
                 osg::Node* osgNode = res.getNode();
                 osgNode->getOrCreateStateSet()->setMode(GL_RESCALE_NORMAL,osg::StateAttribute::ON);
                 osgNode->getOrCreateStateSet()->setMode(GL_NORMALIZE,osg::StateAttribute::ON);
 
-                if (pAnimationManager.valid())
+                if (reader.pAnimationManager.valid())
                 {
                     if (osgNode->getUpdateCallback())
                     {
@@ -315,8 +360,8 @@ ReaderWriterFBX::readNode(const std::string& filenameInit,
                     }
 
                     //because the animations may be altered after registering
-                    pAnimationManager->buildTargetReference();
-                    osgNode->setUpdateCallback(pAnimationManager.get());
+                    reader.pAnimationManager->buildTargetReference();
+                    osgNode->setUpdateCallback(reader.pAnimationManager.get());
                 }
 
                 KFbxAxisSystem fbxAxis = pScene->GetGlobalSettings().GetAxisSystem();
@@ -378,7 +423,7 @@ ReaderWriterFBX::readNode(const std::string& filenameInit,
     }
     catch (...)
     {
-        osg::notify(osg::WARN) << "Exception thrown while importing \"" << filenameInit << '\"' << std::endl;
+        OSG_WARN << "Exception thrown while importing \"" << filenameInit << '\"' << std::endl;
     }
 
     return ReadResult::ERROR_IN_READING_FILE;
@@ -407,6 +452,8 @@ osgDB::ReaderWriter::WriteResult ReaderWriterFBX::writeNode(
 
         CleanUpFbx cleanUpFbx(pSdkManager);
 
+        pSdkManager->SetIOSettings(KFbxIOSettings::Create(pSdkManager, IOSROOT));
+
         bool useFbxRoot = false;
         if (options)
         {
@@ -416,9 +463,7 @@ osgDB::ReaderWriter::WriteResult ReaderWriterFBX::writeNode(
             {
                 if (opt == "Embedded")
                 {
-                    IOSREF.SetBoolProp(EXP_FBX_EMBEDDED, true);
-                    if (KFbxIOSettings::IOSettingsRef().IsIOSettingsAllocated())
-                        KFbxIOSettings::IOSettingsRef().AllocateIOSettings(*pSdkManager);
+                    pSdkManager->GetIOSettings()->SetBoolProp(EXP_FBX_EMBEDDED, true);
                 }
                 else if (opt == "UseFbxRoot")
                 {
@@ -434,7 +479,8 @@ osgDB::ReaderWriter::WriteResult ReaderWriterFBX::writeNode(
         {
             // If root node is a simple group, put all elements under the FBX root
             const osg::Group * osgGroup = node.asGroup();
-            for(unsigned int child=0; child<osgGroup->getNumChildren(); ++child) {
+            for (unsigned int child = 0; child < osgGroup->getNumChildren(); ++child)
+            {
                 const_cast<osg::Node *>(osgGroup->getChild(child))->accept(writerNodeVisitor);
             }
         }
@@ -443,12 +489,25 @@ osgDB::ReaderWriter::WriteResult ReaderWriterFBX::writeNode(
             const_cast<osg::Node&>(node).accept(writerNodeVisitor);
         }
 
+        KFbxDocumentInfo* pDocInfo = pScene->GetDocumentInfo();
+        bool needNewDocInfo = pDocInfo != NULL;
+        if (needNewDocInfo)
+        {
+            pDocInfo = KFbxDocumentInfo::Create(pSdkManager, "");
+        }
+        pDocInfo->LastSaved_ApplicationName.Set(fbxString("OpenSceneGraph"));
+        pDocInfo->LastSaved_ApplicationVersion.Set(fbxString(osgGetVersion()));
+        if (needNewDocInfo)
+        {
+            pScene->SetDocumentInfo(pDocInfo);
+        }
+
         KFbxExporter* lExporter = KFbxExporter::Create(pSdkManager, "");
         pScene->GetGlobalSettings().SetAxisSystem(KFbxAxisSystem::eOpenGL);
 
         // Ensure the directory exists or else the FBX SDK will fail
         if (!osgDB::makeDirectoryForFile(filename)) {
-            osg::notify(osg::NOTICE) << "Can't create directory for file '" << filename << "'. FBX SDK may fail creating the file." << std::endl;
+            OSG_NOTICE << "Can't create directory for file '" << filename << "'. FBX SDK may fail creating the file." << std::endl;
         }
 
         // The FBX SDK interprets the filename as UTF-8

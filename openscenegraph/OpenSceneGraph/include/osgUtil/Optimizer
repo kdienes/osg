@@ -74,22 +74,27 @@ class OSGUTIL_EXPORT Optimizer
             SHARE_DUPLICATE_STATE =     (1 << 4),
             MERGE_GEOMETRY =            (1 << 5),
             CHECK_GEOMETRY =            (1 << 6),
-            SPATIALIZE_GROUPS =         (1 << 7),
-            COPY_SHARED_NODES =         (1 << 8),
-            TRISTRIP_GEOMETRY =         (1 << 9),
-            TESSELLATE_GEOMETRY =       (1 << 10),
-            OPTIMIZE_TEXTURE_SETTINGS = (1 << 11),
-            MERGE_GEODES =              (1 << 12),
-            FLATTEN_BILLBOARDS =        (1 << 13),
-            TEXTURE_ATLAS_BUILDER =     (1 << 14),
-            STATIC_OBJECT_DETECTION =   (1 << 15),
-            FLATTEN_STATIC_TRANSFORMS_DUPLICATING_SHARED_SUBGRAPHS = (1 << 16),
+            MAKE_FAST_GEOMETRY =        (1 << 7),
+            SPATIALIZE_GROUPS =         (1 << 8),
+            COPY_SHARED_NODES =         (1 << 9),
+            TRISTRIP_GEOMETRY =         (1 << 10),
+            TESSELLATE_GEOMETRY =       (1 << 11),
+            OPTIMIZE_TEXTURE_SETTINGS = (1 << 12),
+            MERGE_GEODES =              (1 << 13),
+            FLATTEN_BILLBOARDS =        (1 << 14),
+            TEXTURE_ATLAS_BUILDER =     (1 << 15),
+            STATIC_OBJECT_DETECTION =   (1 << 16),
+            FLATTEN_STATIC_TRANSFORMS_DUPLICATING_SHARED_SUBGRAPHS = (1 << 17),
+            INDEX_MESH =                (1 << 18),
+            VERTEX_POSTTRANSFORM =      (1 << 19),
+            VERTEX_PRETRANSFORM =       (1 << 20),
             DEFAULT_OPTIMIZATIONS = FLATTEN_STATIC_TRANSFORMS |
                                 REMOVE_REDUNDANT_NODES |
                                 REMOVE_LOADED_PROXY_NODES |
                                 COMBINE_ADJACENT_LODS |
                                 SHARE_DUPLICATE_STATE |
                                 MERGE_GEOMETRY |
+                                MAKE_FAST_GEOMETRY |
                                 CHECK_GEOMETRY |
                                 OPTIMIZE_TEXTURE_SETTINGS |
                                 STATIC_OBJECT_DETECTION,
@@ -100,6 +105,7 @@ class OSGUTIL_EXPORT Optimizer
                                 SHARE_DUPLICATE_STATE |
                                 MERGE_GEODES |
                                 MERGE_GEOMETRY |
+                                MAKE_FAST_GEOMETRY |
                                 CHECK_GEOMETRY |
                                 SPATIALIZE_GROUPS |
                                 COPY_SHARED_NODES |
@@ -506,6 +512,20 @@ class OSGUTIL_EXPORT Optimizer
                 
         };
         
+        class OSGUTIL_EXPORT MakeFastGeometryVisitor : public BaseOptimizerVisitor
+        {
+            public:
+
+                /// default to traversing all children.
+                MakeFastGeometryVisitor(Optimizer* optimizer=0):
+                    BaseOptimizerVisitor(optimizer, MAKE_FAST_GEOMETRY) {}
+
+                virtual void apply(osg::Geode& geode) { checkGeode(geode); }
+
+                void checkGeode(osg::Geode& geode);
+                
+        };        
+        
         class OSGUTIL_EXPORT MergeGeometryVisitor : public BaseOptimizerVisitor
         {
             public:
@@ -643,13 +663,13 @@ class OSGUTIL_EXPORT Optimizer
             
             void reset();
             
-            void setMaximumAtlasSize(unsigned int width, unsigned int height);
+            void setMaximumAtlasSize(int width, int height);
 
-            unsigned int getMaximumAtlasWidth() const { return _maximumAtlasWidth; }
-            unsigned int getMaximumAtlasHeight() const { return _maximumAtlasHeight; }
+            int getMaximumAtlasWidth() const { return _maximumAtlasWidth; }
+            int getMaximumAtlasHeight() const { return _maximumAtlasHeight; }
             
-            void setMargin(unsigned int margin);
-            unsigned int getMargin() const { return _margin; }
+            void setMargin(int margin);
+            int getMargin() const { return _margin; }
 
             void addSource(const osg::Image* image);
             void addSource(const osg::Texture2D* texture);
@@ -657,9 +677,8 @@ class OSGUTIL_EXPORT Optimizer
             unsigned int getNumSources() const { return _sourceList.size(); }
             const osg::Image* getSourceImage(unsigned int i) { return _sourceList[i]->_image.get(); }
             const osg::Texture2D* getSourceTexture(unsigned int i) { return _sourceList[i]->_texture.get(); }
-            
+ 
             void buildAtlas();
-            
             osg::Image* getImageAtlas(unsigned int i);
             osg::Texture2D* getTextureAtlas(unsigned int i);
             osg::Matrix getTextureMatrix(unsigned int i);
@@ -674,14 +693,14 @@ class OSGUTIL_EXPORT Optimizer
             
         protected:
         
-            unsigned int _maximumAtlasWidth;
-            unsigned int _maximumAtlasHeight;
-            unsigned int _margin;
+            int _maximumAtlasWidth;
+            int _maximumAtlasHeight;
+            int _margin;
             
 
             // forward declare
             class Atlas;
-            
+    
             class Source : public osg::Referenced
             {
             public:
@@ -694,14 +713,14 @@ class OSGUTIL_EXPORT Optimizer
                 Source(const osg::Texture2D* texture):
                     _x(0),_y(0),_atlas(0),_texture(texture) { if (texture) _image = texture->getImage(); }
             
-                unsigned int _x;
-                unsigned int _y;
+                int _x;
+                int _y;
                 Atlas* _atlas;
 
                 osg::ref_ptr<const osg::Image> _image;
                 osg::ref_ptr<const osg::Texture2D> _texture;
                 
-                bool suitableForAtlas(unsigned int maximumAtlasWidth, unsigned int maximumAtlasHeight, unsigned int margin);
+                bool suitableForAtlas(int maximumAtlasWidth, int maximumAtlasHeight, int margin);
                 osg::Matrix computeTextureMatrix() const;
                 
                 
@@ -709,42 +728,51 @@ class OSGUTIL_EXPORT Optimizer
             
                 virtual ~Source() {}
             };
-            
+
             typedef std::vector< osg::ref_ptr<Source> > SourceList;
 
             class Atlas : public osg::Referenced
             {
             public:
-                Atlas(unsigned int width, unsigned height, unsigned margin):
+                Atlas(int width, int height, int margin):
                     _maximumAtlasWidth(width),
                     _maximumAtlasHeight(height),
                     _margin(margin),
                     _x(0),
                     _y(0),
                     _width(0),
-                    _height(0){}
+                    _height(0),
+                    _indexFirstOfRow(0){}
         
-                unsigned int _maximumAtlasWidth;
-                unsigned int _maximumAtlasHeight;
-                unsigned int _margin;
+                int _maximumAtlasWidth;
+                int _maximumAtlasHeight;
+                int _margin;
 
                 osg::ref_ptr<osg::Texture2D> _texture;
                 osg::ref_ptr<osg::Image> _image;
             
                 SourceList _sourceList;
                 
-                unsigned int _x;
-                unsigned int _y;
-                unsigned int _width;
-                unsigned int _height;
-                
-                bool doesSourceFit(Source* source);
+                int _x;
+                int _y;
+                int _width;
+                int _height;
+                unsigned int _indexFirstOfRow; ///< Contain the index of the first element of the last row.
+                enum FitsIn
+                {
+                    NO,
+                    YES,
+                    IN_NEXT_ROW
+                };
+                //Return YES if it fits in the current row,
+                //NO if it can't fit in any row.
+                //IN_NEXT_ROW if it can't fin the the current row, but can fit in next row or atlas.
+                FitsIn doesSourceFit(Source* source); 
                 bool addSource(Source* source);
                 void clampToNearestPowerOfTwoSize();
                 void copySources();
                 
             protected:
-            
                 virtual ~Atlas() {}
             };
             
@@ -754,7 +782,16 @@ class OSGUTIL_EXPORT Optimizer
             Source* getSource(const osg::Texture2D* texture);
 
             SourceList _sourceList;
-            AtlasList _atlasList;    
+            AtlasList _atlasList;
+            private:
+                struct CompareSrc
+                {
+                    bool operator()(osg::ref_ptr<Source> src1, osg::ref_ptr<Source> src2) const
+                    {
+                        return src1->_image->t() > src2->_image->t();
+                    }
+                };
+                void completeRow(unsigned int indexAtlas);
         };
 
  

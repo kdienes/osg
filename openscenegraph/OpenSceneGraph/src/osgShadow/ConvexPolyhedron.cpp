@@ -22,6 +22,7 @@
 #include<cassert>
 #include<deque>
 #include<algorithm>
+#include<iterator>
 
 #include <stdio.h>
 #include <string.h>
@@ -30,18 +31,21 @@ using namespace osgShadow;
 
 
 #if defined( DEBUG ) || defined( _DEBUG ) || defined( _DEBUG_ )
-
-// #define MAKE_CHECKS 0
-
+// ConvexPolyhedron may produce tons of warnings when it becomes non convex.
+// Unfortuantely this condition often happens in daily routine of shadow usage 
+// due precision errors mixed with repeating frustum cuts performed by MinimalShadowClasses.
+// However, in most of above cases this condition is not fatal
+// because polyhedron becomes concave by very small margin (mesuring deep the hole).
+// Unfortunately warnings are produced even for such small margin cases and can 
+// easily flood the console.
+// So I leave MAKE_CHECKS commented out. Its really useful only for a guy who debugs 
+// larger concaveness issues which means most developers will want to keep it commented.
+//    #define MAKE_CHECKS 1
 #endif
 
 #if MAKE_CHECKS
 
-inline std::ostream & DEBUG_NOTIFY( void )
-{
-    return osg::notify( osg::WARN );
-}
-#define WARN  DEBUG_NOTIFY()
+#define WARN  OSG_WARN
 
 #define CONVEX_POLYHEDRON_CHECK_COHERENCY             1
 #define CONVEX_POLYHEDRON_WARN_ON_INCOHERENT_DATA     2
@@ -56,7 +60,7 @@ inline std::ostream & DEBUG_NOTIFY( void )
 
 #else
 
-#define WARN osg::notify( osg::WARN )
+#define WARN OSG_WARN
 
 #define CONVEX_POLYHEDRON_CHECK_COHERENCY             0
 #define CONVEX_POLYHEDRON_WARN_ON_INCOHERENT_DATA     0
@@ -1752,7 +1756,7 @@ osg::Geometry* ConvexPolyhedron::buildGeometry( const osg::Vec4d& colorOutline,
 
     osg::Vec4Array* colors = new osg::Vec4Array;
     geometry->setColorArray(colors);
-    geometry->setColorBinding(osg::Geometry::BIND_PER_PRIMITIVE);
+    geometry->setColorBinding(osg::Geometry::BIND_PER_PRIMITIVE_SET);
 
     for(Faces::const_iterator itr = _faces.begin();
         itr != _faces.end();

@@ -1,5 +1,6 @@
 
 #include "FFmpegDecoder.hpp"
+#include "FFmpegParameters.hpp"
 
 #include <osg/Notify>
 #include <osgDB/FileNameUtils>
@@ -36,7 +37,7 @@ FFmpegDecoder::~FFmpegDecoder()
 }
 
 
-bool FFmpegDecoder::open(const std::string & filename)
+bool FFmpegDecoder::open(const std::string & filename, FFmpegParameters* parameters)
 {
     try
     {
@@ -47,7 +48,7 @@ bool FFmpegDecoder::open(const std::string & filename)
         {
             avdevice_register_all();
         
-            osg::notify(osg::NOTICE)<<"Attempting to stream "<<filename<<std::endl;
+            OSG_NOTICE<<"Attempting to stream "<<filename<<std::endl;
 
             AVFormatParameters formatParams;
             memset(&formatParams, 0, sizeof(AVFormatParameters));
@@ -70,11 +71,11 @@ bool FFmpegDecoder::open(const std::string & filename)
             
             if (iformat)
             {
-                osg::notify(osg::NOTICE)<<"Found input format: "<<format<<std::endl;
+                OSG_NOTICE<<"Found input format: "<<format<<std::endl;
             }
             else
             {
-                osg::notify(osg::NOTICE)<<"Failed to find input format: "<<format<<std::endl;
+                OSG_NOTICE<<"Failed to find input format: "<<format<<std::endl;
             }
 
             int error = av_open_input_file(&p_format_context, filename.c_str(), iformat, 0, &formatParams);
@@ -100,7 +101,9 @@ bool FFmpegDecoder::open(const std::string & filename)
         }
         else
         {
-            if (av_open_input_file(&p_format_context, filename.c_str(), 0, 0, 0) !=0 )
+            AVInputFormat* av_format = (parameters ? parameters->getFormat() : 0);
+            AVFormatParameters* av_params = (parameters ? parameters->getFormatParameter() : 0);
+            if (av_open_input_file(&p_format_context, filename.c_str(), av_format, 0, av_params) !=0 )
                 throw std::runtime_error("av_open_input_file() failed");
         }
         
@@ -133,13 +136,13 @@ bool FFmpegDecoder::open(const std::string & filename)
 
         catch (const std::runtime_error & error)
         {
-            osg::notify(osg::WARN) << "FFmpegImageStream::open audio failed, audio stream will be disabled: " << error.what() << std::endl;
+            OSG_WARN << "FFmpegImageStream::open audio failed, audio stream will be disabled: " << error.what() << std::endl;
         }
     }
 
     catch (const std::runtime_error & error)
     {
-        osg::notify(osg::WARN) << "FFmpegImageStream::open : " << error.what() << std::endl;
+        OSG_WARN << "FFmpegImageStream::open : " << error.what() << std::endl;
         return false;
     }
     

@@ -1,9 +1,9 @@
 
-IF   (DYNAMIC_OPENSCENEGRAPH)
+IF(DYNAMIC_OPENSCENEGRAPH)
     ADD_DEFINITIONS(-DOSGFX_LIBRARY)
-ELSE (DYNAMIC_OPENSCENEGRAPH)
+ELSE()
     ADD_DEFINITIONS(-DOSG_LIBRARY_STATIC)
-ENDIF(DYNAMIC_OPENSCENEGRAPH)
+ENDIF()
 
 SET(LIB_NAME osgFX)
 SET(HEADER_PATH ${OpenSceneGraph_SOURCE_DIR}/include/${LIB_NAME})
@@ -14,6 +14,7 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/Effect
     ${HEADER_PATH}/Export
     ${HEADER_PATH}/MultiTextureControl
+    ${HEADER_PATH}/Outline
     ${HEADER_PATH}/Registry
     ${HEADER_PATH}/Scribe
     ${HEADER_PATH}/SpecularHighlights
@@ -31,12 +32,14 @@ ADD_LIBRARY(${LIB_NAME}
     Cartoon.cpp
     Effect.cpp
     MultiTextureControl.cpp
+    Outline.cpp
     Registry.cpp
     Scribe.cpp
     SpecularHighlights.cpp
     Technique.cpp
     Validator.cpp
     Version.cpp
+    ${OPENSCENEGRAPH_VERSIONINFO_RC}
 )
 
 LINK_INTERNAL(${LIB_NAME}     

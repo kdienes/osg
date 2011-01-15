@@ -1,10 +1,10 @@
 
 # FIXME: For OS X, need flag for Framework or dylib
-IF   (DYNAMIC_OPENSCENEGRAPH)
+IF(DYNAMIC_OPENSCENEGRAPH)
     ADD_DEFINITIONS(-DOSG_LIBRARY)
-ELSE (DYNAMIC_OPENSCENEGRAPH)
+ELSE()
     ADD_DEFINITIONS(-DOSG_LIBRARY_STATIC)
-ENDIF(DYNAMIC_OPENSCENEGRAPH)
+ENDIF()
 
 SET(LIB_NAME osg)
 
@@ -15,7 +15,7 @@ SET(LIB_NAME osg)
 OPTION(OSG_FORCE_QUERY_RESULT_AVAILABLE_BEFORE_RETRIEVAL "Set to ON to build OcclussionQueryNode with a workaround for multi-threaded OpenGL driver occlussion query crash. " OFF)
 IF(OSG_FORCE_QUERY_RESULT_AVAILABLE_BEFORE_RETRIEVAL)
     ADD_DEFINITIONS(-DFORCE_QUERY_RESULT_AVAILABLE_BEFORE_RETRIEVAL)
-ENDIF(OSG_FORCE_QUERY_RESULT_AVAILABLE_BEFORE_RETRIEVAL)
+ENDIF()
 
 
 SET(HEADER_PATH ${OpenSceneGraph_SOURCE_DIR}/include/${LIB_NAME})
@@ -25,6 +25,7 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/ApplicationUsage
     ${HEADER_PATH}/ArgumentParser
     ${HEADER_PATH}/Array
+    ${HEADER_PATH}/ArrayDispatchers
     ${HEADER_PATH}/AudioStream
     ${HEADER_PATH}/AutoTransform
     ${HEADER_PATH}/Billboard
@@ -35,6 +36,7 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/BoundingSphere
     ${HEADER_PATH}/BoundsChecking
     ${HEADER_PATH}/buffered_value
+    ${HEADER_PATH}/BufferIndexBinding
     ${HEADER_PATH}/BufferObject
     ${HEADER_PATH}/Camera
     ${HEADER_PATH}/CameraNode
@@ -74,6 +76,7 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/GL
     ${HEADER_PATH}/GL2Extensions
     ${HEADER_PATH}/GLExtensions
+    ${HEADER_PATH}/GLBeginEndAdapter
     ${HEADER_PATH}/GLObjects
     ${HEADER_PATH}/GLU
     ${HEADER_PATH}/GraphicsContext
@@ -109,6 +112,8 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/Notify
     ${HEADER_PATH}/Object
     ${HEADER_PATH}/observer_ptr
+    ${HEADER_PATH}/Observer
+    ${HEADER_PATH}/ObserverNodePath
     ${HEADER_PATH}/OccluderNode
     ${HEADER_PATH}/OcclusionQueryNode
     ${HEADER_PATH}/OperationThread
@@ -133,6 +138,8 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/Sequence
     ${HEADER_PATH}/ShadeModel
     ${HEADER_PATH}/Shader
+    ${HEADER_PATH}/ShaderAttribute
+    ${HEADER_PATH}/ShaderComposer
     ${HEADER_PATH}/ShadowVolumeOccluder
     ${HEADER_PATH}/Shape
     ${HEADER_PATH}/ShapeDrawable
@@ -154,6 +161,7 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/Texture
     ${HEADER_PATH}/Texture1D
     ${HEADER_PATH}/Texture2D
+    ${HEADER_PATH}/Texture2DMultisample
     ${HEADER_PATH}/Texture2DArray
     ${HEADER_PATH}/Texture3D
     ${HEADER_PATH}/TextureCubeMap
@@ -195,12 +203,14 @@ ADD_LIBRARY(${LIB_NAME}
     ApplicationUsage.cpp
     ArgumentParser.cpp
     Array.cpp
+    ArrayDispatchers.cpp
     AudioStream.cpp
     AutoTransform.cpp
     Billboard.cpp
     BlendColor.cpp
     BlendEquation.cpp
     BlendFunc.cpp
+    BufferIndexBinding.cpp
     BufferObject.cpp
     Camera.cpp
     CameraView.cpp
@@ -237,7 +247,10 @@ ADD_LIBRARY(${LIB_NAME}
     Geometry.cpp
     GL2Extensions.cpp
     GLExtensions.cpp
+    GLBeginEndAdapter.cpp
     GLObjects.cpp
+    GLStaticLibrary.h
+    GLStaticLibrary.cpp
     GraphicsContext.cpp
     GraphicsThread.cpp
     Group.cpp
@@ -270,6 +283,8 @@ ADD_LIBRARY(${LIB_NAME}
     NodeVisitor.cpp
     Notify.cpp
     Object.cpp
+    Observer.cpp
+    ObserverNodePath.cpp
     OccluderNode.cpp
     OcclusionQueryNode.cpp
     OperationThread.cpp
@@ -290,6 +305,8 @@ ADD_LIBRARY(${LIB_NAME}
     Sequence.cpp
     ShadeModel.cpp
     Shader.cpp
+    ShaderAttribute.cpp
+    ShaderComposer.cpp
     ShadowVolumeOccluder.cpp
     Shape.cpp
     ShapeDrawable.cpp
@@ -309,6 +326,7 @@ ADD_LIBRARY(${LIB_NAME}
     Texture1D.cpp
     Texture2DArray.cpp
     Texture2D.cpp
+    Texture2DMultisample.cpp
     Texture3D.cpp
     Texture.cpp
     TextureCubeMap.cpp
@@ -321,12 +339,43 @@ ADD_LIBRARY(${LIB_NAME}
     VertexProgram.cpp
     View.cpp
     Viewport.cpp
+
+    glu/libutil/error.cpp
+    glu/libutil/mipmap.cpp
+
+    glu/libtess/normal.cpp
+    glu/libtess/memalloc.cpp
+    glu/libtess/dict-list.h
+    glu/libtess/alg-outline
+    glu/libtess/priorityq.cpp
+    glu/libtess/normal.h
+    glu/libtess/dict.h
+    glu/libtess/render.cpp
+    glu/libtess/tessmono.h
+    glu/libtess/mesh.cpp
+    glu/libtess/render.h
+    glu/libtess/tessmono.cpp
+    glu/libtess/priorityq.h
+    glu/libtess/sweep.h
+    glu/libtess/priorityq-sort.h
+    glu/libtess/sweep.cpp
+    glu/libtess/tess.h
+    glu/libtess/geom.h
+    glu/libtess/memalloc.h
+    glu/libtess/dict.cpp
+    glu/libtess/priorityq-heap.h
+    glu/libtess/geom.cpp
+    glu/libtess/tess.cpp
+    glu/libtess/mesh.h
+
+
+    ${OPENSCENEGRAPH_VERSIONINFO_RC}
 )
 
 LINK_INTERNAL(${LIB_NAME}     
     OpenThreads
 )
-LINK_EXTERNAL(${LIB_NAME} ${CMAKE_THREAD_LIBS_INIT}    ${MATH_LIBRARY} )
-LINK_CORELIB_DEFAULT(${LIB_NAME} ${CMAKE_THREAD_LIBS_INIT} ${MATH_LIBRARY} )
+LINK_EXTERNAL(${LIB_NAME} ${CMAKE_THREAD_LIBS_INIT}    ${MATH_LIBRARY} ${RT_LIBRARY} ${DL_LIBRARY})
+LINK_CORELIB_DEFAULT(${LIB_NAME} ${CMAKE_THREAD_LIBS_INIT} ${MATH_LIBRARY} ${RT_LIBRARY} )
 
 INCLUDE(ModuleInstall OPTIONAL)

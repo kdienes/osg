@@ -16,6 +16,8 @@
 
 using namespace osg;
 
+const unsigned int Camera::FACE_CONTROLLED_BY_GEOMETRY_SHADER = 0xffffffff;
+
 Camera::Camera():
     _view(0),
     _allowEventFocus(true),
@@ -31,7 +33,9 @@ Camera::Camera():
     _drawBuffer(GL_NONE),
     _readBuffer(GL_NONE),
     _renderTargetImplementation(FRAME_BUFFER),
-    _renderTargetFallback(FRAME_BUFFER)
+    _renderTargetFallback(FRAME_BUFFER),
+    _implicitBufferAttachmentRenderMask( USE_DISPLAY_SETTINGS_MASK ),
+    _implicitBufferAttachmentResolveMask( USE_DISPLAY_SETTINGS_MASK )
 {
     setStateSet(new StateSet);
 }
@@ -60,6 +64,8 @@ Camera::Camera(const Camera& camera,const CopyOp& copyop):
     _renderTargetImplementation(camera._renderTargetImplementation),
     _renderTargetFallback(camera._renderTargetFallback),
     _bufferAttachmentMap(camera._bufferAttachmentMap),
+    _implicitBufferAttachmentRenderMask(camera._implicitBufferAttachmentRenderMask),
+    _implicitBufferAttachmentResolveMask(camera._implicitBufferAttachmentResolveMask),
     _initialDrawCallback(camera._initialDrawCallback),
     _preDrawCallback(camera._preDrawCallback),
     _postDrawCallback(camera._postDrawCallback),
@@ -84,7 +90,7 @@ void Camera::DrawCallback::operator () (osg::RenderInfo& renderInfo) const
     }
     else
     {
-        osg::notify(osg::WARN)<<"Error: Camera::DrawCallback called without valid camera."<<std::endl;
+        OSG_WARN<<"Error: Camera::DrawCallback called without valid camera."<<std::endl;
     }
 }
 
@@ -122,7 +128,7 @@ void Camera::setRenderTargetImplementation(RenderTargetImplementation impl, Rend
     }
     else
     {
-        osg::notify(osg::NOTICE)<<"Warning: Camera::setRenderTargetImplementation(impl,fallback) must have a lower rated fallback than the main target implementation."<<std::endl;
+        OSG_NOTICE<<"Warning: Camera::setRenderTargetImplementation(impl,fallback) must have a lower rated fallback than the main target implementation."<<std::endl;
         setRenderTargetImplementation(impl);
     }
 }
@@ -260,29 +266,25 @@ void Camera::attach(BufferComponent buffer, GLenum internalFormat)
     case DEPTH_BUFFER:
         if(_bufferAttachmentMap.find(PACKED_DEPTH_STENCIL_BUFFER) != _bufferAttachmentMap.end())
         {
-            notify(WARN)
-                << "Camera: DEPTH_BUFFER already attached as PACKED_DEPTH_STENCIL_BUFFER !"
-                << std::endl;
+            OSG_WARN << "Camera: DEPTH_BUFFER already attached as PACKED_DEPTH_STENCIL_BUFFER !" << std::endl;
         }
         break;
 
     case STENCIL_BUFFER:
         if(_bufferAttachmentMap.find(PACKED_DEPTH_STENCIL_BUFFER) != _bufferAttachmentMap.end())
         {
-            notify(WARN)
-                << "Camera: STENCIL_BUFFER already attached as PACKED_DEPTH_STENCIL_BUFFER !"
-                << std::endl;
+            OSG_WARN << "Camera: STENCIL_BUFFER already attached as PACKED_DEPTH_STENCIL_BUFFER !" << std::endl;
         }
         break;
 
     case PACKED_DEPTH_STENCIL_BUFFER:
         if(_bufferAttachmentMap.find(DEPTH_BUFFER) != _bufferAttachmentMap.end())
         {
-            notify(WARN) << "Camera: DEPTH_BUFFER already attached !" << std::endl;
+            OSG_WARN << "Camera: DEPTH_BUFFER already attached !" << std::endl;
         }
         if(_bufferAttachmentMap.find(STENCIL_BUFFER) != _bufferAttachmentMap.end())
         {
-            notify(WARN) << "Camera: STENCIL_BUFFER already attached !" << std::endl;
+            OSG_WARN << "Camera: STENCIL_BUFFER already attached !" << std::endl;
         }
         break;
     default:
@@ -386,11 +388,21 @@ void Camera::inheritCullSettings(const CullSettings& settings, unsigned int inhe
 {
     CullSettings::inheritCullSettings(settings, inheritanceMask);
 
-    if (inheritanceMask & CLEAR_COLOR)
+    const Camera* camera = dynamic_cast<const Camera*>(&settings);
+    if (camera)
     {
-        //osg::notify(osg::NOTICE)<<"Inheriting slave Camera"<<std::endl;
-        const Camera* camera = dynamic_cast<const Camera*>(&settings);
-        _clearColor = camera->_clearColor;
+        //OSG_NOTICE<<"Inheriting slave Camera"<<std::endl;
+        if (inheritanceMask & CLEAR_COLOR)
+            _clearColor = camera->_clearColor;
+
+        if (inheritanceMask & CLEAR_MASK)
+            _clearMask = camera->_clearMask;
+
+        if (inheritanceMask & DRAW_BUFFER)
+            _drawBuffer = camera->_drawBuffer;
+
+        if (inheritanceMask & READ_BUFFER)
+            _drawBuffer = camera->_readBuffer;
     }
 }
 

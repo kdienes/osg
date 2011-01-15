@@ -5,13 +5,20 @@
  *
  * Copyright (C) ???
  *
- * Writing support added 2007 by Sukender (Benoit Neil), http://sukender.free.fr,
+ * Writing support added 2009 by Sukender (Benoit Neil), http://sukender.free.fr,
  * strongly inspired by the OBJ writer object by Stephan Huber
  *
  * The Open Scene Graph (OSG) is a cross platform C++/OpenGL library for
  * real-time rendering of large 3D photo-realistic models.
  * The OSG homepage is http://www.openscenegraph.org/
  */
+
+
+/// [EXPERIMENTAL] Disables animation data (and matrix transforms) for compatibility with some 3rd party apps.
+/// Animations are not read by all 3DS importers. Thus disabling them may allow some 3rd-party apps, such as Rhinoceros (tested with 4.0) to correctly import 3DS files.
+/// However, having proper hierarchy with matrix transforms will become impossible.
+///\warning This is still experimental, hence the compile flag. This should become a reader/writer option as soon as it works as intented (maybe "noMatrixTransforms" could become a read/write option?).
+#define DISABLE_3DS_ANIMATION 0            // Default = 0
 
 #include <osg/io_utils>
 #include <osg/CullFace>
@@ -77,7 +84,7 @@ inline void copyOsgQuatToLib3dsQuat(float lib3ds_vector[4], const osg::Quat& osg
 
 std::string getFileName(const std::string & path)
 {
-    unsigned int slashPos = path.find_last_of("/\\");
+    size_t slashPos = path.find_last_of("/\\");
     if (slashPos == std::string::npos) return path;
     return path.substr(slashPos+1);
 }
@@ -91,7 +98,7 @@ bool is83(const std::string & s)
     if (s.find_first_of("/\\") != std::string::npos) return false;            // It should not be a path, but a filename
     unsigned int len = s.length();
     if (len > 12 || len == 0) return false;
-    unsigned int pointPos = s.rfind('.');
+    size_t pointPos = s.rfind('.');
     if (pointPos == std::string::npos) return len <= 8;        // Without point
     // With point
     if (pointPos > 8) return false;
@@ -107,8 +114,8 @@ bool is3DSpath(const std::string & s, bool extendedFilePaths)
     if (extendedFilePaths) return true;        // Extended paths are simply those that fits the 64 bytes buffer!
 
     // For each subdirectory
-    unsigned int tokenLen;
-    for (unsigned int tokenBegin=0, tokenEnd=0; tokenEnd == std::string::npos; tokenBegin = tokenEnd+1)
+    size_t tokenLen;
+    for (size_t tokenBegin=0, tokenEnd=0; tokenEnd != std::string::npos; tokenBegin = tokenEnd+1)
     {
         tokenEnd = s.find_first_of("/\\", tokenBegin);
         if (tokenEnd != std::string::npos) tokenLen = tokenEnd-tokenBegin-1;        // -1 to avoid reading the separator
@@ -166,7 +173,7 @@ public:
           triangle.t2 = i2;
           triangle.t3 = i3;
           triangle.material = _material;
-          _listTriangles.push_back(std::pair<Triangle, unsigned int>(triangle, _drawable_n));
+          _listTriangles.push_back(ListTriangle::value_type(triangle, _drawable_n));
       }
       virtual void begin(GLenum mode)
       {
@@ -355,10 +362,12 @@ void PrimitiveIndexWriter::drawArrays(GLenum mode,GLint first,GLsizei count)
     case(GL_LINE_LOOP):
         //break;
     default:
-        osg::notify(osg::WARN) << "3DS WriterNodeVisitor: can't handle mode " << mode << std::endl;
+        OSG_WARN << "3DS WriterNodeVisitor: can't handle mode " << mode << std::endl;
         break;
     }
 }
+
+
 
 WriterNodeVisitor::Material::Material(WriterNodeVisitor & writerNodeVisitor, osg::StateSet * stateset, osg::Material* mat, osg::Texture* tex, int index) :
     index(index),
@@ -380,7 +389,12 @@ WriterNodeVisitor::Material::Material(WriterNodeVisitor & writerNodeVisitor, osg
         diffuse = mat->getDiffuse(osg::Material::FRONT);
         ambient = mat->getAmbient(osg::Material::FRONT);
         specular = mat->getSpecular(osg::Material::FRONT);
-        shininess = mat->getShininess(osg::Material::FRONT);
+        shininess = mat->getShininess(osg::Material::FRONT) / 128.f;
+        // OpenGL shininess = pow(2, 10.0*mat->shininess);            (As in lib3ds example)
+        // => mat->shininess = log.2( OpenGL shininess ) /10        (if values are >0)
+        // => mat->shininess = log( OpenGL shininess ) / log(2) /10
+        //shininess = mat->getShininess(osg::Material::FRONT) <= 0 ? 0 : log( mat->getShininess(osg::Material::FRONT) ) / log(2.f) / 10.f;
+
         transparency = 1-diffuse.w();
         name = writerNodeVisitor.getUniqueName(mat->getName(),"mat");
         osg::StateAttribute * attribute = stateset->getAttribute(osg::StateAttribute::CULLFACE);
@@ -395,13 +409,13 @@ WriterNodeVisitor::Material::Material(WriterNodeVisitor & writerNodeVisitor, osg
             if (mode == osg::CullFace::BACK) double_sided = false;
             else if (mode == osg::CullFace::FRONT)
             {
-                osg::notify(osg::WARN) << "3DS Writer: Reversed face (culled FRONT) not supported yet." << std::endl;
+                OSG_WARN << "3DS Writer: Reversed face (culled FRONT) not supported yet." << std::endl;
                 double_sided = false;
             }
             else
             {
                 assert(mode == osg::CullFace::FRONT_AND_BACK);
-                osg::notify(osg::WARN) << "3DS Writer: Invisible face (culled FRONT_AND_BACK) not supported yet." << std::endl;
+                OSG_WARN << "3DS Writer: Invisible face (culled FRONT_AND_BACK) not supported yet." << std::endl;
                 double_sided = false;
             }
         }
@@ -412,7 +426,8 @@ WriterNodeVisitor::Material::Material(WriterNodeVisitor & writerNodeVisitor, osg
         if(img)
         {
             texture_transparency = (stateset->getMode(GL_BLEND) == osg::StateAttribute::ON);
-            texture_no_tile = (tex->getWrap(osg::Texture2D::WRAP_S) == osg::Texture2D::CLAMP);
+            osg::Texture::WrapMode wrapS = tex->getWrap(osg::Texture2D::WRAP_S);
+            texture_no_tile = !(wrapS == osg::Texture2D::REPEAT || wrapS == osg::Texture2D::MIRROR);
             image = img;
         }
     }
@@ -488,12 +503,12 @@ WriterNodeVisitor::WriterNodeVisitor(Lib3dsFile * file3ds, const std::string & f
     osg::NodeVisitor(osg::NodeVisitor::TRAVERSE_ALL_CHILDREN),
     _succeeded(true),
     _srcDirectory(srcDirectory),
-    file3ds(file3ds),
+    _file3ds(file3ds),
     _currentStateSet(new osg::StateSet()),
     _lastMaterialIndex(0),
     _lastMeshIndex(0),
     _cur3dsNode(NULL),
-    options(options),
+    _options(options),
     _imageCount(0),
     _extendedFilePaths(false)
 {
@@ -516,7 +531,7 @@ WriterNodeVisitor::WriterNodeVisitor(Lib3dsFile * file3ds, const std::string & f
 void WriterNodeVisitor::writeMaterials()
 {
     unsigned int nbMat = _materialMap.size();
-    lib3ds_file_reserve_materials(file3ds, nbMat, 1);
+    lib3ds_file_reserve_materials(_file3ds, nbMat, 1);
     // Ugly thing: it seems lib3ds_file_insert_material() doesn't support insertion in a random order (else materials are not assigned the right way)
     for (unsigned int iMat=0; iMat<nbMat; ++iMat)
     {
@@ -565,14 +580,17 @@ void WriterNodeVisitor::writeMaterials()
                 if(_imageSet.find(mat.image.get()) == _imageSet.end())
                 {
                     _imageSet.insert(mat.image.get());
-                    osgDB::writeImageFile(*(mat.image), path);
+                    osgDB::writeImageFile(*(mat.image), path, _options);
                 }
+                // Here we don't assume anything about initial flags state (actually it is set to LIB3DS_TEXTURE_NO_TILE by lib3DS, but this is subject to change)
                 if (mat.texture_transparency) tex.flags |= LIB3DS_TEXTURE_ALPHA_SOURCE;
+                else tex.flags &= ~LIB3DS_TEXTURE_ALPHA_SOURCE;
                 if (mat.texture_no_tile) tex.flags |= LIB3DS_TEXTURE_NO_TILE;
+                else tex.flags &= ~LIB3DS_TEXTURE_NO_TILE;
             }
             if (!succeeded())
                 return;
-            lib3ds_file_insert_material(file3ds, mat3ds, itr->second.index);
+            lib3ds_file_insert_material(_file3ds, mat3ds, itr->second.index);
             break;        // Ugly thing (3)
         }
         assert(found);        // Ugly thing (4) - Implementation error if !found
@@ -667,7 +685,7 @@ std::string WriterNodeVisitor::getUniqueName(const std::string& _defaultValue, c
     if (defaultPrefix != std::string("_")) return getUniqueName(_defaultValue, "_", nameIsPath);
 
     // No more names
-    osg::notify(osg::FATAL) << "No more names available!" << std::endl;
+    OSG_NOTIFY(osg::FATAL) << "No more names available!" << std::endl;
     _succeeded = false;
     return "ERROR";
 }
@@ -724,7 +742,7 @@ WriterNodeVisitor::buildMesh(osg::Geode        & geo,
                              bool                texcoords,
                              Lib3dsMesh        * mesh)
 {
-    osg::notify(osg::DEBUG_INFO) << "Building Mesh" << std::endl;
+    OSG_DEBUG << "Building Mesh" << std::endl;
     assert(mesh);
 
     // Write points
@@ -734,16 +752,27 @@ WriterNodeVisitor::buildMesh(osg::Geode        & geo,
     for(MapIndices::iterator it = index_vert.begin(); it != index_vert.end();++it)
     {
         osg::Geometry *g = geo.getDrawable( it->first.second )->asGeometry();
-        assert(g->getVertexArray());
-        if (g->getVertexArray()->getType() != osg::Array::Vec3ArrayType)
+        const osg::Array * basevecs = g->getVertexArray();
+        assert(basevecs);
+        if (!basevecs || basevecs->getNumElements()==0) continue;
+        if (basevecs->getType() == osg::Array::Vec3ArrayType)
         {
-            // TODO Handle double presision vertices by converting them to float with a warning
-            osg::notify(osg::FATAL) << "Vertex array is not Vec3. Not implemented" << std::endl;
+            const osg::Vec3Array & vecs= *static_cast<const osg::Vec3Array *>(basevecs);
+            copyOsgVectorToLib3dsVector(mesh->vertices[it->second], vecs[it->first.first]*mat);
+        }
+        else if (basevecs->getType() == osg::Array::Vec3dArrayType)
+        {
+            // Handle double presision vertices by converting them to float with a warning
+            OSG_NOTICE << "3DS format only supports single precision vertices. Converting double precision to single." << std::endl;
+            const osg::Vec3dArray & vecs= *static_cast<const osg::Vec3dArray *>(basevecs);
+            copyOsgVectorToLib3dsVector(mesh->vertices[it->second], vecs[it->first.first]*mat);
+        }
+        else
+        {
+            OSG_NOTIFY(osg::FATAL) << "Vertex array is not Vec3 or Vec3d. Not implemented" << std::endl;
             _succeeded = false;
             return;
         }
-        const osg::Vec3Array & vecs= *static_cast<osg::Vec3Array *>(g->getVertexArray());
-        copyOsgVectorToLib3dsVector(mesh->vertices[it->second], vecs[it->first.first]*mat);
     }
 
     // Write texture coords (Texture 0 only)
@@ -752,26 +781,25 @@ WriterNodeVisitor::buildMesh(osg::Geode        & geo,
         for(MapIndices::iterator it = index_vert.begin(); it != index_vert.end(); ++it)
         {
             osg::Geometry *g = geo.getDrawable( it->first.second )->asGeometry();
-            osg::Array * texarray = g->getTexCoordArray(0);
-            if (texarray)
+            const osg::Array * texarray = g->getNumTexCoordArrays()>=1 ? g->getTexCoordArray(0) : NULL;
+            if (!texarray || texarray->getNumElements()==0) continue;
+
+            if (g->getTexCoordArray(0)->getType() != osg::Array::Vec2ArrayType)
             {
-                if (g->getTexCoordArray(0)->getType() != osg::Array::Vec2ArrayType)
-                {
-                    osg::notify(osg::FATAL) << "Texture coords array is not Vec2. Not implemented" << std::endl;
-                    _succeeded = false;
-                    return;
-                }
-                const osg::Vec2Array & vecs= *static_cast<osg::Vec2Array *>(texarray);
-                mesh->texcos[it->second][0] = vecs[it->first.first][0];
-                mesh->texcos[it->second][1] = vecs[it->first.first][1];
+                OSG_NOTIFY(osg::FATAL) << "Texture coords array is not Vec2. Not implemented" << std::endl;
+                _succeeded = false;
+                return;
             }
+            const osg::Vec2Array & vecs= *static_cast<const osg::Vec2Array *>(texarray);
+            mesh->texcos[it->second][0] = vecs[it->first.first][0];
+            mesh->texcos[it->second][1] = vecs[it->first.first][1];
         }
     }
-    lib3ds_file_insert_mesh(file3ds, mesh, _lastMeshIndex);
+    lib3ds_file_insert_mesh(_file3ds, mesh, _lastMeshIndex);
     ++_lastMeshIndex;
 
     Lib3dsMeshInstanceNode * node3ds = lib3ds_node_new_mesh_instance(mesh, mesh->name, NULL, NULL, NULL);
-    lib3ds_file_append_node(file3ds, reinterpret_cast<Lib3dsNode*>(node3ds), reinterpret_cast<Lib3dsNode*>(_cur3dsNode));
+    lib3ds_file_append_node(_file3ds, reinterpret_cast<Lib3dsNode*>(node3ds), reinterpret_cast<Lib3dsNode*>(_cur3dsNode));
 }
 
 unsigned int 
@@ -781,16 +809,7 @@ WriterNodeVisitor::calcVertices(osg::Geode & geo)
     for (unsigned int i = 0; i < geo.getNumDrawables(); ++i)
     {
         osg::Geometry *g = geo.getDrawable( i )->asGeometry();
-        assert(g->getVertexArray());
-        if (g->getVertexArray()->getType() != osg::Array::Vec3ArrayType)
-        {
-            // TODO Handle double presision vertices by converting them to float with a warning
-            osg::notify(osg::FATAL) << "Vertex array is not Vec3. Not implemented" << std::endl;
-            _succeeded = false;
-            return 0;
-        }
-        const osg::Vec3Array & vecs= *static_cast<osg::Vec3Array *>(g->getVertexArray());
-        numVertice += vecs.getNumElements();
+        if (g->getVertexArray()) numVertice += g->getVertexArray()->getNumElements();
     }
     return numVertice;
 }
@@ -811,18 +830,19 @@ WriterNodeVisitor::buildFaces(osg::Geode        & geo,
     Lib3dsMesh *mesh = lib3ds_mesh_new( name.c_str() );
     if (!mesh)
     {
-        osg::notify(osg::FATAL) << "Allocation error" << std::endl;
+        OSG_NOTIFY(osg::FATAL) << "Allocation error" << std::endl;
         _succeeded = false;
         return;
     }
 
+    //copyOsgMatrixToLib3dsMatrix(mesh->matrix, mat);
     lib3ds_mesh_resize_faces   (mesh, osg::minimum(nbTrianglesRemaining, MAX_FACES));
     lib3ds_mesh_resize_vertices(mesh, osg::minimum(nbVerticesRemaining,  MAX_VERTICES), texcoords ? 0 : 1, 0);        // Not mandatory but will allocate once a big block
 
     // Test if the mesh will be split and needs sorting
     if (nbVerticesRemaining >= MAX_VERTICES || nbTrianglesRemaining >= MAX_FACES)
     {
-        osg::notify(osg::INFO) << "Sorting elements..." << std::endl;
+        OSG_INFO << "Sorting elements..." << std::endl;
         WriterCompareTriangle cmp(geo, nbVerticesRemaining);
         std::sort(listTriangles.begin(), listTriangles.end(), cmp);
     }
@@ -854,7 +874,7 @@ WriterNodeVisitor::buildFaces(osg::Geode        & geo,
             mesh = lib3ds_mesh_new( getUniqueName(geo.getName().empty() ? geo.className() : geo.getName(), "geo").c_str());
             if (!mesh)
             {
-                osg::notify(osg::FATAL) << "Allocation error" << std::endl;
+                OSG_NOTIFY(osg::FATAL) << "Allocation error" << std::endl;
                 _succeeded = false;
                 return;
             }
@@ -877,47 +897,27 @@ WriterNodeVisitor::buildFaces(osg::Geode        & geo,
 }
 
 void 
-WriterNodeVisitor::createListTriangle(osg::Geometry    *    geo, 
-                                      ListTriangle    &    listTriangles,
-                                      bool            &    texcoords,
-                                      unsigned int    &   drawable_n)
+WriterNodeVisitor::createListTriangle(osg::Geometry * geo, 
+                                      ListTriangle  & listTriangles,
+                                      bool          & texcoords,
+                                      unsigned int  & drawable_n)
 {
-    unsigned int nbVertices = 0;
+    const osg::Array * basevecs = geo->getVertexArray();
+    if (!basevecs || basevecs->getNumElements()==0) return;
+
+    // Texture coords
+    const osg::Array * basetexvecs = geo->getNumTexCoordArrays()>=1 ? geo->getTexCoordArray(0) : NULL;
+    if (basetexvecs)
     {
-        if (geo->getVertexArray() && geo->getVertexArray()->getType() != osg::Array::Vec3ArrayType)
+        unsigned int nb = basetexvecs->getNumElements();
+        if (nb != geo->getVertexArray()->getNumElements())
         {
-            // TODO Handle double presision vertices by converting them to float with a warning
-            osg::notify(osg::FATAL) << "Vertex array is not Vec3. Not implemented" << std::endl;
+            OSG_NOTIFY(osg::FATAL) << "There are more/less texture coords than vertices (corrupted geometry)" << std::endl;
             _succeeded = false;
             return;
         }
-        const osg::Vec3Array * vecs = geo->getVertexArray() ? static_cast<osg::Vec3Array *>(geo->getVertexArray()) : NULL;
-        if (vecs) 
-        {
-            nbVertices = geo->getVertexArray()->getNumElements();
-            // Texture coords
-            if (geo->getTexCoordArray(0) && geo->getTexCoordArray(0)->getType() != osg::Array::Vec2ArrayType)
-            {
-                osg::notify(osg::FATAL) << "Texture coords array is not Vec2. Not implemented" << std::endl;
-                _succeeded = false;
-                return;
-            }
-            const osg::Vec2Array * texvecs = geo->getTexCoordArray(0) ? static_cast<osg::Vec2Array *>(geo->getTexCoordArray(0)) : NULL;
-            if (texvecs) 
-            {
-                unsigned int nb = geo->getTexCoordArray(0)->getNumElements();
-                if (nb != geo->getVertexArray()->getNumElements())
-                {
-                    osg::notify(osg::FATAL) << "There are more/less texture coords than vertices (corrupted geometry)" << std::endl;
-                    _succeeded = false;
-                    return;
-                }
-                texcoords = true;
-            }
-        }
+        texcoords = true;
     }
-
-    if (nbVertices==0) return;
 
     int material = processStateSet(_currentStateSet.get());    
 
@@ -949,8 +949,12 @@ void WriterNodeVisitor::apply( osg::Geode &node )
     }
     if (succeeded() && count > 0)
     {
+#if DISABLE_3DS_ANIMATION
         osg::Matrix mat( osg::computeLocalToWorld(getNodePath()) );
         buildFaces(node, mat, listTriangles, texcoords);        // May set _succeded to false
+#else
+        buildFaces(node, osg::Matrix(), listTriangles, texcoords);        // May set _succeded to false
+#endif
     }
     popStateSet(node.getStateSet());
     //_nameStack.pop_back();
@@ -968,8 +972,10 @@ void WriterNodeVisitor::apply( osg::Billboard &node )
     unsigned int count = node.getNumDrawables();
     ListTriangle listTriangles;
     bool texcoords = false;
-    osg::notify(osg::NOTICE) << "Warning: 3DS writer is incomplete for Billboards (rotation not implemented)." << std::endl;
+    OSG_NOTICE << "Warning: 3DS writer is incomplete for Billboards (rotation not implemented)." << std::endl;
+#if DISABLE_3DS_ANIMATION
     osg::Matrix m( osg::computeLocalToWorld(getNodePath()) );
+#endif
     for ( unsigned int i = 0; i < count; i++ )
     {
         osg::Geometry *g = node.getDrawable( i )->asGeometry();
@@ -983,9 +989,15 @@ void WriterNodeVisitor::apply( osg::Billboard &node )
             popStateSet(g->getStateSet());        // May set _succeded to false
             if (!succeeded()) break;
 
-            osg::Matrix currentBillBoardMat(osg::Matrix::translate(node.getPosition(i)) * m);        // TODO handle rotation
-            apply3DSMatrixNode(node, currentBillBoardMat, "bil");        // Add a 3DS matrix node
-            buildFaces(node, currentBillBoardMat, listTriangles, texcoords);        // May set _succeded to false
+            osg::Matrix pointLocalMat(osg::Matrix::translate(node.getPosition(i)));        // TODO handle rotation
+#if DISABLE_3DS_ANIMATION
+            osg::Matrix currentBillboardWorldMat(pointLocalMat * m);
+            apply3DSMatrixNode(node, &pointLocalMat, "bil");                            // Add a 3DS matrix node (with local matrix)
+            buildFaces(node, currentBillboardWorldMat, listTriangles, texcoords);        // May set _succeded to false
+#else
+            apply3DSMatrixNode(node, &pointLocalMat, "bil");                            // Add a 3DS matrix node (with local matrix)
+            buildFaces(node, osg::Matrix(), listTriangles, texcoords);                    // May set _succeded to false
+#endif
             if (!succeeded()) break;
         }
     }
@@ -1002,7 +1014,12 @@ void WriterNodeVisitor::apply(osg::Group &node)
 {
     pushStateSet(node.getStateSet());
     Lib3dsMeshInstanceNode * parent = _cur3dsNode;
-    apply3DSMatrixNode(node, osg::computeLocalToWorld(getNodePath()), "grp");
+#if DISABLE_3DS_ANIMATION
+    osg::Matrix mat( osg::computeLocalToWorld(getNodePath()) );
+    apply3DSMatrixNode(node, &mat, "grp");
+#else
+    apply3DSMatrixNode(node, NULL, "grp");
+#endif
     if (succeeded())
         traverse(node);
     _cur3dsNode = parent;
@@ -1013,39 +1030,43 @@ void WriterNodeVisitor::apply(osg::MatrixTransform &node)
 {
     pushStateSet(node.getStateSet());
     Lib3dsMeshInstanceNode * parent = _cur3dsNode;
-    apply3DSMatrixNode(node, osg::computeLocalToWorld(getNodePath()), "mtx");
+#if DISABLE_3DS_ANIMATION
+    osg::Matrix mat( osg::computeLocalToWorld(getNodePath()) );
+#else
+    osg::Matrix mat( node.getMatrix() );
+#endif
+    apply3DSMatrixNode(node, &mat, "mtx");
     if (succeeded())
         traverse(node);
     _cur3dsNode = parent;
     popStateSet(node.getStateSet());
 }
 
-void WriterNodeVisitor::apply3DSMatrixNode(osg::Node &node, const osg::Matrix & m, const char * const prefix)
+void WriterNodeVisitor::apply3DSMatrixNode(osg::Node &node, const osg::Matrix * m, const char * const prefix)
 {
+    // Note: Creating a mesh instance with no transform and then copying the matrix doesn't work (matrix seems to be a temporary/computed value)
     Lib3dsMeshInstanceNode * parent = _cur3dsNode;
+    Lib3dsMeshInstanceNode * node3ds = NULL;
+    if (m)
+    {
+        osg::Vec3 osgScl, osgPos;
+        osg::Quat osgRot, osgSo;
+        m->decompose(osgPos, osgRot, osgScl, osgSo);
 
-    //const osg::Matrix & m = node.getMatrix();
-    //const osg::Matrix m( osg::computeLocalToWorld(nodePath) );        // [NEEDS TESTING!] 3DS matrices always contain world to local transformation (not local transform; ie. from parent)
+        float pos[3];
+        float scl[3];
+        float rot[4];
+        copyOsgVectorToLib3dsVector(pos, osgPos);
+        copyOsgVectorToLib3dsVector(scl, osgScl);
+        copyOsgQuatToLib3dsQuat(rot, osgRot);
+        node3ds = lib3ds_node_new_mesh_instance(NULL, getUniqueName(node.getName().empty() ? node.className() : node.getName(), prefix).c_str(), pos, scl, rot);
+    }
+    else
+    {
+        node3ds = lib3ds_node_new_mesh_instance(NULL, getUniqueName(node.getName().empty() ? node.className() : node.getName(), prefix).c_str(), NULL, NULL, NULL);
+    }
 
-    // Transform data used to be given to lib3ds_node_new_mesh_instance(), but it seems buggy (pivot problem? bug in conversion?).
-    float pos[3];
-    float scl[3];
-    float rot[4];
-    osg::Vec3 osgScl, osgPos;
-    osg::Quat osgRot, osgSo;
-    m.decompose(osgPos, osgRot, osgScl, osgSo);
-    copyOsgVectorToLib3dsVector(pos, osgPos);
-    copyOsgVectorToLib3dsVector(scl, osgScl);
-    copyOsgQuatToLib3dsQuat(rot, osgRot);
-    Lib3dsMeshInstanceNode * node3ds = lib3ds_node_new_mesh_instance
-        (NULL, getUniqueName(node.getName().empty() ? node.className() : node.getName(), prefix).c_str(), pos, scl, rot);
-
-    //// Create a mesh instance with no transform and then copy the matrix (doesn't work)
-    //Lib3dsMeshInstanceNode * node3ds = lib3ds_node_new_mesh_instance
-    //    (NULL, getUniqueName(node.getName().empty() ? node.className() : node.getName(), "mtx").c_str(), NULL, NULL, NULL);
-    //    copyOsgMatrixToLib3dsMatrix(node3ds->base.matrix, m);
-
-    lib3ds_file_append_node(file3ds, reinterpret_cast<Lib3dsNode*>(node3ds), reinterpret_cast<Lib3dsNode*>(parent));
+    lib3ds_file_append_node(_file3ds, reinterpret_cast<Lib3dsNode*>(node3ds), reinterpret_cast<Lib3dsNode*>(parent));
     _cur3dsNode = node3ds;
 }
 

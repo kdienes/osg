@@ -3,12 +3,12 @@
 
 using namespace osgGA;
 
-void KeySwitchMatrixManipulator::addMatrixManipulator(int key, std::string name, MatrixManipulator *cm)
+void KeySwitchMatrixManipulator::addMatrixManipulator(int key, std::string name, CameraManipulator *cm)
 {
     if(!cm) return;
 
-    _manips[key]=std::make_pair(name,osg::ref_ptr<MatrixManipulator>(cm));
-    
+    _manips[key]=std::make_pair(name,osg::ref_ptr<CameraManipulator>(cm));
+
     if(!_current)
     {
         _current=cm;
@@ -19,7 +19,7 @@ void KeySwitchMatrixManipulator::addMatrixManipulator(int key, std::string name,
     }
 }
 
-void KeySwitchMatrixManipulator::addNumberedMatrixManipulator(MatrixManipulator *cm)
+void KeySwitchMatrixManipulator::addNumberedMatrixManipulator(CameraManipulator *cm)
 {
     if(!cm) return;
     addMatrixManipulator('1'+_manips.size(),cm->className(),cm);
@@ -34,7 +34,7 @@ void KeySwitchMatrixManipulator::selectMatrixManipulator(unsigned int num)
         ++itr,++manipNo)
     {
     }
-    
+
     if (itr!=_manips.end())
     {
         itr->second.second->setHomePosition(_homeEye,_homeCenter,_homeUp,_autoComputeHomePosition);
@@ -45,7 +45,7 @@ void KeySwitchMatrixManipulator::selectMatrixManipulator(unsigned int num)
             {
                 itr->second.second->setCoordinateFrameCallback(_current->getCoordinateFrameCallback());
             }
-        
+
             if ( !itr->second.second->getNode() )
             {
                 itr->second.second->setNode(_current->getNode());
@@ -68,7 +68,7 @@ void KeySwitchMatrixManipulator::setNode(osg::Node* node)
 
 void KeySwitchMatrixManipulator::setHomePosition(const osg::Vec3d& eye, const osg::Vec3d& center, const osg::Vec3d& up, bool autoComputeHomePosition)
 {
-    MatrixManipulator::setHomePosition(eye, center, up, autoComputeHomePosition);
+    CameraManipulator::setHomePosition(eye, center, up, autoComputeHomePosition);
     for(KeyManipMap::iterator itr=_manips.begin();
         itr!=_manips.end();
         ++itr)
@@ -88,17 +88,6 @@ void KeySwitchMatrixManipulator::setAutoComputeHomePosition(bool flag)
     }
 }
 
-void KeySwitchMatrixManipulator::setMinimumDistance(float minimumDistance)
-{
-    _minimumDistance = minimumDistance;
-    for(KeyManipMap::iterator itr=_manips.begin();
-        itr!=_manips.end();
-        ++itr)
-    {
-        itr->second.second->setMinimumDistance(minimumDistance);
-    }
-}
-
 void KeySwitchMatrixManipulator::computeHomePosition()
 {
     for(KeyManipMap::iterator itr=_manips.begin();
@@ -106,6 +95,23 @@ void KeySwitchMatrixManipulator::computeHomePosition()
         ++itr)
     {
         itr->second.second->computeHomePosition();
+    }
+}
+
+void KeySwitchMatrixManipulator::home(const GUIEventAdapter& ee,GUIActionAdapter& aa)
+{
+    // call home for all child manipulators
+    // (this can not be done just for current manipulator,
+    // because it is not possible to transfer some manipulator
+    // settings across manipulators using just MatrixManipulator interface
+    // (one problematic variable is for example OrbitManipulator::distance
+    // that can not be passed by setByMatrix method),
+    // thus we have to call home on all of them)
+    for(KeyManipMap::iterator itr=_manips.begin();
+        itr!=_manips.end();
+        ++itr)
+    {
+        itr->second.second->home(ee,aa);
     }
 }
 
@@ -120,41 +126,41 @@ void KeySwitchMatrixManipulator::setCoordinateFrameCallback(CoordinateFrameCallb
     }
 }
 
-MatrixManipulator* KeySwitchMatrixManipulator::getMatrixManipulatorWithIndex(unsigned int index)
+CameraManipulator* KeySwitchMatrixManipulator::getMatrixManipulatorWithIndex(unsigned int index)
 {
     unsigned i=0;
     for(KeyManipMap::iterator itr = _manips.begin();
          itr != _manips.end();
          ++itr, ++i)
     {
-        if (i==index) return itr->second.second.get(); 
+        if (i==index) return itr->second.second.get();
     }
     return 0;
 }
 
-const MatrixManipulator* KeySwitchMatrixManipulator::getMatrixManipulatorWithIndex(unsigned int index) const
+const CameraManipulator* KeySwitchMatrixManipulator::getMatrixManipulatorWithIndex(unsigned int index) const
 {
     unsigned i=0;
     for(KeyManipMap::const_iterator itr = _manips.begin();
          itr != _manips.end();
          ++itr, ++i)
     {
-        if (i==index) return itr->second.second.get(); 
+        if (i==index) return itr->second.second.get();
     }
     return 0;
 }
 
-MatrixManipulator* KeySwitchMatrixManipulator::getMatrixManipulatorWithKey(unsigned int key)
+CameraManipulator* KeySwitchMatrixManipulator::getMatrixManipulatorWithKey(unsigned int key)
 {
-    KeyManipMap::iterator itr = _manips.find(key); 
-    if (itr!=_manips.end()) return itr->second.second.get(); 
+    KeyManipMap::iterator itr = _manips.find(key);
+    if (itr!=_manips.end()) return itr->second.second.get();
     else return 0;
 }
 
-const MatrixManipulator* KeySwitchMatrixManipulator::getMatrixManipulatorWithKey(unsigned int key) const
+const CameraManipulator* KeySwitchMatrixManipulator::getMatrixManipulatorWithKey(unsigned int key) const
 {
-    KeyManipMap::const_iterator itr = _manips.find(key); 
-    if (itr!=_manips.end()) return itr->second.second.get(); 
+    KeyManipMap::const_iterator itr = _manips.find(key);
+    if (itr!=_manips.end()) return itr->second.second.get();
     else return 0;
 }
 
@@ -170,7 +176,7 @@ bool KeySwitchMatrixManipulator::handle(const GUIEventAdapter& ea,GUIActionAdapt
         KeyManipMap::iterator it=_manips.find(ea.getKey());
         if(it != _manips.end())
         {
-            osg::notify(osg::INFO)<<"Switching to manipulator: "<<(*it).second.first<<std::endl;
+            OSG_INFO<<"Switching to manipulator: "<<(*it).second.first<<std::endl;
             if ( !it->second.second->getNode() )
             {
                 it->second.second->setNode(_current->getNode());
@@ -179,8 +185,6 @@ bool KeySwitchMatrixManipulator::handle(const GUIEventAdapter& ea,GUIActionAdapt
             it->second.second->init(ea,aa);
             _current = it->second.second;
 
-            //_cameraManipChangeCallbacks.notify(this);
-            
             handled = true;
         }
     }

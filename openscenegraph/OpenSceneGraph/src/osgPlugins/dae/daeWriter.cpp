@@ -21,16 +21,23 @@
 #include <sstream>
 
 
-namespace osgdae {
+namespace osgDAE {
 
-std::string toString(osg::Vec3 value)
+std::string toString(const osg::Vec3f& value)
 {
     std::stringstream str;
     str << value.x() << " " << value.y() << " " << value.z();
     return str.str();
 }
 
-std::string toString(osg::Matrix value)
+std::string toString(const osg::Vec3d& value)
+{
+    std::stringstream str;
+    str << value.x() << " " << value.y() << " " << value.z();
+    return str.str();
+}
+
+std::string toString(const osg::Matrix& value)
 {
     std::stringstream str;
     str << value(0,0) << " " << value(1,0) << " " << value(2,0) << " " << value(3,0) << " "
@@ -41,12 +48,16 @@ std::string toString(osg::Matrix value)
 }
 
 
-daeWriter::daeWriter( DAE *dae_, const std::string &fileURI, bool _usePolygons,  bool GoogleMode, TraversalMode tm, bool _writeExtras) : osg::NodeVisitor( tm ),
+daeWriter::daeWriter( DAE *dae_, const std::string &fileURI, bool _usePolygons,  bool googleMode, TraversalMode tm, bool _writeExtras, bool earthTex, bool zUpAxis, bool forceTexture) : osg::NodeVisitor( tm ),
                                         dae(dae_),
+                                        _domLibraryAnimations(NULL),
                                         writeExtras(_writeExtras),
                                         rootName(*dae_),
                                         usePolygons (_usePolygons),
-                                        m_GoogleMode(GoogleMode),
+                                        m_GoogleMode(googleMode),
+                                        m_EarthTex(earthTex),
+                                        m_ZUpAxis(zUpAxis),
+                                        m_ForceTexture(forceTexture),
                                         m_CurrentRenderingHint(osg::StateSet::DEFAULT_BIN)
 {
     success = true;
@@ -58,7 +69,7 @@ daeWriter::daeWriter( DAE *dae_, const std::string &fileURI, bool _usePolygons, 
     dom = (domCOLLADA*)doc->getDomRoot();
     //create scene and instance visual scene
     domCOLLADA::domScene *scene = daeSafeCast< domCOLLADA::domScene >( dom->add( COLLADA_ELEMENT_SCENE ) );
-    domInstanceWithExtra *ivs = daeSafeCast< domInstanceWithExtra >( scene->add( "instance_visual_scene" ) );
+    domInstanceWithExtra *ivs = daeSafeCast< domInstanceWithExtra >( scene->add( COLLADA_ELEMENT_INSTANCE_VISUAL_SCENE ) );
     ivs->setUrl( "#defaultScene" );
     //create library visual scenes and a visual scene and the root node
     lib_vis_scenes = daeSafeCast<domLibrary_visual_scenes>( dom->add( COLLADA_ELEMENT_LIBRARY_VISUAL_SCENES ) );
@@ -68,15 +79,19 @@ daeWriter::daeWriter( DAE *dae_, const std::string &fileURI, bool _usePolygons, 
     currentNode->setId( "sceneRoot" );
 
     //create Asset
-    createAssetTag();
+    createAssetTag(m_ZUpAxis);
 
     lib_cameras = NULL;
     lib_effects = NULL;
+    lib_controllers = NULL;
     lib_geoms = NULL;
     lib_lights = NULL;
     lib_mats = NULL;
 
     lastDepth = 0;
+
+    // Clean up caches
+    uniqueNames.clear();
 
     currentStateSet = new osg::StateSet();
 }
@@ -93,24 +108,16 @@ void daeWriter::debugPrint( osg::Node &node )
     {
         indent += "  ";
     }
-    osg::notify( osg::INFO ) << indent << node.className() << std::endl;
+    OSG_INFO << indent << node.className() << std::endl;
 #endif
 }
 
-bool daeWriter::writeFile()
-{
-    if ( dae->save( (daeUInt)0 ) != DAE_OK )
-    {
-        success = false;
-    }
-    return success;
-}
 
 void daeWriter::setRootNode( const osg::Node &node )
 {
     std::string fname = osgDB::findDataFile( node.getName() );
-    //rootName = fname.c_str();
-    //rootName.validate();
+
+    const_cast<osg::Node*>(&node)->accept( _animatedNodeCollector );
 }
 
 //### provide a name to node
@@ -153,12 +160,14 @@ std::string daeWriter::uniquify( const std::string &name )
     return "";
 }
 
-void daeWriter::createAssetTag()
+void daeWriter::createAssetTag( bool isZUpAxis )
 {
     domAsset *asset = daeSafeCast< domAsset >(dom->add( COLLADA_ELEMENT_ASSET ) );
-    domAsset::domCreated *c = daeSafeCast< domAsset::domCreated >(asset->add("created" ));
-    domAsset::domModified *m = daeSafeCast< domAsset::domModified >(asset->add("modified" ));
-    domAsset::domUnit *u = daeSafeCast< domAsset::domUnit >(asset->add("unit"));
+    domAsset::domCreated *c = daeSafeCast< domAsset::domCreated >(asset->add(COLLADA_ELEMENT_CREATED));
+    domAsset::domModified *m = daeSafeCast< domAsset::domModified >(asset->add(COLLADA_ELEMENT_MODIFIED));
+    domAsset::domUnit *u = daeSafeCast< domAsset::domUnit >(asset->add(COLLADA_ELEMENT_UNIT));
+    domAsset::domUp_axis *up = daeSafeCast< domAsset::domUp_axis >(asset->add(COLLADA_ELEMENT_UP_AXIS));
+    up->setValue(UPAXISTYPE_Z_UP);
 
     //TODO : set date and time
     c->setValue( "2006-07-25T00:00:00Z" );

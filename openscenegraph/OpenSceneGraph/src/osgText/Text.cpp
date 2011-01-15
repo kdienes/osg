@@ -24,17 +24,15 @@
 
 #include <osgDB/ReadFile>
 
-#include "DefaultFont.h"
-
 using namespace osg;
 using namespace osgText;
 
 //#define TREES_CODE_FOR_MAKING_SPACES_EDITABLE
 
 Text::Text():
-    _color(1.0f,1.0f,1.0f,1.0f),
+    _enableDepthWrites(true),
     _backdropType(NONE),
-    _backdropImplementation(DEPTH_RANGE),
+    _backdropImplementation(DELAYED_DEPTH_WRITES),
     _backdropHorizontalOffset(0.07f),
     _backdropVerticalOffset(0.07f),
     _backdropColor(0.0f, 0.0f, 0.0f, 1.0f),
@@ -42,13 +40,12 @@ Text::Text():
     _colorGradientTopLeft(1.0f, 0.0f, 0.0f, 1.0f),
     _colorGradientBottomLeft(0.0f, 1.0f, 0.0f, 1.0f),
     _colorGradientBottomRight(0.0f, 0.0f, 1.0f, 1.0f),
-    _colorGradientTopRight(1.0f, 1.0f, 1.0f, 1.0f)    
+    _colorGradientTopRight(1.0f, 1.0f, 1.0f, 1.0f)
 {}
 
 Text::Text(const Text& text,const osg::CopyOp& copyop):
     osgText::TextBase(text,copyop),
-    _font(text._font),
-    _color(text._color),
+    _enableDepthWrites(text._enableDepthWrites),
     _backdropType(text._backdropType),
     _backdropImplementation(text._backdropImplementation),
     _backdropHorizontalOffset(text._backdropHorizontalOffset),
@@ -67,43 +64,15 @@ Text::~Text()
 {
 }
 
-void Text::setFont(osg::ref_ptr<Font> font)
-{
-    if (_font==font) return;
-    
-    osg::StateSet* previousFontStateSet = _font.valid() ? _font->getStateSet() : DefaultFont::instance()->getStateSet();
-    osg::StateSet* newFontStateSet = font.valid() ? font->getStateSet() : DefaultFont::instance()->getStateSet();
-    
-    if (getStateSet() == previousFontStateSet)
-    {
-        setStateSet( newFontStateSet );
-    }
-    
-    _font = font;
-    
-    computeGlyphRepresentation();
-}
-
-void Text::setFont(const std::string& fontfile)
-{
-    setFont(readRefFontFile(fontfile));
-}
-
-
-void Text::setColor(const osg::Vec4& color)
-{
-    _color = color;
-}
-
 
 Font* Text::getActiveFont()
 {
-    return _font.valid() ? _font.get() : DefaultFont::instance();
+    return _font.valid() ? _font.get() : Font::getDefaultFont().get();
 }
 
 const Font* Text::getActiveFont() const
 {
-    return _font.valid() ? _font.get() : DefaultFont::instance();
+    return _font.valid() ? _font.get() : Font::getDefaultFont().get();
 }
 
 String::iterator Text::computeLastCharacterOnLine(osg::Vec2& cursor, String::iterator first,String::iterator last)
@@ -112,22 +81,12 @@ String::iterator Text::computeLastCharacterOnLine(osg::Vec2& cursor, String::ite
     if (!activefont) return last;
 
     float hr = _characterHeight/getFontHeight();
-    float wr = hr/_characterAspectRatio;
+    float wr = hr/getCharacterAspectRatio();
 
     bool kerning = true;
     unsigned int previous_charcode = 0;
 
     String::iterator lastChar = first;
-
-    std::set<unsigned int> deliminatorSet;
-    deliminatorSet.insert(' ');
-    deliminatorSet.insert('\n');
-    deliminatorSet.insert(':');
-    deliminatorSet.insert('/');
-    deliminatorSet.insert(',');
-    deliminatorSet.insert(';');
-    deliminatorSet.insert(':');
-    deliminatorSet.insert('.');
 
     for(bool outOfSpace=false;lastChar!=last;++lastChar)
     {
@@ -138,7 +97,7 @@ String::iterator Text::computeLastCharacterOnLine(osg::Vec2& cursor, String::ite
             return lastChar;
         }
 
-        Font::Glyph* glyph = activefont->getGlyph(_fontSize, charcode);
+        Glyph* glyph = activefont->getGlyph(_fontSize, charcode);
         if (glyph)
         {
 
@@ -161,14 +120,14 @@ String::iterator Text::computeLastCharacterOnLine(osg::Vec2& cursor, String::ite
                 {
                   case LEFT_TO_RIGHT:
                   {
-                    osg::Vec2 delta(activefont->getKerning(_fontSize, previous_charcode,charcode,_kerningType));
+                    osg::Vec2 delta(activefont->getKerning(previous_charcode,charcode,_kerningType));
                     cursor.x() += delta.x() * wr;
                     cursor.y() += delta.y() * hr;
                     break;
                   }
                   case RIGHT_TO_LEFT:
                   {
-                    osg::Vec2 delta(activefont->getKerning(_fontSize, charcode,previous_charcode,_kerningType));
+                    osg::Vec2 delta(activefont->getKerning(charcode,previous_charcode,_kerningType));
                     cursor.x() -= delta.x() * wr;
                     cursor.y() -= delta.y() * hr;
                     break;
@@ -213,19 +172,27 @@ String::iterator Text::computeLastCharacterOnLine(osg::Vec2& cursor, String::ite
         }
 
     }
-    
+
     // word boundary detection & wrapping
     if (lastChar!=last)
     {
-        if (deliminatorSet.count(*lastChar)==0) 
-        {
-            String::iterator lastValidChar = lastChar;
-            while (lastValidChar!=first && deliminatorSet.count(*lastValidChar)==0)
+        String::iterator lastValidChar = lastChar;
+          String::iterator prevChar;
+        while (lastValidChar != first){
+            prevChar = lastValidChar - 1;
+
+            // last char is after a hyphen
+                if(*lastValidChar == '-')
+                return lastValidChar + 1;
+
+            // last char is start of whitespace
+            if((*lastValidChar == ' ' || *lastValidChar == '\n') && (*prevChar != ' ' && *prevChar != '\n'))
+                return lastValidChar;
+
+            // Subtract off glyphs from the cursor position (to correctly center text)
+                if(*prevChar != '-')
             {
-                --lastValidChar;
-                
-                // Subtract off glyphs from the cursor position (to correctly center text)
-                Font::Glyph* glyph = activefont->getGlyph(_fontSize, *lastValidChar);
+                Glyph* glyph = activefont->getGlyph(_fontSize, *prevChar);
                 if (glyph)
                 {
                     switch(_layout)
@@ -236,12 +203,9 @@ String::iterator Text::computeLastCharacterOnLine(osg::Vec2& cursor, String::ite
                     }
                 }
             }
-            if (first!=lastValidChar)
-            {
-                ++lastValidChar;
-                lastChar = lastValidChar;
-            }
-        }
+
+            lastValidChar = prevChar;
+          }
     }
 
     return lastChar;
@@ -280,7 +244,7 @@ void Text::computeGlyphRepresentation()
     unsigned int lineNumber = 0;
 
     float hr = _characterHeight/getFontHeight();
-    float wr = hr/_characterAspectRatio;
+    float wr = hr/getCharacterAspectRatio();
 
     for(String::iterator itr=_text.begin();
         itr!=_text.end();
@@ -402,7 +366,7 @@ void Text::computeGlyphRepresentation()
             {
                 unsigned int charcode = *itr;
 
-                Font::Glyph* glyph = activefont->getGlyph(_fontSize, charcode);
+                Glyph* glyph = activefont->getGlyph(_fontSize, charcode);
                 if (glyph)
                 {
                     float width = (float)(glyph->s()) * wr;
@@ -425,14 +389,14 @@ void Text::computeGlyphRepresentation()
                         {
                           case LEFT_TO_RIGHT:
                           {
-                            osg::Vec2 delta(activefont->getKerning(_fontSize, previous_charcode,charcode,_kerningType));
+                            osg::Vec2 delta(activefont->getKerning(previous_charcode,charcode,_kerningType));
                             cursor.x() += delta.x() * wr;
                             cursor.y() += delta.y() * hr;
                             break;
                           }
                           case RIGHT_TO_LEFT:
                           {
-                            osg::Vec2 delta(activefont->getKerning(_fontSize, charcode,previous_charcode,_kerningType));
+                            osg::Vec2 delta(activefont->getKerning(charcode,previous_charcode,_kerningType));
                             cursor.x() -= delta.x() * wr;
                             cursor.y() -= delta.y() * hr;
                             break;
@@ -452,16 +416,31 @@ void Text::computeGlyphRepresentation()
                     glyphquad._glyphs.push_back(glyph);
                     glyphquad._lineNumbers.push_back(lineNumber);
 
+                    // Adjust coordinates and texture coordinates to avoid
+                    // clipping the edges of antialiased characters.
+                    osg::Vec2 mintc = glyph->getMinTexCoord();
+                    osg::Vec2 maxtc = glyph->getMaxTexCoord();
+                    osg::Vec2 vDiff = maxtc - mintc;
+                    float fHorizTCMargin = 1.0f / glyph->getTexture()->getTextureWidth();
+                    float fVertTCMargin = 1.0f / glyph->getTexture()->getTextureHeight();
+                    float fHorizQuadMargin = vDiff.x() == 0.0f ? 0.0f : width * fHorizTCMargin / vDiff.x();
+                    float fVertQuadMargin = vDiff.y() == 0.0f ? 0.0f : height * fVertTCMargin / vDiff.y();
+                    mintc.x() -= fHorizTCMargin;
+                    mintc.y() -= fVertTCMargin;
+                    maxtc.x() += fHorizTCMargin;
+                    maxtc.y() += fVertTCMargin;
+
                     // set up the coords of the quad
-                    glyphquad._coords.push_back(local+osg::Vec2(0.0f,height));
-                    glyphquad._coords.push_back(local+osg::Vec2(0.0f,0.0f));
-                    glyphquad._coords.push_back(local+osg::Vec2(width,0.0f));
-                    glyphquad._coords.push_back(local+osg::Vec2(width,height));
+                    osg::Vec2 upLeft = local+osg::Vec2(0.0f-fHorizQuadMargin,height+fVertQuadMargin);
+                    osg::Vec2 lowLeft = local+osg::Vec2(0.0f-fHorizQuadMargin,0.0f-fVertQuadMargin);
+                    osg::Vec2 lowRight = local+osg::Vec2(width+fHorizQuadMargin,0.0f-fVertQuadMargin);
+                    osg::Vec2 upRight = local+osg::Vec2(width+fHorizQuadMargin,height+fVertQuadMargin);
+                    glyphquad._coords.push_back(upLeft);
+                    glyphquad._coords.push_back(lowLeft);
+                    glyphquad._coords.push_back(lowRight);
+                    glyphquad._coords.push_back(upRight);
 
                     // set up the tex coords of the quad
-                    const osg::Vec2& mintc = glyph->getMinTexCoord();
-                    const osg::Vec2& maxtc = glyph->getMaxTexCoord();
-
                     glyphquad._texcoords.push_back(osg::Vec2(mintc.x(),maxtc.y()));
                     glyphquad._texcoords.push_back(osg::Vec2(mintc.x(),mintc.y()));
                     glyphquad._texcoords.push_back(osg::Vec2(maxtc.x(),mintc.y()));
@@ -473,32 +452,27 @@ void Text::computeGlyphRepresentation()
                     {
                       case LEFT_TO_RIGHT:
                           cursor.x() += glyph->getHorizontalAdvance() * wr;
-                          _textBB.expandBy(osg::Vec3(local.x(),local.y(),0.0f)); //lower left corner
-                          _textBB.expandBy(osg::Vec3(cursor.x(),local.y()+height,0.0f)); //upper right corner
+                          _textBB.expandBy(osg::Vec3(lowLeft.x(), lowLeft.y(), 0.0f)); //lower left corner
+                          _textBB.expandBy(osg::Vec3(upRight.x(), upRight.y(), 0.0f)); //upper right corner
                           break;
                       case VERTICAL:
-                          cursor.y() -= glyph->getVerticalAdvance() *hr;
-                          _textBB.expandBy(osg::Vec3(local.x(),local.y()+height,0.0f)); //upper left corner
-                          _textBB.expandBy(osg::Vec3(local.x()+width,cursor.y(),0.0f)); //lower right corner
+                          cursor.y() -= glyph->getVerticalAdvance() * hr;
+                          _textBB.expandBy(osg::Vec3(upLeft.x(),upLeft.y(),0.0f)); //upper left corner
+                          _textBB.expandBy(osg::Vec3(lowRight.x(),lowRight.y(),0.0f)); //lower right corner
                           break;
                       case RIGHT_TO_LEFT:
-                          _textBB.expandBy(osg::Vec3(local.x()+width,local.y(),0.0f)); //lower right corner
-                          _textBB.expandBy(osg::Vec3(cursor.x(),local.y()+height,0.0f)); //upper left corner
+                          _textBB.expandBy(osg::Vec3(lowRight.x(),lowRight.y(),0.0f)); //lower right corner
+                          _textBB.expandBy(osg::Vec3(upLeft.x(),upLeft.y(),0.0f)); //upper left corner
                           break;
                     }
-
                     previous_charcode = charcode;
 
                 }
             }
 
-            if (itr!=_text.end())
-            {
-                // skip over spaces and return.
-                while (*itr==' ') ++itr;
-                if (*itr=='\n') ++itr;
-            }
-
+            // skip over spaces and return.
+            while (itr != _text.end() && *itr==' ') ++itr;
+            if (itr != _text.end() && *itr=='\n') ++itr;
         }
         else
         {
@@ -527,7 +501,7 @@ void Text::computeGlyphRepresentation()
           }
           case VERTICAL:
           {
-            startOfLine_coords.x() += _characterHeight/_characterAspectRatio * (1.0 + _lineSpacing);
+            startOfLine_coords.x() += _characterHeight/getCharacterAspectRatio() * (1.0 + _lineSpacing);
             cursor = startOfLine_coords;
             previous_charcode = 0;
             // because _lineCount is the max vertical no. of characters....
@@ -542,6 +516,7 @@ void Text::computeGlyphRepresentation()
    
     TextBase::computePositions();
     computeBackdropBoundingBox();
+    computeBoundingBoxMargin();
     computeColorGradients();
 }
 
@@ -679,7 +654,7 @@ void Text::computePositions(unsigned int contextID) const
             float pixelSizeVector_w = M(3,2)*P23 + M(3,3)*P33;
 
             float pixelSizeVert=(_characterHeight*sqrtf(scale_10.length2()))/(pixelSizeVector_w*0.701f);
-            float pixelSizeHori=(_characterHeight/_characterAspectRatio*sqrtf(scale_00.length2()))/(pixelSizeVector_w*0.701f);
+            float pixelSizeHori=(_characterHeight/getCharacterAspectRatio()*sqrtf(scale_00.length2()))/(pixelSizeVector_w*0.701f);
 
             // avoid nasty math by preventing a divide by zero
             if (pixelSizeVert == 0.0f)
@@ -690,7 +665,7 @@ void Text::computePositions(unsigned int contextID) const
             if (_characterSizeMode==SCREEN_COORDS)
             {
                 float scale_font_vert=_characterHeight/pixelSizeVert;
-                float scale_font_hori=_characterHeight/_characterAspectRatio/pixelSizeHori;
+                float scale_font_hori=_characterHeight/getCharacterAspectRatio()/pixelSizeHori;
 
                 if (P10<0)
                    scale_font_vert=-scale_font_vert;
@@ -1022,6 +997,21 @@ void Text::computeBackdropBoundingBox() const
     }
 }
 
+// This method expands the bounding box to a settable margin when a bounding box drawing mode is active. 
+void Text::computeBoundingBoxMargin() const
+{
+    if(_drawMode & (BOUNDINGBOX | FILLEDBOUNDINGBOX)){
+        _textBB.set(
+            _textBB.xMin() - _textBBMargin,
+            _textBB.yMin() - _textBBMargin,
+            _textBB.zMin(),
+            _textBB.xMax() + _textBBMargin,
+            _textBB.yMax() + _textBBMargin,
+            _textBB.zMax()
+        );
+    }
+}
+
 void Text::computeColorGradients() const
 {
     switch(_colorGradientMode)
@@ -1048,17 +1038,6 @@ void Text::computeColorGradientsOverall() const
     float max_x = FLT_MIN;
     float max_y = FLT_MIN;
 
-    float rgb_q11[3];
-    float hsv_q11[3];
-    float rgb_q12[3];
-    float hsv_q12[3];
-    float rgb_q21[3];
-    float hsv_q21[3];
-    float rgb_q22[3];
-    float hsv_q22[3];
-
-    float rgb[3];
-    float hsv[3];
     unsigned int i;
 
     for(TextureGlyphQuadMap::const_iterator const_titr=_textureGlyphQuadMap.begin();
@@ -1091,36 +1070,6 @@ void Text::computeColorGradientsOverall() const
         }
     }
 
-    rgb_q11[0] = _colorGradientBottomLeft[0];
-    rgb_q11[1] = _colorGradientBottomLeft[1];
-    rgb_q11[2] = _colorGradientBottomLeft[2];
-
-    rgb_q12[0] = _colorGradientTopLeft[0];
-    rgb_q12[1] = _colorGradientTopLeft[1];
-    rgb_q12[2] = _colorGradientTopLeft[2];
-
-    rgb_q21[0] = _colorGradientBottomRight[0];
-    rgb_q21[1] = _colorGradientBottomRight[1];
-    rgb_q21[2] = _colorGradientBottomRight[2];
-
-    rgb_q22[0] = _colorGradientTopRight[0];
-    rgb_q22[1] = _colorGradientTopRight[1];
-    rgb_q22[2] = _colorGradientTopRight[2];
-
-    // for linear interpolation to look correct 
-    // for colors and imitate what OpenGL does,
-    // we need to convert over to Hue-Saturation-Value
-    // and linear interpolate in that space.
-    // HSV will interpolate through the color spectrum.
-    // Now that I think about this, perhaps we could
-    // extend this to use function pointers or something
-    // so users may specify their own color interpolation
-    // scales such as Intensity, or Heated Metal, etc.
-    convertRgbToHsv(rgb_q11, hsv_q11);
-    convertRgbToHsv(rgb_q12, hsv_q12);
-    convertRgbToHsv(rgb_q21, hsv_q21);
-    convertRgbToHsv(rgb_q22, hsv_q22);
-
     for(TextureGlyphQuadMap::iterator titr=_textureGlyphQuadMap.begin();
         titr!=_textureGlyphQuadMap.end();
         ++titr)
@@ -1137,43 +1086,43 @@ void Text::computeColorGradientsOverall() const
 
         for(i=0;i<numCoords;++i)
         {
-            float hue = bilinearInterpolate(
+            float red = bilinearInterpolate(
                 min_x,
                 max_x,
                 min_y,
                 max_y,
                 coords2[i].x(),
                 coords2[i].y(),
-                hsv_q11[0],
-                hsv_q12[0],
-                hsv_q21[0],
-                hsv_q22[0]
+                _colorGradientBottomLeft[0],
+                _colorGradientTopLeft[0],
+                _colorGradientBottomRight[0],
+                _colorGradientTopRight[0]
             );
 
-            float saturation = bilinearInterpolate(
+            float green = bilinearInterpolate(
                 min_x,
                 max_x,
                 min_y,
                 max_y,
                 coords2[i].x(),
                 coords2[i].y(),
-                hsv_q11[1],
-                hsv_q12[1],
-                hsv_q21[1],
-                hsv_q22[1]
+                _colorGradientBottomLeft[1],
+                _colorGradientTopLeft[1],
+                _colorGradientBottomRight[1],
+                _colorGradientTopRight[1]
             );
 
-            float value = bilinearInterpolate(
+            float blue = bilinearInterpolate(
                 min_x,
                 max_x,
                 min_y,
                 max_y,
                 coords2[i].x(),
                 coords2[i].y(),
-                hsv_q11[2],
-                hsv_q12[2],
-                hsv_q21[2],
-                hsv_q22[2]
+                _colorGradientBottomLeft[2],
+                _colorGradientTopLeft[2],
+                _colorGradientBottomRight[2],
+                _colorGradientTopRight[2]
             );
             // Alpha does not convert to HSV            
             float alpha = bilinearInterpolate(
@@ -1189,12 +1138,7 @@ void Text::computeColorGradientsOverall() const
                 _colorGradientTopRight[3]
             );                                    
 
-            hsv[0] = hue;
-            hsv[1] = saturation;
-            hsv[2] = value;
-            // Convert back to RGB
-            convertHsvToRgb(hsv, rgb);
-            colorCoords[i] = osg::Vec4(rgb[0],rgb[1],rgb[2],alpha);
+            colorCoords[i] = osg::Vec4(red,green,blue,alpha);
         }
     }
 }
@@ -1263,8 +1207,9 @@ void Text::drawImplementation(osg::State& state, const osg::Vec4& colorMultiplie
 #else
     state.applyTextureMode(0,GL_TEXTURE_2D,false);
 #endif
+#if defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
     state.applyTextureAttribute(0,getActiveFont()->getTexEnv());
-
+#endif
     if (_characterSizeMode!=OBJECT_COORDS || _autoRotateToScreen)
     {
         int frameNumber = state.getFrameStamp()?state.getFrameStamp()->getFrameNumber():0;
@@ -1329,7 +1274,81 @@ void Text::drawImplementation(osg::State& state, const osg::Vec4& colorMultiplie
         }
     }
 
-    glNormal3fv(_normal.ptr());
+    osg::GLBeginEndAdapter& gl = (state.getGLBeginEndAdapter());
+
+    state.Normal(_normal.x(), _normal.y(), _normal.z());
+
+    if (_drawMode & FILLEDBOUNDINGBOX)
+    {
+        if (_textBB.valid())
+        {
+        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
+            state.applyTextureMode(0,GL_TEXTURE_2D,osg::StateAttribute::OFF);
+
+            const osg::Matrix& matrix = _autoTransformCache[contextID]._matrix;
+
+            osg::Vec3 c00(osg::Vec3(_textBB.xMin(),_textBB.yMin(),_textBB.zMin())*matrix);
+            osg::Vec3 c10(osg::Vec3(_textBB.xMax(),_textBB.yMin(),_textBB.zMin())*matrix);
+            osg::Vec3 c11(osg::Vec3(_textBB.xMax(),_textBB.yMax(),_textBB.zMin())*matrix);
+            osg::Vec3 c01(osg::Vec3(_textBB.xMin(),_textBB.yMax(),_textBB.zMin())*matrix);
+
+            switch(_backdropImplementation)
+            {
+                case NO_DEPTH_BUFFER:
+                    // Do nothing.  The bounding box will be rendered before the text and that's all that matters.
+                    break;
+                case DEPTH_RANGE:
+                    glPushAttrib(GL_DEPTH_BUFFER_BIT);
+                    //unsigned int backdrop_index = 0;
+                    //unsigned int max_backdrop_index = 8;
+                    //const double offset = double(max_backdrop_index - backdrop_index) * 0.003;
+                    glDepthRange(0.001, 1.001);
+                    break;
+                /*case STENCIL_BUFFER:
+                    break;*/
+                default:
+                    glPushAttrib(GL_POLYGON_OFFSET_FILL);
+                    glEnable(GL_POLYGON_OFFSET_FILL);
+                    glPolygonOffset(0.1f * osg::PolygonOffset::getFactorMultiplier(), 10.0f * osg::PolygonOffset::getUnitsMultiplier() );
+            }
+
+            gl.Color4f(colorMultiplier.r()*_textBBColor.r(),colorMultiplier.g()*_textBBColor.g(),colorMultiplier.b()*_textBBColor.b(),colorMultiplier.a()*_textBBColor.a());
+            gl.Begin(GL_QUADS);
+                gl.Vertex3fv(c00.ptr());
+                gl.Vertex3fv(c10.ptr());
+                gl.Vertex3fv(c11.ptr());
+                gl.Vertex3fv(c01.ptr());
+            gl.End();
+
+            switch(_backdropImplementation)
+            {
+                case NO_DEPTH_BUFFER:
+                    // Do nothing.
+                    break;
+                case DEPTH_RANGE:
+                    glDepthRange(0.0, 1.0);
+                    glPopAttrib();
+                    break;
+                /*case STENCIL_BUFFER:
+                    break;*/
+                default:
+                    glDisable(GL_POLYGON_OFFSET_FILL);
+                    glPopAttrib();
+            }
+        #else
+            OSG_NOTICE<<"Warning: Text::drawImplementation() fillMode FILLEDBOUNDINGBOX not supported"<<std::endl;
+        #endif
+        }
+    }    
+
+#if 1   
+    state.applyTextureMode(0,GL_TEXTURE_2D,true);
+#else
+    state.applyTextureMode(0,GL_TEXTURE_2D,false);
+#endif
+#if defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
+    state.applyTextureAttribute(0,getActiveFont()->getTexEnv());
+#endif
 
     if (_drawMode & TEXT)
     {
@@ -1341,7 +1360,7 @@ void Text::drawImplementation(osg::State& state, const osg::Vec4& colorMultiplie
         // So this is a pick your poison approach. Each alternative
         // backend has trade-offs associated with it, but with luck,
         // the user may find that works for them.
-        if(_backdropType != NONE)
+        if(_backdropType != NONE && _backdropImplementation != DELAYED_DEPTH_WRITES)
         {
             switch(_backdropImplementation)
             {
@@ -1363,7 +1382,7 @@ void Text::drawImplementation(osg::State& state, const osg::Vec4& colorMultiplie
         }
         else
         {
-            renderOnlyForegroundText(state,colorMultiplier);
+            renderWithDelayedDepthWrites(state,colorMultiplier);
         }
     }
 
@@ -1382,19 +1401,19 @@ void Text::drawImplementation(osg::State& state, const osg::Vec4& colorMultiplie
             osg::Vec3 c01(osg::Vec3(_textBB.xMin(),_textBB.yMax(),_textBB.zMin())*matrix);
 
         
-            glColor4fv(colorMultiplier.ptr());
-            glBegin(GL_LINE_LOOP);
-                glVertex3fv(c00.ptr());
-                glVertex3fv(c10.ptr());
-                glVertex3fv(c11.ptr());
-                glVertex3fv(c01.ptr());
-            glEnd();
+            gl.Color4f(colorMultiplier.r()*_textBBColor.r(),colorMultiplier.g()*_textBBColor.g(),colorMultiplier.b()*_textBBColor.b(),colorMultiplier.a()*_textBBColor.a());
+            gl.Begin(GL_LINE_LOOP);
+                gl.Vertex3fv(c00.ptr());
+                gl.Vertex3fv(c10.ptr());
+                gl.Vertex3fv(c11.ptr());
+                gl.Vertex3fv(c01.ptr());
+            gl.End();
         }
-    }    
+    }
 
     if (_drawMode & ALIGNMENT)
     {
-        glColor4fv(colorMultiplier.ptr());
+        gl.Color4fv(colorMultiplier.ptr());
 
         float cursorsize = _characterHeight*0.5f;
 
@@ -1407,12 +1426,12 @@ void Text::drawImplementation(osg::State& state, const osg::Vec4& colorMultiplie
 
         state.applyTextureMode(0,GL_TEXTURE_2D,osg::StateAttribute::OFF);
         
-        glBegin(GL_LINES);
-            glVertex3fv(hl.ptr());
-            glVertex3fv(hr.ptr());
-            glVertex3fv(vt.ptr());
-            glVertex3fv(vb.ptr());
-        glEnd();
+        gl.Begin(GL_LINES);
+            gl.Vertex3fv(hl.ptr());
+            gl.Vertex3fv(hr.ptr());
+            gl.Vertex3fv(vt.ptr());
+            gl.Vertex3fv(vb.ptr());
+        gl.End();
         
     }    
 }
@@ -1531,191 +1550,6 @@ float Text::bilinearInterpolate(float x1, float x2, float y1, float y2, float x,
     );
 }
 
-
-/**
- ** routines to convert between RGB and HSV
- **
- ** Reference:  Foley, van Dam, Feiner, Hughes,
- **        "Computer Graphics Principles and Practices,"
- **        Additon-Wesley, 1990, pp592-593.
- **/       
-/*
- *  FUNCTION
- *    HsvRgb( hsv, rgb )
- *
- *  DESCRIPTION
- *    convert a hue-saturation-value into a red-green-blue value
- *
- *    NOTE
- *    Array sizes are 3
- *    Values are between 0.0 and 1.0
- */
-
-void Text::convertHsvToRgb( float hsv[], float rgb[] ) const
-{
-    float h, s, v;            /* hue, sat, value        */
-    /*    double delta;    */        /* change in color value    */
-    float r, g, b;            /* red, green, blue        */
-    float i, f, p, q, t;        /* interim values        */
-
-
-    /* guarantee valid input:                    */
-
-    h = hsv[0] / 60.f;
-    while( h >= 6.f )    h -= 6.f;
-    while( h <  0.f )     h += 6.f;
-
-    s = hsv[1];
-    if( s < 0.f )
-        s = 0.f;
-    if( s > 1.f )
-        s = 1.f;
-
-    v = hsv[2];
-    if( v < 0.f )
-        v = 0.f;
-    if( v > 1.f )
-        v = 1.f;
-
-
-    /* if sat==0, then is a gray:                    */
-
-    if( s == 0.0f )
-    {
-        rgb[0] = rgb[1] = rgb[2] = v;
-        return;
-    }
-
-
-    /* get an rgb from the hue itself:                */
-
-    i = floor( h );
-    f = h - i;
-    p = v * ( 1.f - s );
-    q = v * ( 1.f - s*f );
-    t = v * ( 1.f - ( s * (1.f-f) ) );
-
-    switch( (int) i )
-    {
-        case 0:
-            r = v;    g = t;    b = p;
-            break;
-
-        case 1:
-            r = q;    g = v;    b = p;
-            break;
-
-        case 2:
-            r = p;    g = v;    b = t;
-            break;
-
-        case 3:
-            r = p;    g = q;    b = v;
-            break;
-
-        case 4:
-            r = t;    g = p;    b = v;
-            break;
-
-        case 5:
-            r = v;    g = p;    b = q;
-            break;
-
-        default:
-            /* never happens? */
-            r = 0;  g = 0;  b = 0;
-            break;
-    }
-
-
-    rgb[0] = r;
-    rgb[1] = g;
-    rgb[2] = b;
-
-}
-
-/*
- *  FUNCTION
- *    RgbHsv
- *
- *  DESCRIPTION
- *    convert a red-green-blue value into hue-saturation-value
- *
- *    NOTE
- *    Array sizes are 3
- *    Values are between 0.0 and 1.0
- */
-
-void Text::convertRgbToHsv( float rgb[], float hsv[] ) const
-{
-    float r, g, b;            /* red, green, blue        */
-    float min, max;            /* min and max rgb values    */
-    float fmin, fmax, diff;        /* min, max, and range of rgb vals */
-    float hue, sat, value;        /* h s v            */
-    float cr, cg, cb;        /* coefficients for computing hue */
-
-
-    /* determine min and max color primary values:            */
-
-    r = rgb[0];    g = rgb[1];    b = rgb[2];
-    min = r;    max = r;
-    if( g < min ) min = g;
-    if( g > max ) max = g;
-    if( b < min ) min = b;
-    if( b > max ) max = b;
-
-    fmin = min;
-    fmax = max;
-    diff = fmax - fmin;
-
-
-    /* get value and saturation:                    */
-
-    value = fmax;
-    if( max == 0.f )
-        sat = 0.0f;
-    else
-        sat = diff/fmax;
-
-
-
-    /* compute hue:                            */
-
-    if( sat == 0.0f )
-        hue = 0.0f;
-    else
-    {
-        float inv_diff = 1.0f / diff;
-        cr = ( fmax-r ) * inv_diff;
-        cg = ( fmax-g ) * inv_diff;
-        cb = ( fmax-b ) * inv_diff;
-
-        if( max == r ) 
-            hue =      (g-b) * inv_diff;
-        else if( max == g ) 
-            hue = 2.f + (b-r) * inv_diff;
-        else if( max == b ) 
-            hue = 4.f + (r-g) * inv_diff;
-        else
-            hue = 0.0f;
-    }
-
-
-    hue *= 60.0f;
-    if( hue < 0.0f )
-        hue += 360.0f;
-    if( hue > 360.0f )
-        hue -= 360.0f;
-
-
-    /* store output values:                        */
-
-    hsv[0] = hue;
-    hsv[1] = sat;
-    hsv[2] = value;
-
-}
-
 void Text::drawForegroundText(osg::State& state, const GlyphQuads& glyphquad, const osg::Vec4& colorMultiplier) const
 {
     unsigned int contextID = state.getContextID();
@@ -1729,14 +1563,14 @@ void Text::drawForegroundText(osg::State& state, const GlyphQuads& glyphquad, co
         if(_colorGradientMode == SOLID)
         {
             state.disableColorPointer();
-            glColor4f(colorMultiplier.r()*_color.r(),colorMultiplier.g()*_color.g(),colorMultiplier.b()*_color.b(),colorMultiplier.a()*_color.a());
+            state.Color(colorMultiplier.r()*_color.r(),colorMultiplier.g()*_color.g(),colorMultiplier.b()*_color.b(),colorMultiplier.a()*_color.a());
         }
         else
         {
             state.setColorPointer( 4, GL_FLOAT, 0, &(glyphquad._colorCoords.front()));
         }
 
-        glDrawArrays(GL_QUADS,0,transformedCoords.size());
+        state.drawQuads(0,transformedCoords.size());
 
     }
 }
@@ -1754,14 +1588,82 @@ void Text::renderOnlyForegroundText(osg::State& state, const osg::Vec4& colorMul
 
         drawForegroundText(state, glyphquad, colorMultiplier);
     }
+}
 
+void Text::renderWithDelayedDepthWrites(osg::State& state, const osg::Vec4& colorMultiplier) const
+{
+    //glPushAttrib( _enableDepthWrites ? (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT) : GL_DEPTH_BUFFER_BIT);
+    // Render to color buffer without writing to depth buffer.
+    glDepthMask(GL_FALSE);
+    drawTextWithBackdrop(state,colorMultiplier);
+
+    // Render to depth buffer if depth writes requested.
+    if( _enableDepthWrites )
+    {
+        glDepthMask(GL_TRUE);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+        drawTextWithBackdrop(state,colorMultiplier);
+    }
+
+    state.haveAppliedAttribute(osg::StateAttribute::DEPTH);
+    state.haveAppliedAttribute(osg::StateAttribute::COLORMASK);
+
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    //glPopAttrib();
+}
+
+void Text::drawTextWithBackdrop(osg::State& state, const osg::Vec4& colorMultiplier) const
+{
+    unsigned int contextID = state.getContextID();
+
+    for(TextureGlyphQuadMap::iterator titr=_textureGlyphQuadMap.begin();
+        titr!=_textureGlyphQuadMap.end();
+        ++titr)
+    {
+        // need to set the texture here...
+        state.applyTextureAttribute(0,titr->first.get());
+
+        const GlyphQuads& glyphquad = titr->second;
+
+        if(_backdropType != NONE)
+        {
+            unsigned int backdrop_index;
+            unsigned int max_backdrop_index;
+            if(_backdropType == OUTLINE)
+            {
+                backdrop_index = 0;
+                max_backdrop_index = 8;
+            }
+            else
+            {
+                backdrop_index = _backdropType;
+                max_backdrop_index = _backdropType+1;
+            }
+
+            state.setTexCoordPointer( 0, 2, GL_FLOAT, 0, &(glyphquad._texcoords.front()));
+            state.disableColorPointer();
+            state.Color(_backdropColor.r(),_backdropColor.g(),_backdropColor.b(),_backdropColor.a());
+
+            for( ; backdrop_index < max_backdrop_index; backdrop_index++)
+            {
+                const GlyphQuads::Coords3& transformedBackdropCoords = glyphquad._transformedBackdropCoords[backdrop_index][contextID];
+                if (!transformedBackdropCoords.empty()) 
+                {
+                    state.setVertexPointer( 3, GL_FLOAT, 0, &(transformedBackdropCoords.front()));
+                    state.drawQuads(0,transformedBackdropCoords.size());
+                }
+            }
+        }
+
+        drawForegroundText(state, glyphquad, colorMultiplier);
+    }
 }
 
 
 void Text::renderWithPolygonOffset(osg::State& state, const osg::Vec4& colorMultiplier) const
 {
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
     unsigned int contextID = state.getContextID();
-
 
     if (!osg::PolygonOffset::areFactorAndUnitsMultipliersSet())
     {
@@ -1796,7 +1698,7 @@ void Text::renderWithPolygonOffset(osg::State& state, const osg::Vec4& colorMult
 
         state.setTexCoordPointer( 0, 2, GL_FLOAT, 0, &(glyphquad._texcoords.front()));
         state.disableColorPointer();
-        glColor4fv(_backdropColor.ptr());
+        state.Color(_backdropColor.r(),_backdropColor.g(),_backdropColor.b(),_backdropColor.a());
 
         for( ; backdrop_index < max_backdrop_index; backdrop_index++)
         {
@@ -1805,8 +1707,8 @@ void Text::renderWithPolygonOffset(osg::State& state, const osg::Vec4& colorMult
             {
                 state.setVertexPointer( 3, GL_FLOAT, 0, &(transformedBackdropCoords.front()));
                 glPolygonOffset(0.1f * osg::PolygonOffset::getFactorMultiplier(),
-                                2.0f * osg::PolygonOffset::getUnitsMultiplier() * (max_backdrop_index-backdrop_index) );
-                glDrawArrays(GL_QUADS,0,transformedBackdropCoords.size());
+                                osg::PolygonOffset::getUnitsMultiplier() * (max_backdrop_index-backdrop_index) );
+                state.drawQuads(0,transformedBackdropCoords.size());
             }
         }
 
@@ -1817,11 +1719,15 @@ void Text::renderWithPolygonOffset(osg::State& state, const osg::Vec4& colorMult
     }
 
     glPopAttrib();
+#else
+    OSG_NOTICE<<"Warning: Text::renderWithPolygonOffset(..) not implemented."<<std::endl;
+#endif
 }
     
 
 void Text::renderWithNoDepthBuffer(osg::State& state, const osg::Vec4& colorMultiplier) const
 {
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
     unsigned int contextID = state.getContextID();
 
     glPushAttrib(GL_DEPTH_BUFFER_BIT);
@@ -1851,7 +1757,7 @@ void Text::renderWithNoDepthBuffer(osg::State& state, const osg::Vec4& colorMult
 
         state.setTexCoordPointer( 0, 2, GL_FLOAT, 0, &(glyphquad._texcoords.front()));
         state.disableColorPointer();
-        glColor4fv(_backdropColor.ptr());
+        state.Color(_backdropColor.r(),_backdropColor.g(),_backdropColor.b(),_backdropColor.a());
 
         for( ; backdrop_index < max_backdrop_index; backdrop_index++)
         {
@@ -1859,7 +1765,7 @@ void Text::renderWithNoDepthBuffer(osg::State& state, const osg::Vec4& colorMult
             if (!transformedBackdropCoords.empty()) 
             {
                 state.setVertexPointer( 3, GL_FLOAT, 0, &(transformedBackdropCoords.front()));
-                glDrawArrays(GL_QUADS,0,transformedBackdropCoords.size());
+                state.drawQuads(0,transformedBackdropCoords.size());
             }
         }
 
@@ -1867,11 +1773,15 @@ void Text::renderWithNoDepthBuffer(osg::State& state, const osg::Vec4& colorMult
     }
 
     glPopAttrib();
+#else
+    OSG_NOTICE<<"Warning: Text::renderWithNoDepthBuffer(..) not implemented."<<std::endl;
+#endif
 }
 
 // This idea comes from Paul Martz's OpenGL FAQ: 13.050
 void Text::renderWithDepthRange(osg::State& state, const osg::Vec4& colorMultiplier) const
 {
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
     unsigned int contextID = state.getContextID();
 
     // Hmmm, the man page says GL_VIEWPORT_BIT for Depth range (near and far)
@@ -1903,7 +1813,7 @@ void Text::renderWithDepthRange(osg::State& state, const osg::Vec4& colorMultipl
 
         state.setTexCoordPointer( 0, 2, GL_FLOAT, 0, &(glyphquad._texcoords.front()));
         state.disableColorPointer();
-        glColor4fv(_backdropColor.ptr());
+        state.Color(_backdropColor.r(),_backdropColor.g(),_backdropColor.b(),_backdropColor.a());
 
         for( ; backdrop_index < max_backdrop_index; backdrop_index++)
         {
@@ -1911,10 +1821,10 @@ void Text::renderWithDepthRange(osg::State& state, const osg::Vec4& colorMultipl
             if (!transformedBackdropCoords.empty()) 
             {
                 state.setVertexPointer( 3, GL_FLOAT, 0, &(transformedBackdropCoords.front()));
-                double offset = double(max_backdrop_index-backdrop_index)*0.003;
+                double offset = double(max_backdrop_index-backdrop_index)*0.0001;
                 glDepthRange( offset, 1.0+offset);
 
-                glDrawArrays(GL_QUADS,0,transformedBackdropCoords.size());
+                state.drawQuads(0,transformedBackdropCoords.size());
             }
         }
 
@@ -1924,10 +1834,14 @@ void Text::renderWithDepthRange(osg::State& state, const osg::Vec4& colorMultipl
     }
 
     glPopAttrib();
+#else
+    OSG_NOTICE<<"Warning: Text::renderWithDepthRange(..) not implemented."<<std::endl;
+#endif
 }
 
 void Text::renderWithStencilBuffer(osg::State& state, const osg::Vec4& colorMultiplier) const
 {
+#if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
     /* Here are the steps:
      * 1) Disable drawing color
      * 2) Enable the stencil buffer
@@ -2005,7 +1919,7 @@ void Text::renderWithStencilBuffer(osg::State& state, const osg::Vec4& colorMult
             if (!transformedBackdropCoords.empty()) 
             {
                 state.setVertexPointer( 3, GL_FLOAT, 0, &(transformedBackdropCoords.front()));
-                glDrawArrays(GL_QUADS,0,transformedBackdropCoords.size());
+                state.drawQuads(0,transformedBackdropCoords.size());
             }
         }
 
@@ -2015,7 +1929,7 @@ void Text::renderWithStencilBuffer(osg::State& state, const osg::Vec4& colorMult
         {
             state.setVertexPointer( 3, GL_FLOAT, 0, &(transformedCoords.front()));
             state.setTexCoordPointer( 0, 2, GL_FLOAT, 0, &(glyphquad._texcoords.front()));
-            glDrawArrays(GL_QUADS,0,transformedCoords.size());
+            state.drawQuads(0,transformedCoords.size());
         }
     }
 
@@ -2065,7 +1979,7 @@ void Text::renderWithStencilBuffer(osg::State& state, const osg::Vec4& colorMult
 
         state.setTexCoordPointer( 0, 2, GL_FLOAT, 0, &(glyphquad._texcoords.front()));
         state.disableColorPointer();
-        glColor4fv(_backdropColor.ptr());
+        state.Color(_backdropColor.r(),_backdropColor.g(),_backdropColor.b(),_backdropColor.a());
 
         for( ; backdrop_index < max_backdrop_index; backdrop_index++)
         {
@@ -2073,15 +1987,15 @@ void Text::renderWithStencilBuffer(osg::State& state, const osg::Vec4& colorMult
             if (!transformedBackdropCoords.empty()) 
             {
                 state.setVertexPointer( 3, GL_FLOAT, 0, &(transformedBackdropCoords.front()));
-                glDrawArrays(GL_QUADS,0,transformedBackdropCoords.size());
+                state.drawQuads(0,transformedBackdropCoords.size());
             }
         }
 
         drawForegroundText(state, glyphquad, colorMultiplier);
     }
-    
+
     glPopAttrib();
+#else
+    OSG_NOTICE<<"Warning: Text::renderWithStencilBuffer(..) not implemented."<<std::endl;
+#endif
 }
-
-
-

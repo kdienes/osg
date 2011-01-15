@@ -1,7 +1,7 @@
 // -*-c++-*-
 
 /*
- * $Id: mesh.h 5224 2006-07-04 09:13:15Z robert $
+ * $Id: mesh.h 10272 2009-05-26 11:00:26Z robert $
  *
  * Loader for DirectX .x files.
  * Copyright (c)2002-2006 Ulrich Hertlein <u.hertlein@sandbox.de>
@@ -74,7 +74,7 @@ namespace DX {
         }
 
         /// Parse 'Mesh'.
-        void parseMesh(std::ifstream& fin);
+        void parseMesh(std::istream& fin);
 
     private:
         Object * _obj;
@@ -92,13 +92,13 @@ namespace DX {
         MeshMaterialList* _materialList;
 
         /// Parse 'MeshNormals'.
-        void parseMeshNormals(std::ifstream& fin);
+        void parseMeshNormals(std::istream& fin);
 
         /// Parse 'MeshMaterialList'.
-        void parseMeshMaterialList(std::ifstream& fin);
+        void parseMeshMaterialList(std::istream& fin);
 
         /// Read 'MeshTextureCoords'.
-        void readMeshTexCoords(std::ifstream& fin);
+        void readMeshTexCoords(std::istream& fin);
     };
 
 } // namespace

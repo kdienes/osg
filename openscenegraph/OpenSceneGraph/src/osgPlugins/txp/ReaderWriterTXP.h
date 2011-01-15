@@ -73,13 +73,15 @@ public:
 
         return const_cast<ReaderWriterTXP*>(this)->local_readNode(file, options);
     }
+
+    bool removeArchive( int id );
     
 protected:
 
 
     ReadResult local_readNode(const std::string& file, const osgDB::ReaderWriter::Options* options);
 
-    TXPArchive *getArchive(int id, const std::string&);
+    osg::ref_ptr< TXPArchive > getArchive(int id, const std::string&);
  
     osg::Node* getTileContent(const TXPArchive::TileInfo &info, int x, int y, int lod, TXPArchive* archive,  std::vector<TXPArchive::TileLocationInfo>& childrenLoc);
     osg::Node* getTileContent(const TXPArchive::TileInfo &info, const TXPArchive::TileLocationInfo& loc, TXPArchive* archive,  std::vector<TXPArchive::TileLocationInfo>& childrenLoc);

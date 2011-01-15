@@ -5,7 +5,7 @@
 *
 * Copyright (C) ???
 *
-* Writing support added 2007 by Sukender (Benoit Neil), http://sukender.free.fr,
+* Writing support added 2009 by Sukender (Benoit Neil), http://sukender.free.fr,
 * strongly inspired by the OBJ writer object by Stephan Huber
 *
 * The Open Scene Graph (OSG) is a cross platform C++/OpenGL library for
@@ -196,12 +196,12 @@ class WriterNodeVisitor: public osg::NodeVisitor
         typedef std::stack<osg::ref_ptr<osg::StateSet> > StateSetStack;
         typedef std::map< osg::ref_ptr<osg::StateSet>, Material, CompareStateSet> MaterialMap;
 
-        void apply3DSMatrixNode(osg::Node &node, const osg::Matrix & m, const char * const prefix);
+        void apply3DSMatrixNode(osg::Node &node, const osg::Matrix * m, const char * const prefix);
 
         bool                                _succeeded;
         std::string                         _directory;
         std::string                         _srcDirectory;
-        Lib3dsFile *                        file3ds;
+        Lib3dsFile *                        _file3ds;
         StateSetStack                       _stateSetStack;
         osg::ref_ptr<osg::StateSet>         _currentStateSet;
         std::map<std::string, unsigned int> _mapPrefix;            ///< List of next number to use in unique name generation, for each prefix
@@ -210,7 +210,7 @@ class WriterNodeVisitor: public osg::NodeVisitor
         unsigned int                        _lastMaterialIndex;
         unsigned int                        _lastMeshIndex;
         Lib3dsMeshInstanceNode *            _cur3dsNode;
-        const osgDB::ReaderWriter::Options* options;
+        const osgDB::ReaderWriter::Options* _options;
         unsigned int                        _imageCount;
         bool                                _extendedFilePaths;
         std::set<osg::Image *>              _imageSet;

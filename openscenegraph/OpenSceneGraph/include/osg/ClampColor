@@ -31,6 +31,11 @@
 #define GL_CLAMP_FRAGMENT_COLOR                 GL_CLAMP_FRAGMENT_COLOR_ARB
 #endif
 
+#if defined(OSG_GL3_AVAILABLE)
+    #define GL_CLAMP_VERTEX_COLOR             0x891A
+    #define GL_CLAMP_FRAGMENT_COLOR           0x891B
+#endif
+
 namespace osg {
 
 /** Encapsulates OpenGL ClampColor state. */
@@ -55,7 +60,7 @@ class OSG_EXPORT ClampColor : public StateAttribute
         virtual int compare(const StateAttribute& sa) const
         {
             // Check for equal types, then create the rhs variable
-            // used by the COMPARE_StateAttribute_Paramter macros below.
+            // used by the COMPARE_StateAttribute_Parameter macros below.
             COMPARE_StateAttribute_Types(ClampColor,sa)
 
             // Compare each parameter in turn against the rhs.
@@ -100,7 +105,7 @@ class OSG_EXPORT ClampColor : public StateAttribute
 
                 ~Extensions() {}
                 
-                typedef void (APIENTRY * GLClampColorProc) (GLenum target, GLenum mode);
+                typedef void (GL_APIENTRY * GLClampColorProc) (GLenum target, GLenum mode);
                 bool                _isClampColorSupported;
                 GLClampColorProc    _glClampColor;
 

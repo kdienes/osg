@@ -118,7 +118,7 @@ void IntersectorGroup::intersect(osgUtil::IntersectionVisitor& iv, osg::Drawable
         }
     }
     
-    // osg::notify(osg::NOTICE)<<"Number testing "<<numTested<<std::endl;
+    // OSG_NOTICE<<"Number testing "<<numTested<<std::endl;
 
 }
 
@@ -203,11 +203,11 @@ void IntersectionVisitor::reset()
 
 void IntersectionVisitor::apply(osg::Node& node)
 {
-    // osg::notify(osg::NOTICE)<<"apply(Node&)"<<std::endl;
+    // OSG_NOTICE<<"apply(Node&)"<<std::endl;
 
     if (!enter(node)) return;
 
-    // osg::notify(osg::NOTICE)<<"inside apply(Node&)"<<std::endl;
+    // OSG_NOTICE<<"inside apply(Node&)"<<std::endl;
 
     traverse(node);
 
@@ -225,11 +225,11 @@ void IntersectionVisitor::apply(osg::Group& group)
 
 void IntersectionVisitor::apply(osg::Geode& geode)
 {
-    // osg::notify(osg::NOTICE)<<"apply(Geode&)"<<std::endl;
+    // OSG_NOTICE<<"apply(Geode&)"<<std::endl;
 
     if (!enter(geode)) return;
 
-    // osg::notify(osg::NOTICE)<<"inside apply(Geode&)"<<std::endl;
+    // OSG_NOTICE<<"inside apply(Geode&)"<<std::endl;
 
     for(unsigned int i=0; i<geode.getNumDrawables(); ++i)
     {
@@ -250,12 +250,17 @@ void IntersectionVisitor::apply(osg::Billboard& billboard)
     for(unsigned int i = 0; i < billboard.getNumDrawables(); i++ )
     {
         const osg::Vec3& pos = billboard.getPosition(i);
-        osg::ref_ptr<osg::RefMatrix> billboard_matrix = _modelStack.empty() ? 
-            new osg::RefMatrix :
-            new osg::RefMatrix(*_modelStack.back());
+        osg::ref_ptr<osg::RefMatrix> billboard_matrix = new osg::RefMatrix;
+        if (getViewMatrix())
+        {
+            if (getModelMatrix()) billboard_matrix->mult( *getModelMatrix(), *getViewMatrix() );
+            else billboard_matrix->set( *getViewMatrix() );
+        }
+        else if (getModelMatrix()) billboard_matrix->set( *getModelMatrix() );
 
         billboard.computeMatrix(*billboard_matrix,eye_local,pos);
-        
+
+        if (getViewMatrix()) billboard_matrix->postMult( osg::Matrix::inverse(*getViewMatrix()) );
         pushModelMatrix(billboard_matrix.get());
 
         // now push an new intersector clone transform to the new local coordinates
@@ -431,12 +436,12 @@ void IntersectionVisitor::apply(osg::Projection& projection)
 
 void IntersectionVisitor::apply(osg::Camera& camera)
 {
-    // osg::notify(osg::NOTICE)<<"apply(Camera&)"<<std::endl;
+    // OSG_NOTICE<<"apply(Camera&)"<<std::endl;
 
     // note, commenting out right now because default Camera setup is with the culling active.  Should this be changed?
     // if (!enter(camera)) return;
     
-    // osg::notify(osg::NOTICE)<<"inside apply(Camera&)"<<std::endl;
+    // OSG_NOTICE<<"inside apply(Camera&)"<<std::endl;
 
     osg::RefMatrix* projection = NULL;
     osg::RefMatrix* view = NULL;

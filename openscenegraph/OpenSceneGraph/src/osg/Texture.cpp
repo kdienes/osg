@@ -1,4 +1,4 @@
-/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2006 Robert Osfield 
+/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2006 Robert Osfield
  *
  * This library is open source and may be redistributed and/or modified under  
  * the terms of the OpenSceneGraph Public License (OSGPL) version 0.0 or 
@@ -19,15 +19,20 @@
 #include <osg/Timer>
 #include <osg/ApplicationUsage>
 #include <osg/FrameBufferObject>
+#include <osg/TextureRectangle>
+#include <osg/Texture1D>
 
 #include <OpenThreads/ScopedLock>
 #include <OpenThreads/Mutex>
 
-using namespace osg;
-
 #ifndef GL_TEXTURE_WRAP_R
 #define GL_TEXTURE_WRAP_R                 0x8072
 #endif
+
+#ifndef GL_TEXTURE_MAX_LEVEL
+#define GL_TEXTURE_MAX_LEVEL              0x813D
+#endif
+
 
 #ifndef GL_UNPACK_CLIENT_STORAGE_APPLE
 #define GL_UNPACK_CLIENT_STORAGE_APPLE    0x85B2
@@ -42,92 +47,17 @@ using namespace osg;
 #define GL_STORAGE_SHARED_APPLE           0x85BF
 #endif
 
-//#define DO_TIMING
+// #define DO_TIMING
+// #define CHECK_CONSISTENCY
+
+namespace osg {
 
 ApplicationUsageProxy Texture_e0(ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_MAX_TEXTURE_SIZE","Set the maximum size of textures.");
-
-class TextureObjectManager : public osg::Referenced
-{
-public:
-
-    TextureObjectManager():
-        _expiryDelay(0.0)
-    {
-        // printf("Constructing TextureObjectManager\n");
-    }
-
-    ~TextureObjectManager()
-    {
-        // printf("Destructing TextureObjectManager\n");
-    }
-
-    virtual Texture::TextureObject* generateTextureObject(unsigned int contextID,GLenum target);
-
-    virtual Texture::TextureObject* generateTextureObject(unsigned int contextID,
-                                                 GLenum    target,
-                                                 GLint     numMipmapLevels,
-                                                 GLenum    internalFormat,
-                                                 GLsizei   width,
-                                                 GLsizei   height,
-                                                 GLsizei   depth,
-                                                 GLint     border);
-
-    virtual Texture::TextureObject* reuseTextureObject(unsigned int contextID,
-                                              GLenum    target,
-                                              GLint     numMipmapLevels,
-                                              GLenum    internalFormat,
-                                              GLsizei   width,
-                                              GLsizei   height,
-                                              GLsizei   depth,
-                                              GLint     border);
-
-    inline Texture::TextureObject* reuseOrGenerateTextureObject(unsigned int contextID,
-                                              GLenum    target,
-                                              GLint     numMipmapLevels,
-                                              GLenum    internalFormat,
-                                              GLsizei   width,
-                                              GLsizei   height,
-                                              GLsizei   depth,
-                                              GLint     border)
-    {
-        Texture::TextureObject* to = reuseTextureObject(contextID,target,numMipmapLevels,internalFormat,width,height,depth,border);
-        if (to) return to;
-        else return generateTextureObject(contextID,target,numMipmapLevels,internalFormat,width,height,depth,border);
-    }                                                      
-
-    void addTextureObjects(Texture::TextureObjectListMap& toblm);
-
-    void addTextureObjectsFrom(Texture& texture);
-
-    void flushAllTextureObjects(unsigned int contextID);
-
-    void discardAllTextureObjects(unsigned int contextID);
-
-    void flushTextureObjects(unsigned int contextID,double currentTime, double& availableTime);
-
-    void setExpiryDelay(double expiryDelay) { _expiryDelay = expiryDelay; }
-
-    double getExpiryDelay() const { return _expiryDelay; }
-
-    /** How long to keep unused texture objects before deletion. */
-    double                  _expiryDelay;
-
-    Texture::TextureObjectListMap    _textureObjectListMap;
-
-    // mutex to keep access serialized.
-    OpenThreads::Mutex      _mutex;
-};
-
-unsigned int Texture::s_numberTextureReusedLastInLastFrame = 0;
-unsigned int Texture::s_numberNewTextureInLastFrame = 0;
-unsigned int Texture::s_numberDeletedTextureInLastFrame = 0;
-
-unsigned int s_minimumNumberOfTextureObjectsToRetainInCache = 0;
 
 typedef buffered_value< ref_ptr<Texture::Extensions> > BufferedExtensions;
 static BufferedExtensions s_extensions;
 
-static ref_ptr<TextureObjectManager> s_textureObjectManager = new TextureObjectManager;
+unsigned int s_minimumNumberOfTextureObjectsToRetainInCache = 0;
 
 void Texture::setMinimumNumberOfTextureObjectsToRetainInCache(unsigned int minimum)
 {
@@ -139,185 +69,730 @@ unsigned int Texture::getMinimumNumberOfTextureObjectsToRetainInCache()
     return s_minimumNumberOfTextureObjectsToRetainInCache;
 }
 
-Texture::TextureObject* TextureObjectManager::generateTextureObject(unsigned int /*contextID*/,GLenum target)
-{
-    GLuint id;
-    glGenTextures( 1L, &id );
 
-    return new Texture::TextureObject(id,target);
+Texture::TextureObject::~TextureObject()
+{
+    // OSG_NOTICE<<"Texture::TextureObject::~TextureObject() "<<this<<std::endl;
 }
 
-static int s_number = 0;
-
-Texture::TextureObject* TextureObjectManager::generateTextureObject(unsigned int /*contextID*/,
-                                                                             GLenum    target,
-                                                                             GLint     numMipmapLevels,
-                                                                             GLenum    internalFormat,
-                                                                             GLsizei   width,
-                                                                             GLsizei   height,
-                                                                             GLsizei   depth,
-                                                                             GLint     border)
+void Texture::TextureObject::bind()
 {
-    ++s_number;
-    ++Texture::s_numberNewTextureInLastFrame;
-    // notify(NOTICE)<<"creating new texture object "<<s_number<<std::endl;
-
-    // no useable texture object found so return 0
-    GLuint id;
-    glGenTextures( 1L, &id );
-
-    return new Texture::TextureObject(id,target,numMipmapLevels,internalFormat,width,height,depth,border);
+    glBindTexture( _profile._target, _id);
+    if (_set) _set->moveToBack(this);
 }
 
-Texture::TextureObject* TextureObjectManager::reuseTextureObject(unsigned int contextID,
-                                                                             GLenum    target,
-                                                                             GLint     numMipmapLevels,
-                                                                             GLenum    internalFormat,
-                                                                             GLsizei   width,
-                                                                             GLsizei   height,
-                                                                             GLsizei   depth,
-                                                                             GLint     border)
+void Texture::TextureObject::setAllocated(GLint     numMipmapLevels,
+                                          GLenum    internalFormat,
+                                          GLsizei   width,
+                                          GLsizei   height,
+                                          GLsizei   depth,
+                                          GLint     border)
 {
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
-
-    Texture::TextureObjectList& tol = _textureObjectListMap[contextID];
-    for(Texture::TextureObjectList::iterator itr = tol.begin();
-        itr != tol.end();
-        ++itr)
+    _allocated=true;
+    if (!match(_profile._target,numMipmapLevels,internalFormat,width,height,depth,border))
     {
-        if ((*itr)->match(target,numMipmapLevels,internalFormat,width,height,depth,border))
-        {
-            // found usable texture object.
-            Texture::TextureObject* textureObject = (*itr).release();
-            tol.erase(itr);
-            
-            // notify(NOTICE)<<"reusing texture object "<<std::endl;
-            
-            ++Texture::s_numberTextureReusedLastInLastFrame;
+        // keep previous size
+        unsigned int previousSize = _profile._size;
 
-            return textureObject;
+        _profile.set(numMipmapLevels,internalFormat,width,height,depth,border);
+
+        if (_set)
+        {
+            _set->moveToSet(this, _set->getParent()->getTextureObjectSet(_profile));
+
+            // Update texture pool size
+            _set->getParent()->getCurrTexturePoolSize() -= previousSize;
+            _set->getParent()->getCurrTexturePoolSize() += _profile._size;
+       }
+    }
+}
+
+void Texture::TextureProfile::computeSize()
+{
+    unsigned int numBitsPerTexel = 32;
+
+    switch(_internalFormat)
+    {
+        case(1): numBitsPerTexel = 8; break;
+        case(GL_ALPHA): numBitsPerTexel = 8; break;
+        case(GL_LUMINANCE): numBitsPerTexel = 8; break;
+        case(GL_INTENSITY): numBitsPerTexel = 8; break;
+
+        case(GL_LUMINANCE_ALPHA): numBitsPerTexel = 16; break;
+        case(2): numBitsPerTexel = 16; break;
+
+        case(GL_RGB): numBitsPerTexel = 24; break;
+        case(GL_BGR): numBitsPerTexel = 24; break;
+        case(3): numBitsPerTexel = 24; break;
+
+        case(GL_RGBA): numBitsPerTexel = 32; break;
+        case(4): numBitsPerTexel = 32; break;
+
+        case(GL_COMPRESSED_ALPHA_ARB):           numBitsPerTexel = 4; break;
+        case(GL_COMPRESSED_INTENSITY_ARB):       numBitsPerTexel = 4; break;
+        case(GL_COMPRESSED_LUMINANCE_ALPHA_ARB): numBitsPerTexel = 4; break;
+        case(GL_COMPRESSED_RGB_S3TC_DXT1_EXT):   numBitsPerTexel = 4; break;
+        case(GL_COMPRESSED_RGBA_S3TC_DXT1_EXT):  numBitsPerTexel = 4; break;
+
+        case(GL_COMPRESSED_RGB_ARB):             numBitsPerTexel = 8; break;
+        case(GL_COMPRESSED_RGBA_S3TC_DXT3_EXT):  numBitsPerTexel = 8; break;
+        case(GL_COMPRESSED_RGBA_S3TC_DXT5_EXT):  numBitsPerTexel = 8; break;
+
+        case(GL_COMPRESSED_SIGNED_RED_RGTC1_EXT):       numBitsPerTexel = 4; break;
+        case(GL_COMPRESSED_RED_RGTC1_EXT):              numBitsPerTexel = 4; break;
+        case(GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT): numBitsPerTexel = 8; break;
+        case(GL_COMPRESSED_RED_GREEN_RGTC2_EXT):        numBitsPerTexel = 8; break;
+
+        case(GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG):  numBitsPerTexel = 2; break;
+        case(GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG): numBitsPerTexel = 2; break;
+        case(GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG):  numBitsPerTexel = 4; break;
+        case(GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG): numBitsPerTexel = 4; break;
+    }
+
+    _size = (unsigned int)(ceil(double(_width * _height * _depth * numBitsPerTexel)/8.0));
+
+    if (_numMipmapLevels>1)
+    {
+        unsigned int mipmapSize = _size / 4;
+        for(GLint i=0; i<_numMipmapLevels && mipmapSize!=0; ++i)
+        {
+            _size += mipmapSize;
+            mipmapSize /= 4;
         }
     }
-    
-    return 0;
+
+    // OSG_NOTICE<<"TO ("<<_width<<", "<<_height<<", "<<_depth<<") size="<<_size<<" numBitsPerTexel="<<numBitsPerTexel<<std::endl;
 }
 
-    
-
-void TextureObjectManager::addTextureObjects(Texture::TextureObjectListMap& toblm)
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//  New texture object manager
+//
+Texture::TextureObjectSet::TextureObjectSet(TextureObjectManager* parent, const TextureProfile& profile):
+    _parent(parent),
+    _contextID(parent->getContextID()),
+    _profile(profile),
+    _numOfTextureObjects(0),
+    _head(0),
+    _tail(0)
 {
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+}
 
-    for(unsigned int i=0; i< toblm.size(); ++i)
+Texture::TextureObjectSet::~TextureObjectSet()
+{
+#if 0
+    OSG_NOTICE<<"TextureObjectSet::~TextureObjectSet(), _numOfTextureObjects="<<_numOfTextureObjects<<std::endl;
+    OSG_NOTICE<<"     _orphanedTextureObjects = "<<_orphanedTextureObjects.size()<<std::endl;
+    OSG_NOTICE<<"     _head = "<<_head<<std::endl;
+    OSG_NOTICE<<"     _tail = "<<_tail<<std::endl;
+#endif
+}
+
+bool Texture::TextureObjectSet::checkConsistency() const
+{
+#ifndef CHECK_CONSISTENCY
+    return true;
+#else
+    // OSG_NOTICE<<"TextureObjectSet::checkConsistency()"<<std::endl;
+    // check consistency of linked list.
+    unsigned int numInList = 0;
+    Texture::TextureObject* to = _head;
+    while(to!=0)
     {
-        Texture::TextureObjectList& tol = _textureObjectListMap[i];
-        tol.insert(tol.end(),toblm[i].begin(),toblm[i].end());
+        ++numInList;
+
+        if (to->_next)
+        {
+            if ((to->_next)->_previous != to)
+            {
+                OSG_NOTICE<<"Texture::TextureObjectSet::checkConsistency() : Error (to->_next)->_previous != to "<<std::endl;
+                return false;
+            }
+        }
+        else
+        {
+            if (_tail != to)
+            {
+                OSG_NOTICE<<"Texture::TextureObjectSet::checkConsistency() : Error _tail != to"<<std::endl;
+                return false;
+            }
+        }
+
+        to = to->_next;
     }
+
+    unsigned int totalNumber = numInList + _orphanedTextureObjects.size();
+    if (totalNumber != _numOfTextureObjects)
+    {
+        OSG_NOTICE<<"Error numInList + _orphanedTextureObjects.size() != _numOfTextureObjects"<<std::endl;
+        OSG_NOTICE<<"    numInList = "<<numInList<<std::endl;
+        OSG_NOTICE<<"    _orphanedTextureObjects.size() = "<<_orphanedTextureObjects.size()<<std::endl;
+        OSG_NOTICE<<"    _pendingOrphanedTextureObjects.size() = "<<_pendingOrphanedTextureObjects.size()<<std::endl;
+        OSG_NOTICE<<"    _numOfTextureObjects = "<<_numOfTextureObjects<<std::endl;
+        return false;
+    }
+
+    return true;
+#endif
 }
 
-void TextureObjectManager::addTextureObjectsFrom(Texture& texture)
+void Texture::TextureObjectSet::handlePendingOrphandedTextureObjects()
 {
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+    // OSG_NOTICE<<"handlePendingOrphandedTextureObjects()"<<_pendingOrphanedTextureObjects.size()<<std::endl;
 
-    texture.takeTextureObjects(_textureObjectListMap);
-}
+    if (_pendingOrphanedTextureObjects.empty()) return;
 
-void TextureObjectManager::flushAllTextureObjects(unsigned int contextID)
-{
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+    unsigned int numOrphaned = _pendingOrphanedTextureObjects.size();
 
-    Texture::TextureObjectList& tol = _textureObjectListMap[contextID];
-
-    // osg::notify(osg::INFO)<<"Flushing texture objects num="<<tol.size()<<" contextID="<<contextID<<std::endl;
-
-    for(Texture::TextureObjectList::iterator itr=tol.begin();
-        itr!=tol.end();
+    for(TextureObjectList::iterator itr = _pendingOrphanedTextureObjects.begin();
+        itr != _pendingOrphanedTextureObjects.end();
         ++itr)
     {
-        // osg::notify(osg::NOTICE)<<"  deleting texture object "<<(*itr)->_id<<std::endl;
-        glDeleteTextures( 1L, &((*itr)->_id));
+        TextureObject* to = itr->get();
+
+        _orphanedTextureObjects.push_back(to);
+
+        remove(to);
+
+#if 0
+        OSG_NOTICE<<"  HPOTO  after  _head = "<<_head<<std::endl;
+        OSG_NOTICE<<"  HPOTO  after _tail = "<<_tail<<std::endl;
+        OSG_NOTICE<<"  HPOTO  after to->_previous = "<<to->_previous<<std::endl;
+        OSG_NOTICE<<"  HPOTO  after to->_next = "<<to->_next<<std::endl;
+#endif
+
     }
-    tol.clear();
+
+
+    // update the TextureObjectManager's running total of active + orphaned TextureObjects
+    _parent->getNumberOrphanedTextureObjects() += numOrphaned;
+    _parent->getNumberActiveTextureObjects() -= numOrphaned;
+
+    _pendingOrphanedTextureObjects.clear();
+
+    checkConsistency();
 }
 
-void TextureObjectManager::discardAllTextureObjects(unsigned int contextID)
-{
-    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
 
-    Texture::TextureObjectList& tol = _textureObjectListMap[contextID];
-    tol.clear();
+void Texture::TextureObjectSet::deleteAllTextureObjects()
+{
+    // OSG_NOTICE<<"Texture::TextureObjectSet::deleteAllTextureObjects()"<<std::endl;
+
+    // move the pending orhpans into the orhans list
+    handlePendingOrphandedTextureObjects();
+
+    // detect all the active texture objects from their Textures
+    TextureObject* to = _head;
+    while(to!=0)
+    {
+        ref_ptr<TextureObject> glto = to;
+
+        to = to->_next;
+
+        _orphanedTextureObjects.push_back(glto.get());
+        remove(glto.get());
+
+        ref_ptr<Texture> original_texture = glto->getTexture();
+        if (original_texture.valid())
+        {
+            original_texture->setTextureObject(_contextID,0);
+        }
+    }
+
+    // now do the actual delete.
+    flushAllDeletedTextureObjects();
+
+    // OSG_NOTICE<<"done GLBufferObjectSet::deleteAllGLBufferObjects()"<<std::endl;
 }
 
-void TextureObjectManager::flushTextureObjects(unsigned int contextID,double currentTime, double& availableTime)
+void Texture::TextureObjectSet::discardAllTextureObjects()
 {
+    // OSG_NOTICE<<"Texture::TextureObjectSet::discardAllTextureObjects()."<<std::endl;
+
+    TextureObject* to = _head;
+    while(to!=0)
+    {
+        ref_ptr<TextureObject> glto = to;
+
+        to = to->_next;
+
+        ref_ptr<Texture> original_texture = glto->getTexture();
+
+        if (original_texture.valid())
+        {
+            original_texture->setTextureObject(_contextID,0);
+        }
+    }
+
+    // the linked list should now be empty
+    _head = 0;
+    _tail = 0;
+
+    _pendingOrphanedTextureObjects.clear();
+    _orphanedTextureObjects.clear();
+
+    unsigned int numDeleted = _numOfTextureObjects;
+    _numOfTextureObjects = 0;
+
+    // update the TextureObjectManager's running total of current pool size
+    _parent->getCurrTexturePoolSize() -= numDeleted*_profile._size;
+    _parent->getNumberOrphanedTextureObjects() -= numDeleted;
+    _parent->getNumberDeleted() += numDeleted;
+}
+
+void Texture::TextureObjectSet::flushAllDeletedTextureObjects()
+{
+    // OSG_NOTICE<<"Texture::TextureObjectSet::flushAllDeletedTextureObjects()"<<std::endl;
+
+    for(TextureObjectList::iterator itr = _orphanedTextureObjects.begin();
+        itr != _orphanedTextureObjects.end();
+        ++itr)
+    {
+
+        GLuint id = (*itr)->id();
+
+        // OSG_NOTICE<<"    Deleting textureobject ptr="<<itr->get()<<" id="<<id<<std::endl;
+        glDeleteTextures( 1L, &id);
+    }
+
+    unsigned int numDeleted = _orphanedTextureObjects.size();
+    _numOfTextureObjects -= numDeleted;
+
+    // update the TextureObjectManager's running total of current pool size
+    _parent->getCurrTexturePoolSize() -= numDeleted*_profile._size;
+    _parent->getNumberOrphanedTextureObjects() -= numDeleted;
+    _parent->getNumberDeleted() += numDeleted;
+
+    _orphanedTextureObjects.clear();
+}
+
+void Texture::TextureObjectSet::discardAllDeletedTextureObjects()
+{
+    // OSG_NOTICE<<"Texture::TextureObjectSet::discardAllDeletedTextureObjects()"<<std::endl;
+
+    // clean up the pending orphans.
+    handlePendingOrphandedTextureObjects();
+
+    unsigned int numDiscarded = _orphanedTextureObjects.size();
+
+    _numOfTextureObjects -= numDiscarded;
+
+    // update the TextureObjectManager's running total of current pool size
+    _parent->setCurrTexturePoolSize( _parent->getCurrTexturePoolSize() - numDiscarded*_profile._size );
+
+    // update the number of active and orphaned TextureOjects
+    _parent->getNumberOrphanedTextureObjects() -= 1;
+    _parent->getNumberActiveTextureObjects() += 1;
+    _parent->getNumberDeleted() += 1;
+
+    // just clear the list as there is nothing else we can do with them when discarding them
+    _orphanedTextureObjects.clear();
+}
+
+void Texture::TextureObjectSet::flushDeletedTextureObjects(double currentTime, double& availableTime)
+{
+    // OSG_NOTICE<<"Texture::TextureObjectSet::flushDeletedTextureObjects(..)"<<std::endl;
+
+
+
+    if (_parent->getCurrTexturePoolSize()<=_parent->getMaxTexturePoolSize())
+    {
+        // OSG_NOTICE<<"Plenty of space in TexturePool"<<std::endl;
+        return;
+    }
+
+#if 1
+    if (!_pendingOrphanedTextureObjects.empty())
+    {
+        // OSG_NOTICE<<"Texture::TextureObjectSet::flushDeletedTextureObjects(..) handling orphans"<<std::endl;
+        OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+        handlePendingOrphandedTextureObjects();
+    }
+#endif
+
+    // if nothing to delete return
+    if (_orphanedTextureObjects.empty())
+    {
+        return;
+    }
+
     // if no time available don't try to flush objects.
     if (availableTime<=0.0) return;
 
-    unsigned int numObjectsDeleted = 0;
-    unsigned int maxNumObjectsToDelete = 4;
+#if 0
+    // if we don't have too many orphaned texture objects then don't bother deleting them, as we can potentially reuse them later.
+    if (_parent->getNumberOrphanedTextureObjects()<=s_minimumNumberOfTextureObjectsToRetainInCache) return;
 
-    const osg::Timer& timer = *osg::Timer::instance();
-    osg::Timer_t start_tick = timer.tick();
-    double elapsedTime = 0.0;
+    unsigned int numDeleted = 0;
+    unsigned int maxNumObjectsToDelete = _parent->getNumberOrphanedTextureObjects()-s_minimumNumberOfTextureObjectsToRetainInCache;
+    if (maxNumObjectsToDelete>4) maxNumObjectsToDelete = 4;
 
-    unsigned int numTexturesDeleted = 0;
-    {    
+#else
+
+    unsigned int numDeleted = 0;
+    unsigned int sizeRequired = _parent->getCurrTexturePoolSize() - _parent->getMaxTexturePoolSize();
+    unsigned int maxNumObjectsToDelete = static_cast<unsigned int>(ceil(double(sizeRequired) / double(_profile._size)));
+    // OSG_NOTICE<<"_parent->getCurrTexturePoolSize()="<<_parent->getCurrTexturePoolSize() <<" _parent->getMaxTexturePoolSize()="<< _parent->getMaxTexturePoolSize()<<std::endl;
+    // OSG_NOTICE<<"Looking to reclaim "<<sizeRequired<<", going to look to remove "<<maxNumObjectsToDelete<<" from "<<_orphanedTextureObjects.size()<<" orhpans"<<std::endl;
+
+#endif
+
+    ElapsedTime timer;
+
+    TextureObjectList::iterator itr = _orphanedTextureObjects.begin();
+    for(;
+        itr != _orphanedTextureObjects.end() && timer.elapsedTime()<availableTime && numDeleted<maxNumObjectsToDelete;
+        ++itr)
+    {
+
+        GLuint id = (*itr)->id();
+
+        // OSG_NOTICE<<"    Deleting textureobject ptr="<<itr->get()<<" id="<<id<<std::endl;
+        glDeleteTextures( 1L, &id);
+
+        ++numDeleted;
+    }
+
+    // OSG_NOTICE<<"Size before = "<<_orphanedTextureObjects.size();
+    _orphanedTextureObjects.erase(_orphanedTextureObjects.begin(), itr);
+    // OSG_NOTICE<<", after = "<<_orphanedTextureObjects.size()<<" numDeleted = "<<numDeleted<<std::endl;
+
+    // update the number of TO's in this TextureObjectSet
+    _numOfTextureObjects -= numDeleted;
+
+    _parent->setCurrTexturePoolSize( _parent->getCurrTexturePoolSize() - numDeleted*_profile._size );
+
+    // update the number of active and orphaned TextureOjects
+    _parent->getNumberOrphanedTextureObjects() -= numDeleted;
+    _parent->getNumberDeleted() += numDeleted;
+
+    availableTime -= timer.elapsedTime();
+}
+
+bool Texture::TextureObjectSet::makeSpace(unsigned int& size)
+{
+#if 1
+    if (!_pendingOrphanedTextureObjects.empty())
+    {
+        // OSG_NOTICE<<"Texture::TextureObjectSet::Texture::TextureObjectSet::makeSpace(..) handling orphans"<<std::endl;
+        OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+        handlePendingOrphandedTextureObjects();
+    }
+#endif
+
+    if (!_orphanedTextureObjects.empty())
+    {
+        unsigned int sizeAvailable = _orphanedTextureObjects.size() * _profile._size;
+        if (size>sizeAvailable) size -= sizeAvailable;
+        else size = 0;
+
+        flushAllDeletedTextureObjects();
+    }
+
+    return size==0;
+}
+
+Texture::TextureObject* Texture::TextureObjectSet::takeFromOrphans(Texture* texture)
+{
+    // take front of orphaned list.
+    ref_ptr<TextureObject> to = _orphanedTextureObjects.front();
+
+    // remove from orphan list.
+    _orphanedTextureObjects.pop_front();
+
+    // assign to new texture
+    to->setTexture(texture);
+
+    // update the number of active and orphaned TextureOjects
+    _parent->getNumberOrphanedTextureObjects() -= 1;
+    _parent->getNumberActiveTextureObjects() += 1;
+
+    // place at back of active list
+    addToBack(to.get());
+
+    // OSG_INFO<<"Reusing orhpahned TextureObject, _numOfTextureObjects="<<_numOfTextureObjects<<std::endl;
+
+    return to.release();
+}
+
+
+Texture::TextureObject* Texture::TextureObjectSet::takeOrGenerate(Texture* texture)
+{
+    // see if we can recyle TextureObject from the orphane list
+    if (!_pendingOrphanedTextureObjects.empty())
+    {
+        OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+        handlePendingOrphandedTextureObjects();
+        return takeFromOrphans(texture);
+    }
+    else if (!_orphanedTextureObjects.empty())
+    {
+        return takeFromOrphans(texture);
+    }
+
+    unsigned int minFrameNumber = _parent->getFrameNumber();
+
+    // see if we can reuse TextureObject by taking the least recently used active TextureObject
+    if ((_parent->getMaxTexturePoolSize()!=0) &&
+        (!_parent->hasSpace(_profile._size)) &&
+        (_numOfTextureObjects>1) &&
+        (_head != 0) &&
+        (_head->_frameLastUsed<minFrameNumber))
+    {
+
         OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
 
-        Texture::TextureObjectList& tol = _textureObjectListMap[contextID];
+        ref_ptr<TextureObject> to = _head;
 
-        // reset the time of any uninitialized objects.
-        Texture::TextureObjectList::iterator itr;
-        for(itr=tol.begin();
-            itr!=tol.end();
-            ++itr)
+        ref_ptr<Texture> original_texture = to->getTexture();
+
+        if (original_texture.valid())
         {
-            if ((*itr)->_timeStamp==0.0) (*itr)->_timeStamp=currentTime;
+            original_texture->setTextureObject(_contextID,0);
+            OSG_INFO<<"TextureObjectSet="<<this<<": Reusing an active TextureObject "<<to.get()<<" _numOfTextureObjects="<<_numOfTextureObjects<<" width="<<_profile._width<<" height="<<_profile._height<<std::endl;
+        }
+        else
+        {
+            OSG_INFO<<"Reusing a recently orphaned active TextureObject "<<to.get()<<std::endl;
         }
 
-        double expiryTime = currentTime-_expiryDelay;
+        moveToBack(to.get());
 
-        for(itr=tol.begin();
-            itr!=tol.end() && elapsedTime<availableTime && tol.size()>s_minimumNumberOfTextureObjectsToRetainInCache && numObjectsDeleted<maxNumObjectsToDelete;
-            )
+        // assign to new texture
+        to->setTexture(texture);
+
+        return to.release();
+    }
+
+    //
+    // no TextureObjects available to recycle so have to create one from scratch
+    //
+    GLuint id;
+    glGenTextures( 1L, &id );
+
+    TextureObject* to = new Texture::TextureObject(const_cast<Texture*>(texture),id,_profile);
+    to->_set = this;
+    ++_numOfTextureObjects;
+
+    // update the current texture pool size
+    _parent->getCurrTexturePoolSize() += _profile._size;
+    _parent->getNumberActiveTextureObjects() += 1;
+
+    addToBack(to);
+
+    OSG_INFO<<"Created new " << this << " TextureObject, _numOfTextureObjects "<<_numOfTextureObjects<<std::endl;
+
+    return to;
+}
+
+void Texture::TextureObjectSet::moveToBack(Texture::TextureObject* to)
+{
+#if 0
+    OSG_NOTICE<<"TextureObjectSet::moveToBack("<<to<<")"<<std::endl;
+    OSG_NOTICE<<"    before _head = "<<_head<<std::endl;
+    OSG_NOTICE<<"    before _tail = "<<_tail<<std::endl;
+    OSG_NOTICE<<"    before to->_previous = "<<to->_previous<<std::endl;
+    OSG_NOTICE<<"    before to->_next = "<<to->_next<<std::endl;
+#endif
+
+    to->_frameLastUsed = _parent->getFrameNumber();
+
+    // nothing to do if we are already tail
+    if (to==_tail) return;
+
+    // if no tail exists then assign 'to' as tail and head
+    if (_tail==0)
+    {
+        OSG_NOTICE<<"Error ***************** Should not get here !!!!!!!!!"<<std::endl;
+        _head = to;
+        _tail = to;
+        return;
+    }
+
+    if (to->_next==0)
+    {
+        OSG_NOTICE<<"Error ***************** Should not get here either !!!!!!!!!"<<std::endl;
+        return;
+    }
+
+
+    if (to->_previous)
+    {
+        (to->_previous)->_next = to->_next;
+    }
+    else
+    {
+        // 'to' is the head, so moving it to the back will mean we need a new head
+        if (to->_next)
         {
-            if ((*itr)->_timeStamp<=expiryTime)
-            {
-                --s_number;
-                ++Texture::s_numberDeletedTextureInLastFrame;
-
-                glDeleteTextures( 1L, &((*itr)->_id));
-                itr = tol.erase(itr);
-                ++numTexturesDeleted;
-                ++numObjectsDeleted;
-            }
-            else
-            {
-                ++itr;
-            }
-            elapsedTime = timer.delta_s(start_tick,timer.tick());
+            _head = to->_next;
         }
     }
-    elapsedTime = timer.delta_s(start_tick,timer.tick());
-    // if (numTexturesDeleted) notify(osg::NOTICE)<<"Number of Texture's deleted = "<<numTexturesDeleted<<" new total "<<s_number<<" elapsed time"<<elapsedTime<<std::endl;
-        
-    availableTime -= elapsedTime;
+
+    (to->_next)->_previous = to->_previous;
+
+    _tail->_next = to;
+
+    to->_previous = _tail;
+    to->_next = 0;
+
+    _tail = to;
+
+#if 0
+    OSG_NOTICE<<"  m2B   after  _head = "<<_head<<std::endl;
+    OSG_NOTICE<<"  m2B   after _tail = "<<_tail<<std::endl;
+    OSG_NOTICE<<"  m2B   after to->_previous = "<<to->_previous<<std::endl;
+    OSG_NOTICE<<"  m2B   after to->_next = "<<to->_next<<std::endl;
+#endif
+    checkConsistency();
 }
 
-
-static TextureObjectManager* getTextureObjectManager()
+void Texture::TextureObjectSet::addToBack(Texture::TextureObject* to)
 {
-    return s_textureObjectManager.get();
+#if 0
+    OSG_NOTICE<<"TextureObjectSet::addToBack("<<to<<")"<<std::endl;
+    OSG_NOTICE<<"    before _head = "<<_head<<std::endl;
+    OSG_NOTICE<<"    before _tail = "<<_tail<<std::endl;
+    OSG_NOTICE<<"    before to->_previous = "<<to->_previous<<std::endl;
+    OSG_NOTICE<<"    before to->_next = "<<to->_next<<std::endl;
+#endif
+
+    if (to->_previous !=0 || to->_next !=0)
+    {
+        moveToBack(to);
+    }
+    else
+    {
+        to->_frameLastUsed = _parent->getFrameNumber();
+
+        if (_tail) _tail->_next = to;
+        to->_previous = _tail;
+
+        if (!_head) _head = to;
+        _tail = to;
+    }
+#if 0
+    OSG_NOTICE<<"  a2B  after  _head = "<<_head<<std::endl;
+    OSG_NOTICE<<"  a2B   after _tail = "<<_tail<<std::endl;
+    OSG_NOTICE<<"  a2B   after to->_previous = "<<to->_previous<<std::endl;
+    OSG_NOTICE<<"  a2B   after to->_next = "<<to->_next<<std::endl;
+#endif
+    checkConsistency();
 }
 
-
-Texture::TextureObject* Texture::generateTextureObject(unsigned int contextID,GLenum target)
+void Texture::TextureObjectSet::orphan(Texture::TextureObject* to)
 {
-    if (getTextureObjectManager()) return getTextureObjectManager()->generateTextureObject(contextID,target);
-    else return 0;
+    // OSG_NOTICE<<"TextureObjectSet::orphan("<<to<<")"<<std::endl;
+
+    OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+
+    // disconnect from original texture
+    to->setTexture(0);
+
+    // add orphan 'to' to the pending list of orphans, these will then be
+    // handled in the handlePendingOrphandedTextureObjects() where the TO's
+    // will be removed from the active list, and then placed in the orhpanTextureObject
+    // list.  This double buffered approach to handling orphaned TO's is used
+    // to avoid having to mutex the process of appling active TO's.
+    _pendingOrphanedTextureObjects.push_back(to);
+
+#if 0
+    OSG_NOTICE<<"TextureObjectSet::orphan("<<to<<")  _pendingOrphanedTextureObjects.size()="<<_pendingOrphanedTextureObjects.size()<<std::endl;
+    OSG_NOTICE<<"                                    _orphanedTextureObjects.size()="<<_orphanedTextureObjects.size()<<std::endl;
+#endif
 }
 
-Texture::TextureObject* Texture::generateTextureObject(unsigned int contextID,
+void Texture::TextureObjectSet::remove(Texture::TextureObject* to)
+{
+    if (to->_previous!=0)
+    {
+        (to->_previous)->_next = to->_next;
+    }
+    else
+    {
+        // 'to' was head so assign _head to the next in list
+        _head = to->_next;
+    }
+
+    if (to->_next!=0)
+    {
+        (to->_next)->_previous = to->_previous;
+    }
+    else
+    {
+        // 'to' was tail so assing tail to the previous in list
+        _tail = to->_previous;
+    }
+
+    // reset the 'to' list pointers as it's no longer in the active list.
+    to->_next = 0;
+    to->_previous = 0;
+}
+
+void Texture::TextureObjectSet::moveToSet(TextureObject* to, TextureObjectSet* set)
+{
+    if (set==this) return;
+    if (!set) return;
+
+    // remove 'to' from original set
+    --_numOfTextureObjects;
+    remove(to);
+
+    // register 'to' with new set.
+    to->_set = set;
+    ++set->_numOfTextureObjects;
+    set->addToBack(to);
+}
+
+
+Texture::TextureObjectManager::TextureObjectManager(unsigned int contextID):
+    _contextID(contextID),
+    _numActiveTextureObjects(0),
+    _numOrphanedTextureObjects(0),
+    _currTexturePoolSize(0),
+    _maxTexturePoolSize(0),
+    _frameNumber(0),
+    _numFrames(0),
+    _numDeleted(0),
+    _deleteTime(0.0),
+    _numGenerated(0),
+    _generateTime(0.0),
+    _numApplied(0),
+    _applyTime(0.0)
+{
+}
+
+void Texture::TextureObjectManager::setMaxTexturePoolSize(unsigned int size)
+{
+    if (_maxTexturePoolSize == size) return;
+
+    if (size<_currTexturePoolSize)
+    {
+        OSG_NOTICE<<"Warning: new MaxTexturePoolSize="<<size<<" is smaller than current TexturePoolSize="<<_currTexturePoolSize<<std::endl;
+    }
+
+    _maxTexturePoolSize = size;
+}
+
+bool Texture::TextureObjectManager::makeSpace(unsigned int size)
+{
+    for(TextureSetMap::iterator itr = _textureSetMap.begin();
+        itr != _textureSetMap.end() && size>0;
+        ++itr)
+    {
+        if ((*itr).second->makeSpace(size)) return true;
+    }
+
+    return size==0;
+}
+
+
+Texture::TextureObject* Texture::TextureObjectManager::generateTextureObject(const Texture* texture, GLenum target)
+{
+    return generateTextureObject(texture, target, 0, 0, 0, 0, 0, 0);
+}
+
+Texture::TextureObject* Texture::TextureObjectManager::generateTextureObject(const Texture* texture, 
                                              GLenum    target,
                                              GLint     numMipmapLevels,
                                              GLenum    internalFormat,
@@ -326,34 +801,203 @@ Texture::TextureObject* Texture::generateTextureObject(unsigned int contextID,
                                              GLsizei   depth,
                                              GLint     border)
 {
-    if (getTextureObjectManager())    
-        return getTextureObjectManager()->reuseOrGenerateTextureObject(contextID,
-                                             target,
-                                             numMipmapLevels,
-                                             internalFormat,
-                                             width,
-                                             height,
-                                             depth,
-                                             border);
-    else
-        return 0;
-}                                             
+    ElapsedTime elapsedTime(&(getGenerateTime()));
+    ++getNumberGenerated();
+
+    Texture::TextureProfile profile(target,numMipmapLevels,internalFormat,width,height,depth,border);
+    TextureObjectSet* tos = getTextureObjectSet(profile);
+    return tos->takeOrGenerate(const_cast<Texture*>(texture));
+}
+
+Texture::TextureObjectSet* Texture::TextureObjectManager::getTextureObjectSet(const TextureProfile& profile)
+{
+    osg::ref_ptr<Texture::TextureObjectSet>& tos = _textureSetMap[profile];
+    if (!tos) tos = new Texture::TextureObjectSet(this, profile);
+    return tos.get();
+}
+
+void Texture::TextureObjectManager::handlePendingOrphandedTextureObjects()
+{
+    for(TextureSetMap::iterator itr = _textureSetMap.begin();
+        itr != _textureSetMap.end();
+        ++itr)
+    {
+        (*itr).second->handlePendingOrphandedTextureObjects();
+    }
+}
+
+void Texture::TextureObjectManager::deleteAllTextureObjects()
+{
+    // OSG_NOTICE<<"Texture::TextureObjectManager::deleteAllTextureObjects() _contextID="<<_contextID<<std::endl;
+
+    ElapsedTime elapsedTime(&(getDeleteTime()));
+
+    for(TextureSetMap::iterator itr = _textureSetMap.begin();
+        itr != _textureSetMap.end();
+        ++itr)
+    {
+        (*itr).second->deleteAllTextureObjects();
+    }
+}
+
+void Texture::TextureObjectManager::discardAllTextureObjects()
+{
+    // OSG_NOTICE<<"Texture::TextureObjectManager::discardAllTextureObjects() _contextID="<<_contextID<<" _numActiveTextureObjects="<<_numActiveTextureObjects<<std::endl;
+
+    for(TextureSetMap::iterator itr = _textureSetMap.begin();
+        itr != _textureSetMap.end();
+        ++itr)
+    {
+        (*itr).second->discardAllTextureObjects();
+    }
+}
+
+void Texture::TextureObjectManager::flushAllDeletedTextureObjects()
+{
+    // OSG_NOTICE<<"Texture::TextureObjectManager::flushAllDeletedTextureObjects() _contextID="<<_contextID<<std::endl;
+
+    ElapsedTime elapsedTime(&(getDeleteTime()));
+
+    for(TextureSetMap::iterator itr = _textureSetMap.begin();
+        itr != _textureSetMap.end();
+        ++itr)
+    {
+        (*itr).second->flushAllDeletedTextureObjects();
+    }
+}
+
+void Texture::TextureObjectManager::discardAllDeletedTextureObjects()
+{
+    // OSG_NOTICE<<"Texture::TextureObjectManager::discardAllDeletedTextureObjects() _contextID="<<_contextID<<" _numActiveTextureObjects="<<_numActiveTextureObjects<<std::endl;
+
+    for(TextureSetMap::iterator itr = _textureSetMap.begin();
+        itr != _textureSetMap.end();
+        ++itr)
+    {
+        (*itr).second->discardAllDeletedTextureObjects();
+    }
+}
+
+void Texture::TextureObjectManager::flushDeletedTextureObjects(double currentTime, double& availableTime)
+{
+    ElapsedTime elapsedTime(&(getDeleteTime()));
+
+    static double max_ratio = 0.0f;
+    double ratio = double(getCurrTexturePoolSize())/double(getMaxTexturePoolSize());
+    if (ratio>max_ratio)
+    {
+        max_ratio = ratio;
+    }
+    // OSG_NOTICE<<"TexturePool Size ratio "<<ratio<<", max ratio "<<max_ratio<<std::endl;
+
+    for(TextureSetMap::iterator itr = _textureSetMap.begin();
+        (itr != _textureSetMap.end()) && (availableTime > 0.0);
+        ++itr)
+    {
+        (*itr).second->flushDeletedTextureObjects(currentTime, availableTime);
+    }
+}
+
+void Texture::TextureObjectManager::releaseTextureObject(Texture::TextureObject* to)
+{
+    if (to->_set) to->_set->orphan(to);
+    else OSG_NOTICE<<"TextureObjectManager::releaseTextureObject(Texture::TextureObject* to) Not implemented yet"<<std::endl;
+}
+
+
+void Texture::TextureObjectManager::newFrame(osg::FrameStamp* fs)
+{
+    if (fs) _frameNumber = fs->getFrameNumber();
+    else ++_frameNumber;
+
+    ++_numFrames;
+}
+
+void Texture::TextureObjectManager::reportStats()
+{
+    double numFrames(_numFrames==0 ? 1.0 : _numFrames);
+    OSG_NOTICE<<"TextureObjectMananger::reportStats()"<<std::endl;
+    OSG_NOTICE<<"   total _numOfTextureObjects="<<_numActiveTextureObjects<<", _numOrphanedTextureObjects="<<_numOrphanedTextureObjects<<" _currTexturePoolSize="<<_currTexturePoolSize<<std::endl;
+    OSG_NOTICE<<"   total _numGenerated="<<_numGenerated<<", _generateTime="<<_generateTime<<", averagePerFrame="<<_generateTime/numFrames*1000.0<<"ms"<<std::endl;
+    OSG_NOTICE<<"   total _numDeleted="<<_numDeleted<<", _deleteTime="<<_deleteTime<<", averagePerFrame="<<_deleteTime/numFrames*1000.0<<"ms"<<std::endl;
+    OSG_NOTICE<<"   total _numApplied="<<_numApplied<<", _applyTime="<<_applyTime<<", averagePerFrame="<<_applyTime/numFrames*1000.0<<"ms"<<std::endl;
+}
+
+void Texture::TextureObjectManager::resetStats()
+{
+    _numFrames = 0;
+    _numDeleted = 0;
+    _deleteTime = 0;
+
+    _numGenerated = 0;
+    _generateTime = 0;
+
+    _numApplied = 0;
+    _applyTime = 0;
+}
+
+
+
+osg::ref_ptr<Texture::TextureObjectManager>& Texture::getTextureObjectManager(unsigned int contextID)
+{
+    typedef osg::buffered_object< ref_ptr<Texture::TextureObjectManager> > TextureObjectManagerBuffer;
+    static TextureObjectManagerBuffer s_TextureObjectManager;
+    if (!s_TextureObjectManager[contextID]) s_TextureObjectManager[contextID] = new Texture::TextureObjectManager(contextID);
+    return s_TextureObjectManager[contextID];
+}
+
+
+Texture::TextureObject* Texture::generateTextureObject(const Texture* texture, unsigned int contextID, GLenum target)
+{
+    return getTextureObjectManager(contextID)->generateTextureObject(texture, target);
+}
+
+Texture::TextureObject* Texture::generateTextureObject(const Texture* texture, unsigned int contextID,
+                                             GLenum    target,
+                                             GLint     numMipmapLevels,
+                                             GLenum    internalFormat,
+                                             GLsizei   width,
+                                             GLsizei   height,
+                                             GLsizei   depth,
+                                             GLint     border)
+{
+    return getTextureObjectManager(contextID)->generateTextureObject(texture,target,numMipmapLevels,internalFormat,width,height,depth,border);
+}
+
+void Texture::deleteAllTextureObjects(unsigned int contextID)
+{
+    getTextureObjectManager(contextID)->deleteAllTextureObjects();
+}
+
+void Texture::discardAllTextureObjects(unsigned int contextID)
+{
+    getTextureObjectManager(contextID)->discardAllTextureObjects();
+}
 
 void Texture::flushAllDeletedTextureObjects(unsigned int contextID)
 {
-    if (getTextureObjectManager()) getTextureObjectManager()->flushAllTextureObjects(contextID);
+    getTextureObjectManager(contextID)->flushAllDeletedTextureObjects();
 }
 
 void Texture::discardAllDeletedTextureObjects(unsigned int contextID)
 {
-    if (getTextureObjectManager()) getTextureObjectManager()->discardAllTextureObjects(contextID);
+    getTextureObjectManager(contextID)->discardAllDeletedTextureObjects();
 }
 
 void Texture::flushDeletedTextureObjects(unsigned int contextID,double currentTime, double& availbleTime)
 {
-    if (getTextureObjectManager()) getTextureObjectManager()->flushTextureObjects(contextID, currentTime, availbleTime);
+    getTextureObjectManager(contextID)->flushDeletedTextureObjects(currentTime, availbleTime);
 }
 
+void Texture::releaseTextureObject(unsigned int contextID, Texture::TextureObject* to)
+{
+    getTextureObjectManager(contextID)->releaseTextureObject(to);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Texture class implementation
+//
 Texture::Texture():
             _wrap_s(CLAMP),
             _wrap_t(CLAMP),
@@ -364,7 +1008,7 @@ Texture::Texture():
             _useHardwareMipMapGeneration(true),
             _unrefImageDataAfterApply(false),
             _clientStorageHint(false),
-            _resizeNonPowerOfTwoHint(true),
+            _resizeNonPowerOfTwoHint(!OSG_GLES2_FEATURES && !OSG_GL3_FEATURES),
             _borderColor(0.0, 0.0, 0.0, 0.0),
             _borderWidth(0),
             _internalFormatMode(USE_IMAGE_DATA_FORMAT),
@@ -464,7 +1108,7 @@ void Texture::setWrap(WrapParameter which, WrapMode wrap)
         case WRAP_S : _wrap_s = wrap; dirtyTextureParameters(); break;
         case WRAP_T : _wrap_t = wrap; dirtyTextureParameters(); break;
         case WRAP_R : _wrap_r = wrap; dirtyTextureParameters(); break;
-        default : notify(WARN)<<"Error: invalid 'which' passed Texture::setWrap("<<(unsigned int)which<<","<<(unsigned int)wrap<<")"<<std::endl; break;
+        default : OSG_WARN<<"Error: invalid 'which' passed Texture::setWrap("<<(unsigned int)which<<","<<(unsigned int)wrap<<")"<<std::endl; break;
     }
     
 }
@@ -477,7 +1121,7 @@ Texture::WrapMode Texture::getWrap(WrapParameter which) const
         case WRAP_S : return _wrap_s;
         case WRAP_T : return _wrap_t;
         case WRAP_R : return _wrap_r;
-        default : notify(WARN)<<"Error: invalid 'which' passed Texture::getWrap(which)"<<std::endl; return _wrap_s;
+        default : OSG_WARN<<"Error: invalid 'which' passed Texture::getWrap(which)"<<std::endl; return _wrap_s;
     }
 }
 
@@ -488,7 +1132,7 @@ void Texture::setFilter(FilterParameter which, FilterMode filter)
     {
         case MIN_FILTER : _min_filter = filter; dirtyTextureParameters(); break;
         case MAG_FILTER : _mag_filter = filter; dirtyTextureParameters(); break;
-        default : notify(WARN)<<"Error: invalid 'which' passed Texture::setFilter("<<(unsigned int)which<<","<<(unsigned int)filter<<")"<<std::endl; break;
+        default : OSG_WARN<<"Error: invalid 'which' passed Texture::setFilter("<<(unsigned int)which<<","<<(unsigned int)filter<<")"<<std::endl; break;
     }
 }
 
@@ -499,7 +1143,7 @@ Texture::FilterMode Texture::getFilter(FilterParameter which) const
     {
         case MIN_FILTER : return _min_filter;
         case MAG_FILTER : return _mag_filter;
-        default : notify(WARN)<<"Error: invalid 'which' passed Texture::getFilter(which)"<< std::endl; return _min_filter;
+        default : OSG_WARN<<"Error: invalid 'which' passed Texture::getFilter(which)"<< std::endl; return _min_filter;
     }
 }
 
@@ -516,20 +1160,14 @@ void Texture::setMaxAnisotropy(float anis)
 /** Force a recompile on next apply() of associated OpenGL texture objects.*/
 void Texture::dirtyTextureObject()
 {
-    if (getTextureObjectManager()) getTextureObjectManager()->addTextureObjectsFrom(*this);
-}
-
-void Texture::takeTextureObjects(Texture::TextureObjectListMap& toblm)
-{
-    for(unsigned int i = 0; i<_textureObjectBuffer.size();++i)
+    for(unsigned int i=0; i<_textureObjectBuffer.size();++i)
     {
-        if (_textureObjectBuffer[i].valid()) 
+        if (_textureObjectBuffer[i].valid())
         {
-            //notify(INFO) << "releasing texture "<<toblm[i].size()<<std::endl;
-            toblm[i].push_back(_textureObjectBuffer[i]);
+            Texture::releaseTextureObject(i, _textureObjectBuffer[i].get());
+            _textureObjectBuffer[i] = 0;
         }
     }
-    _textureObjectBuffer.setAllElementsTo(0);
 }
 
 void Texture::dirtyTextureParameters()
@@ -603,7 +1241,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
                 switch(image.getPixelFormat())
                 {
                     case(3):
-                    case(GL_RGB):   internalFormat = GL_COMPRESSED_RGBA_S3TC_DXT3_EXT; break;
+                    case(GL_RGB):   internalFormat = GL_COMPRESSED_RGB_S3TC_DXT1_EXT; break;
                     case(4):
                     case(GL_RGBA):  internalFormat = GL_COMPRESSED_RGBA_S3TC_DXT3_EXT; break;
                     default:        internalFormat = image.getInternalTextureFormat(); break;
@@ -618,7 +1256,7 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
                 switch(image.getPixelFormat())
                 {
                     case(3):
-                    case(GL_RGB):   internalFormat = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT; break;
+                    case(GL_RGB):   internalFormat = GL_COMPRESSED_RGB_S3TC_DXT1_EXT; break;
                     case(4):
                     case(GL_RGBA):  internalFormat = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT; break;
                     default:        internalFormat = image.getInternalTextureFormat(); break;
@@ -626,15 +1264,51 @@ void Texture::computeInternalFormatWithImage(const osg::Image& image) const
             }
             else internalFormat = image.getInternalTextureFormat();
             break;
+        
+        case(USE_RGTC1_COMPRESSION):
+            if (extensions->isTextureCompressionRGTCSupported())
+            {
+                switch(image.getPixelFormat())
+                {
+                    case(3):
+                    case(GL_RGB):   internalFormat = GL_COMPRESSED_RED_RGTC1_EXT; break;
+                    case(4):
+                    case(GL_RGBA):  internalFormat = GL_COMPRESSED_RED_RGTC1_EXT; break;
+                    default:        internalFormat = image.getInternalTextureFormat(); break;
+                }
+            }
+            else internalFormat = image.getInternalTextureFormat();
+            break;        
+        case(USE_RGTC2_COMPRESSION):
+            if (extensions->isTextureCompressionRGTCSupported())
+            {
+                switch(image.getPixelFormat())
+                {
+                    case(3):
+                    case(GL_RGB):   internalFormat = GL_COMPRESSED_RED_GREEN_RGTC2_EXT; break;
+                    case(4):
+                    case(GL_RGBA):  internalFormat = GL_COMPRESSED_RED_GREEN_RGTC2_EXT; break;
+                    default:        internalFormat = image.getInternalTextureFormat(); break;
+                }
+            }
+            else internalFormat = image.getInternalTextureFormat();
+            break;        
         default:
             break;
         }
     }
     
     _internalFormat = internalFormat;
+
+    // GLES doesn't cope with internal formats of 1,2,3 and 4 so map them to the appropriate equivilants.
+    if (_internalFormat==1) _internalFormat = GL_LUMINANCE;
+    if (_internalFormat==2) _internalFormat = GL_LUMINANCE_ALPHA;
+    if (_internalFormat==3) _internalFormat = GL_RGB;
+    if (_internalFormat==4) _internalFormat = GL_RGBA;
+
     computeInternalFormatType();
     
-    //osg::notify(osg::NOTICE)<<"Internal format="<<std::hex<<internalFormat<<std::dec<<std::endl;
+    //OSG_NOTICE<<"Internal format="<<std::hex<<internalFormat<<std::dec<<std::endl;
 }
 
 void Texture::computeInternalFormatType() const
@@ -733,6 +1407,14 @@ bool Texture::isCompressedInternalFormat(GLint internalFormat)
         case(GL_COMPRESSED_RGBA_S3TC_DXT1_EXT):
         case(GL_COMPRESSED_RGBA_S3TC_DXT3_EXT):
         case(GL_COMPRESSED_RGBA_S3TC_DXT5_EXT):
+        case(GL_COMPRESSED_SIGNED_RED_RGTC1_EXT):
+        case(GL_COMPRESSED_RED_RGTC1_EXT):
+        case(GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT):
+        case(GL_COMPRESSED_RED_GREEN_RGTC2_EXT):
+        case(GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG):
+        case(GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG):
+        case(GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG):
+        case(GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG):
             return true;
         default:
             return false;
@@ -745,9 +1427,45 @@ void Texture::getCompressedSize(GLenum internalFormat, GLint width, GLint height
         blockSize = 8;
     else if (internalFormat == GL_COMPRESSED_RGBA_S3TC_DXT3_EXT || internalFormat == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT)
         blockSize = 16;
+    else if (internalFormat == GL_COMPRESSED_RED_RGTC1_EXT || internalFormat == GL_COMPRESSED_SIGNED_RED_RGTC1_EXT)
+        blockSize = 8;
+    else if (internalFormat == GL_COMPRESSED_RED_GREEN_RGTC2_EXT || internalFormat == GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT)
+        blockSize = 16;    
+    else if (internalFormat == GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG || internalFormat == GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG)
+    {
+         blockSize = 8 * 4; // Pixel by pixel block size for 2bpp
+         GLint widthBlocks = width / 8;
+         GLint heightBlocks = height / 4;
+         GLint bpp = 2;
+         
+         // Clamp to minimum number of blocks
+         if(widthBlocks < 2)
+             widthBlocks = 2;
+         if(heightBlocks < 2)
+             heightBlocks = 2;
+         
+         size = widthBlocks * heightBlocks * ((blockSize  * bpp) / 8);    
+         return;
+     }
+    else if (internalFormat == GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG || internalFormat == GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG)
+    {
+         blockSize = 4 * 4; // Pixel by pixel block size for 4bpp
+         GLint widthBlocks = width / 4;
+         GLint heightBlocks = height / 4;
+         GLint bpp = 4;
+         
+         // Clamp to minimum number of blocks
+         if(widthBlocks < 2)
+             widthBlocks = 2;
+         if(heightBlocks < 2)
+             heightBlocks = 2;
+         
+         size = widthBlocks * heightBlocks * ((blockSize  * bpp) / 8);    
+         return;
+    }
     else
     {
-        notify(WARN)<<"Texture::getCompressedSize(...) : cannot compute correct size of compressed format ("<<internalFormat<<") returning 0."<<std::endl;
+        OSG_WARN<<"Texture::getCompressedSize(...) : cannot compute correct size of compressed format ("<<internalFormat<<") returning 0."<<std::endl;
         blockSize = 0;
     }
          
@@ -795,12 +1513,28 @@ void Texture::applyTexParameters(GLenum target, State& state) const
             wr = CLAMP;
     }
 
+    #if defined(OSG_GLES1_AVAILABLE) || defined(OSG_GLES2_AVAILABLE) 
+        if (ws == CLAMP) ws = CLAMP_TO_EDGE;
+        if (wt == CLAMP) wt = CLAMP_TO_EDGE;
+        if (wr == CLAMP) wr = CLAMP_TO_EDGE;
+    #endif
+    
+    const Image * image = getImage(0);
+    if( image &&
+        image->isMipmap() &&
+        extensions->isTextureMaxLevelSupported() &&
+        int( image->getNumMipmapLevels() ) <
+            Image::computeNumberOfMipmapLevels( image->s(), image->t(), image->r() ) )
+            glTexParameteri( target, GL_TEXTURE_MAX_LEVEL, image->getNumMipmapLevels() - 1 );    
+
+
     glTexParameteri( target, GL_TEXTURE_WRAP_S, ws );
     
     if (target!=GL_TEXTURE_1D) glTexParameteri( target, GL_TEXTURE_WRAP_T, wt );
     
     if (target==GL_TEXTURE_3D) glTexParameteri( target, GL_TEXTURE_WRAP_R, wr );
 
+    
     glTexParameteri( target, GL_TEXTURE_MIN_FILTER, _min_filter);
     glTexParameteri( target, GL_TEXTURE_MAG_FILTER, _mag_filter);
 
@@ -815,6 +1549,12 @@ void Texture::applyTexParameters(GLenum target, State& state) const
 
     if (extensions->isTextureBorderClampSupported())
     {
+
+        #ifndef GL_TEXTURE_BORDER_COLOR
+            #define GL_TEXTURE_BORDER_COLOR     0x1004
+        #endif
+
+
         if (_internalFormatType == SIGNED_INTEGER)
         {
             GLint color[4] = {(GLint)_borderColor.r(), (GLint)_borderColor.g(), (GLint)_borderColor.b(), (GLint)_borderColor.a()};
@@ -829,8 +1569,10 @@ void Texture::applyTexParameters(GLenum target, State& state) const
         }
     }
 
-    // integer texture are not supported by the shadow
-    if (extensions->isShadowSupported() && target == GL_TEXTURE_2D &&
+    // integer textures are not supported by the shadow
+    // GL_TEXTURE_1D_ARRAY_EXT could be included in the check below but its not yet implemented in OSG
+    if (extensions->isShadowSupported() && 
+        (target == GL_TEXTURE_2D || target == GL_TEXTURE_1D || target == GL_TEXTURE_RECTANGLE || target == GL_TEXTURE_CUBE_MAP || target == GL_TEXTURE_2D_ARRAY_EXT ) &&
         _internalFormatType != SIGNED_INTEGER && _internalFormatType != UNSIGNED_INTEGER)
     {
         if (_use_shadow_comparison)
@@ -881,9 +1623,7 @@ void Texture::computeRequiredTextureDimensions(State& state, const osg::Image& i
     inwidth = width;
     inheight = height;
     
-    bool useHardwareMipMapGeneration = !image.isMipmap() && isHardwareMipmapGenerationEnabled(state);
-
-    if( _min_filter == LINEAR || _min_filter == NEAREST || useHardwareMipMapGeneration )
+    if( _min_filter == LINEAR || _min_filter == NEAREST)
     {
         numMipmapLevels = 1;
     }
@@ -893,22 +1633,12 @@ void Texture::computeRequiredTextureDimensions(State& state, const osg::Image& i
     }
     else
     {
-        numMipmapLevels = 0;
-        for( ; (width || height) ;++numMipmapLevels)
-        {
-
-            if (width == 0)
-                width = 1;
-            if (height == 0)
-                height = 1;
-
-            width >>= 1;
-            height >>= 1;
-        }    
+        numMipmapLevels = 1;
+        for(int s=1; s<width || s<height; s <<= 1, ++numMipmapLevels) {}
     }
-    
-    // osg::notify(osg::NOTICE)<<"Texture::computeRequiredTextureDimensions() image.s() "<<image.s()<<" image.t()="<<image.t()<<" width="<<width<<" height="<<height<<" numMipmapLevels="<<numMipmapLevels<<std::endl; 
-    // osg::notify(osg::NOTICE)<<"  _resizeNonPowerOfTwoHint="<<_resizeNonPowerOfTwoHint<<" extensions->isNonPowerOfTwoTextureSupported(_min_filter)="<<extensions->isNonPowerOfTwoTextureSupported(_min_filter) <<std::endl; 
+
+    // OSG_NOTICE<<"Texture::computeRequiredTextureDimensions() image.s() "<<image.s()<<" image.t()="<<image.t()<<" width="<<width<<" height="<<height<<" numMipmapLevels="<<numMipmapLevels<<std::endl; 
+    // OSG_NOTICE<<"  _resizeNonPowerOfTwoHint="<<_resizeNonPowerOfTwoHint<<" extensions->isNonPowerOfTwoTextureSupported(_min_filter)="<<extensions->isNonPowerOfTwoTextureSupported(_min_filter) <<std::endl; 
 }
 
 bool Texture::areAllTextureObjectsLoaded() const
@@ -929,7 +1659,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
 
 #ifdef DO_TIMING
     osg::Timer_t start_tick = osg::Timer::instance()->tick();
-    osg::notify(osg::NOTICE)<<"glTexImage2D pixelFormat = "<<std::hex<<image->getPixelFormat()<<std::dec<<std::endl;
+    OSG_NOTICE<<"glTexImage2D pixelFormat = "<<std::hex<<image->getPixelFormat()<<std::dec<<std::endl;
 #endif
 
     // get the contextID (user defined ID of 0 upwards) for the 
@@ -949,7 +1679,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
         (((inwidth >> 2) << 2) != inwidth ||
          ((inheight >> 2) << 2) != inheight))
     {
-        osg::notify(osg::NOTICE)<<"Received a request to compress an image, but image size is not a multiple of four ("<<inwidth<<"x"<<inheight<<"). Reverting to uncompressed.\n";
+        OSG_NOTICE<<"Received a request to compress an image, but image size is not a multiple of four ("<<inwidth<<"x"<<inheight<<"). Reverting to uncompressed.\n";
         switch(_internalFormat)
         {
             case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
@@ -962,78 +1692,84 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
             case GL_COMPRESSED_LUMINANCE: _internalFormat = GL_LUMINANCE; break;
             case GL_COMPRESSED_LUMINANCE_ALPHA: _internalFormat = GL_LUMINANCE_ALPHA; break;
             case GL_COMPRESSED_INTENSITY: _internalFormat = GL_INTENSITY; break;
+            case GL_COMPRESSED_SIGNED_RED_RGTC1_EXT:
+            case GL_COMPRESSED_RED_RGTC1_EXT: _internalFormat = GL_RED; break;
+            case GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT:
+            case GL_COMPRESSED_RED_GREEN_RGTC2_EXT: _internalFormat = GL_LUMINANCE_ALPHA; break;
         }
     }
-    
+
     glPixelStorei(GL_UNPACK_ALIGNMENT,image->getPacking());
-    
+
     bool useClientStorage = extensions->isClientStorageSupported() && getClientStorageHint();
     if (useClientStorage)
     {
         glPixelStorei(GL_UNPACK_CLIENT_STORAGE_APPLE,GL_TRUE);
-        glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_PRIORITY,0.0f);
-        
+
+        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
+            glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_PRIORITY,0.0f);
+        #endif
+
         #ifdef GL_TEXTURE_STORAGE_HINT_APPLE    
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_STORAGE_HINT_APPLE , GL_STORAGE_CACHED_APPLE);
         #endif
     }
-    
-    unsigned char* data = (unsigned char*)image->data();
- 
-    // osg::notify(osg::NOTICE)<<"inwidth="<<inwidth<<" inheight="<<inheight<<" image->getFileName()"<<image->getFileName()<<std::endl;
+
+    unsigned char* dataPtr = (unsigned char*)image->data();
+
+    // OSG_NOTICE<<"inwidth="<<inwidth<<" inheight="<<inheight<<" image->getFileName()"<<image->getFileName()<<std::endl;
 
     bool needImageRescale = inwidth!=image->s() || inheight!=image->t();
     if (needImageRescale)
     {
-
         // resize the image to power of two.
         
         if (image->isMipmap())
         {
-            notify(WARN)<<"Warning:: Mipmapped osg::Image not a power of two, cannot apply to texture."<<std::endl;
+            OSG_WARN<<"Warning:: Mipmapped osg::Image not a power of two, cannot apply to texture."<<std::endl;
             return;
         }
         else if (compressed_image)
         {
-            notify(WARN)<<"Warning:: Compressed osg::Image not a power of two, cannot apply to texture."<<std::endl;
+            OSG_WARN<<"Warning:: Compressed osg::Image not a power of two, cannot apply to texture."<<std::endl;
             return;
         }
         
         unsigned int newTotalSize = osg::Image::computeRowWidthInBytes(inwidth,image->getPixelFormat(),image->getDataType(),image->getPacking())*inheight;
-        data = new unsigned char [newTotalSize];
+        dataPtr = new unsigned char [newTotalSize];
         
-        if (!data)
+        if (!dataPtr)
         {
-            notify(WARN)<<"Warning:: Not enough memory to resize image, cannot apply to texture."<<std::endl;
+            OSG_WARN<<"Warning:: Not enough memory to resize image, cannot apply to texture."<<std::endl;
             return;
         }
 
-        if (!image->getFileName().empty()) notify(NOTICE) << "Scaling image '"<<image->getFileName()<<"' from ("<<image->s()<<","<<image->t()<<") to ("<<inwidth<<","<<inheight<<")"<<std::endl;
-        else notify(NOTICE) << "Scaling image from ("<<image->s()<<","<<image->t()<<") to ("<<inwidth<<","<<inheight<<")"<<std::endl;
+        if (!image->getFileName().empty()) { OSG_NOTICE << "Scaling image '"<<image->getFileName()<<"' from ("<<image->s()<<","<<image->t()<<") to ("<<inwidth<<","<<inheight<<")"<<std::endl; }
+        else { OSG_NOTICE << "Scaling image from ("<<image->s()<<","<<image->t()<<") to ("<<inwidth<<","<<inheight<<")"<<std::endl; }
+
+        PixelStorageModes psm;
+        psm.pack_alignment = image->getPacking();
+        psm.unpack_alignment = image->getPacking();
 
         // rescale the image to the correct size.
-        glPixelStorei(GL_PACK_ALIGNMENT,image->getPacking());
-        gluScaleImage(image->getPixelFormat(),
-                      image->s(),image->t(),image->getDataType(),image->data(),
-                      inwidth,inheight,image->getDataType(),data);
-        
-    }    
+        gluScaleImage(&psm, image->getPixelFormat(),
+                        image->s(),image->t(),image->getDataType(),image->data(),
+                        inwidth,inheight,image->getDataType(),
+                        dataPtr);
+
+    }
 
     bool mipmappingRequired = _min_filter != LINEAR && _min_filter != NEAREST;
     bool useHardwareMipMapGeneration = mipmappingRequired && (!image->isMipmap() && isHardwareMipmapGenerationEnabled(state));
     bool useGluBuildMipMaps = mipmappingRequired && (!useHardwareMipMapGeneration && !image->isMipmap());
 
-    unsigned char* dataMinusOffset = 0;
-    unsigned char* dataPlusOffset = 0;
-
-    const PixelBufferObject* pbo = image->getPixelBufferObject();
-    if (pbo && pbo->isPBOSupported(contextID) && !needImageRescale && !useGluBuildMipMaps)
+    GLBufferObject* pbo = image->getOrCreateGLBufferObject(contextID);
+    if (pbo && !needImageRescale && !useGluBuildMipMaps)
     {
         state.bindPixelBufferObject(pbo);
-        dataMinusOffset = data;
-        dataPlusOffset = reinterpret_cast<unsigned char*>(pbo->offset());
+        dataPtr = reinterpret_cast<unsigned char*>(pbo->getOffset(image->getBufferIndex()));
 #ifdef DO_TIMING
-        osg::notify(osg::NOTICE)<<"after PBO "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
+        OSG_NOTICE<<"after PBO "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
 #endif
     }
     else
@@ -1054,7 +1790,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
                 inwidth, inheight, _borderWidth,
                 (GLenum)image->getPixelFormat(),
                 (GLenum)image->getDataType(),
-                data -dataMinusOffset+dataPlusOffset);
+                dataPtr);
 
         }
         else if (extensions->isCompressedTexImage2DSupported())
@@ -1067,7 +1803,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
             extensions->glCompressedTexImage2D(target, 0, _internalFormat, 
                 inwidth, inheight,0, 
                 size, 
-                data-dataMinusOffset+dataPlusOffset);                
+                dataPtr);
         }
 
         mipmapAfterTexImage(state, mipmapResult);
@@ -1099,7 +1835,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
                          width, height, _borderWidth,
                         (GLenum)image->getPixelFormat(),
                         (GLenum)image->getDataType(),
-                        image->getMipmapData(k)-dataMinusOffset+dataPlusOffset);
+                        dataPtr + image->getMipmapOffset(k));
 
                     width >>= 1;
                     height >>= 1;
@@ -1120,7 +1856,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
                     
                     extensions->glCompressedTexImage2D(target, k, _internalFormat, 
                                                        width, height, _borderWidth, 
-                                                       size, image->getMipmapData(k)-dataMinusOffset+dataPlusOffset);                
+                                                       size, dataPtr + image->getMipmapOffset(k));
 
                     width >>= 1;
                     height >>= 1;
@@ -1129,7 +1865,6 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
         }
         else
         {
-        
             if ( !compressed_image)
             {
                 numMipmapLevels = 0;
@@ -1137,7 +1872,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
                 gluBuild2DMipmaps( target, _internalFormat,
                     inwidth,inheight,
                     (GLenum)image->getPixelFormat(), (GLenum)image->getDataType(),
-                    data);
+                    dataPtr);
 
                 int width  = image->s();
                 int height = image->t();
@@ -1149,7 +1884,7 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
             }
             else 
             {
-                notify(WARN)<<"Warning:: Compressed image cannot be mip mapped"<<std::endl;
+                OSG_WARN<<"Warning:: Compressed image cannot be mip mapped"<<std::endl;
             }
 
         }
@@ -1165,13 +1900,13 @@ void Texture::applyTexImage2D_load(State& state, GLenum target, const Image* ima
     static double s_total_time = 0.0;
     double delta_time = osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick());
     s_total_time += delta_time;
-    osg::notify(osg::NOTICE)<<"glTexImage2D "<<delta_time<<"ms  total "<<s_total_time<<"ms"<<std::endl;
+    OSG_NOTICE<<"glTexImage2D "<<delta_time<<"ms  total "<<s_total_time<<"ms"<<std::endl;
 #endif
 
     if (needImageRescale)
     {
         // clean up the resized image.
-        delete [] data;
+        delete [] dataPtr;
     }
     
     if (useClientStorage)
@@ -1211,7 +1946,7 @@ void Texture::applyTexImage2D_subload(State& state, GLenum target, const Image* 
 
 #ifdef DO_TIMING
     osg::Timer_t start_tick = osg::Timer::instance()->tick();
-    osg::notify(osg::NOTICE)<<"glTexSubImage2D pixelFormat = "<<std::hex<<image->getPixelFormat()<<std::dec<<std::endl;
+    OSG_NOTICE<<"glTexSubImage2D pixelFormat = "<<std::hex<<image->getPixelFormat()<<std::dec<<std::endl;
 #endif
    
 
@@ -1225,62 +1960,58 @@ void Texture::applyTexImage2D_subload(State& state, GLenum target, const Image* 
     
     glPixelStorei(GL_UNPACK_ALIGNMENT,image->getPacking());
     
-    unsigned char* data = (unsigned char*)image->data();
- 
+    unsigned char* dataPtr = (unsigned char*)image->data();
 
     bool needImageRescale = inwidth!=image->s() || inheight!=image->t();
     if (needImageRescale)
     {
-
         // resize the image to power of two.
-        
         if (image->isMipmap())
         {
-            notify(WARN)<<"Warning:: Mipmapped osg::Image not a power of two, cannot apply to texture."<<std::endl;
+            OSG_WARN<<"Warning:: Mipmapped osg::Image not a power of two, cannot apply to texture."<<std::endl;
             return;
         }
         else if (compressed_image)
         {
-            notify(WARN)<<"Warning:: Compressed osg::Image not a power of two, cannot apply to texture."<<std::endl;
-            return;
-        }
-        
-        unsigned int newTotalSize = osg::Image::computeRowWidthInBytes(inwidth,image->getPixelFormat(),image->getDataType(),image->getPacking())*inheight;
-        data = new unsigned char [newTotalSize];
-        
-        if (!data)
-        {
-            notify(WARN)<<"Warning:: Not enough memory to resize image, cannot apply to texture."<<std::endl;
+            OSG_WARN<<"Warning:: Compressed osg::Image not a power of two, cannot apply to texture."<<std::endl;
             return;
         }
 
-        if (!image->getFileName().empty()) notify(NOTICE) << "Scaling image '"<<image->getFileName()<<"' from ("<<image->s()<<","<<image->t()<<") to ("<<inwidth<<","<<inheight<<")"<<std::endl;
-        else notify(NOTICE) << "Scaling image from ("<<image->s()<<","<<image->t()<<") to ("<<inwidth<<","<<inheight<<")"<<std::endl;
+        unsigned int newTotalSize = osg::Image::computeRowWidthInBytes(inwidth,image->getPixelFormat(),image->getDataType(),image->getPacking())*inheight;
+        dataPtr = new unsigned char [newTotalSize];
+
+        if (!dataPtr)
+        {
+            OSG_WARN<<"Warning:: Not enough memory to resize image, cannot apply to texture."<<std::endl;
+            return;
+        }
+
+        if (!image->getFileName().empty()) { OSG_NOTICE << "Scaling image '"<<image->getFileName()<<"' from ("<<image->s()<<","<<image->t()<<") to ("<<inwidth<<","<<inheight<<")"<<std::endl; }
+        else { OSG_NOTICE << "Scaling image from ("<<image->s()<<","<<image->t()<<") to ("<<inwidth<<","<<inheight<<")"<<std::endl; }
 
         // rescale the image to the correct size.
-        glPixelStorei(GL_PACK_ALIGNMENT,image->getPacking());
-        gluScaleImage(image->getPixelFormat(),
+        PixelStorageModes psm;
+        psm.pack_alignment = image->getPacking();
+        psm.unpack_alignment = image->getPacking();
+
+        gluScaleImage(&psm, image->getPixelFormat(),
                       image->s(),image->t(),image->getDataType(),image->data(),
-                      inwidth,inheight,image->getDataType(),data);
-        
-    }    
+                      inwidth,inheight,image->getDataType(),
+                      dataPtr);
+    }
 
 
     bool mipmappingRequired = _min_filter != LINEAR && _min_filter != NEAREST;
     bool useHardwareMipMapGeneration = mipmappingRequired && (!image->isMipmap() && isHardwareMipmapGenerationEnabled(state));
     bool useGluBuildMipMaps = mipmappingRequired && (!useHardwareMipMapGeneration && !image->isMipmap());
 
-    unsigned char* dataMinusOffset = 0;
-    unsigned char* dataPlusOffset = 0;
-    
-    const PixelBufferObject* pbo = image->getPixelBufferObject();
-    if (pbo && pbo->isPBOSupported(contextID) && !needImageRescale && !useGluBuildMipMaps)
+    GLBufferObject* pbo = image->getOrCreateGLBufferObject(contextID);
+    if (pbo && !needImageRescale && !useGluBuildMipMaps)
     {
         state.bindPixelBufferObject(pbo);
-        dataMinusOffset = data;
-        dataPlusOffset = reinterpret_cast<unsigned char*>(pbo->offset());
+        dataPtr = reinterpret_cast<unsigned char*>(pbo->getOffset(image->getBufferIndex()));
 #ifdef DO_TIMING
-        osg::notify(osg::NOTICE)<<"after PBO "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
+        OSG_NOTICE<<"after PBO "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
 #endif
     }
     else
@@ -1295,13 +2026,12 @@ void Texture::applyTexImage2D_subload(State& state, GLenum target, const Image* 
 
         if (!compressed_image)
         {
-            glTexSubImage2D( target, 0, 
+            glTexSubImage2D( target, 0,
                 0, 0,
                 inwidth, inheight,
                 (GLenum)image->getPixelFormat(),
                 (GLenum)image->getDataType(),
-                data - dataMinusOffset + dataPlusOffset);
-
+                dataPtr);
         }
         else if (extensions->isCompressedTexImage2DSupported())
         {        
@@ -1313,7 +2043,7 @@ void Texture::applyTexImage2D_subload(State& state, GLenum target, const Image* 
                 inwidth, inheight,
                 (GLenum)image->getPixelFormat(),
                 size,
-                data - dataMinusOffset + dataPlusOffset );                
+                dataPtr);
         }
 
         mipmapAfterTexImage(state, mipmapResult);
@@ -1342,7 +2072,7 @@ void Texture::applyTexImage2D_subload(State& state, GLenum target, const Image* 
                         width, height,
                         (GLenum)image->getPixelFormat(),
                         (GLenum)image->getDataType(),
-                        image->getMipmapData(k) - dataMinusOffset + dataPlusOffset);
+                        dataPtr + image->getMipmapOffset(k));
 
                     width >>= 1;
                     height >>= 1;
@@ -1367,7 +2097,7 @@ void Texture::applyTexImage2D_subload(State& state, GLenum target, const Image* 
                                                        width, height, 
                                                        (GLenum)image->getPixelFormat(),
                                                        size,
-                                                        image->getMipmapData(k) - dataMinusOffset + dataPlusOffset);                
+                                                       dataPtr + image->getMipmapOffset(k));
 
                     //state.checkGLErrors("after extensions->glCompressedTexSubImage2D(");
 
@@ -1379,7 +2109,7 @@ void Texture::applyTexImage2D_subload(State& state, GLenum target, const Image* 
         }
         else
         {
-            //notify(WARN)<<"Warning:: cannot subload mip mapped texture from non mipmapped image."<<std::endl;
+            //OSG_WARN<<"Warning:: cannot subload mip mapped texture from non mipmapped image."<<std::endl;
             applyTexImage2D_load(state, target, image, inwidth, inheight,numMipmapLevels); 
             return;
         }
@@ -1390,13 +2120,13 @@ void Texture::applyTexImage2D_subload(State& state, GLenum target, const Image* 
         state.unbindPixelBufferObject();
     }
 #ifdef DO_TIMING
-    osg::notify(osg::NOTICE)<<"glTexSubImage2D "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
+    OSG_NOTICE<<"glTexSubImage2D "<<osg::Timer::instance()->delta_m(start_tick,osg::Timer::instance()->tick())<<"ms"<<std::endl;
 #endif
 
     if (needImageRescale)
     {
         // clean up the resized image.
-        delete [] data;
+        delete [] dataPtr;
     }
 }
 
@@ -1414,7 +2144,7 @@ bool Texture::isHardwareMipmapGenerationEnabled(const State& state) const
 
         const FBOExtensions* fbo_ext = FBOExtensions::instance(contextID,true);
 
-        if (fbo_ext->glGenerateMipmapEXT)
+        if (fbo_ext->glGenerateMipmap)
         {
             return true;
         }
@@ -1427,6 +2157,9 @@ Texture::GenerateMipmapMode Texture::mipmapBeforeTexImage(const State& state, bo
 {
     if (hardwareMipmapOn)
     {
+#if defined( OSG_GLES2_AVAILABLE ) || defined( OSG_GL3_AVAILABLE ) 
+        return GENERATE_MIPMAP;
+#else
         int width = getTextureWidth();
         int height = getTextureHeight();
 
@@ -1438,7 +2171,7 @@ Texture::GenerateMipmapMode Texture::mipmapBeforeTexImage(const State& state, bo
             if (_internalFormatType != SIGNED_INTEGER &&
                 _internalFormatType != UNSIGNED_INTEGER)
             {
-                if (FBOExtensions::instance(state.getContextID(), true)->glGenerateMipmapEXT)
+                if (FBOExtensions::instance(state.getContextID(), true)->glGenerateMipmap)
                 {
                     return GENERATE_MIPMAP;
                 }
@@ -1447,6 +2180,7 @@ Texture::GenerateMipmapMode Texture::mipmapBeforeTexImage(const State& state, bo
 
         glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP_SGIS, GL_TRUE);
         return GENERATE_MIPMAP_TEX_PARAMETER;
+#endif
     }
     return GENERATE_MIPMAP_NONE;
 }
@@ -1455,22 +2189,22 @@ void Texture::mipmapAfterTexImage(State& state, GenerateMipmapMode beforeResult)
 {
     switch (beforeResult)
     {
-    case GENERATE_MIPMAP:
+        case GENERATE_MIPMAP:
         {
             unsigned int contextID = state.getContextID();
             TextureObject* textureObject = getTextureObject(contextID);
             if (textureObject)
             {
                 osg::FBOExtensions* fbo_ext = osg::FBOExtensions::instance(contextID, true);
-                fbo_ext->glGenerateMipmapEXT(textureObject->_target);
+                fbo_ext->glGenerateMipmap(textureObject->target());
             }
+            break;
         }
-        break;
-    case GENERATE_MIPMAP_TEX_PARAMETER:
-        glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP_SGIS, GL_FALSE);
-        break;
-    case GENERATE_MIPMAP_NONE:
-        break;
+        case GENERATE_MIPMAP_TEX_PARAMETER:
+            glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP_SGIS, GL_FALSE);
+            break;
+        case GENERATE_MIPMAP_NONE:
+            break;
     }
 }
 
@@ -1497,10 +2231,10 @@ void Texture::generateMipmap(State& state) const
     osg::FBOExtensions* fbo_ext = osg::FBOExtensions::instance(state.getContextID(), true);
 
     // check if the function is supported
-    if (fbo_ext->glGenerateMipmapEXT)
+    if (fbo_ext->glGenerateMipmap)
     {
         textureObject->bind();
-        fbo_ext->glGenerateMipmapEXT(textureObject->_target);
+        fbo_ext->glGenerateMipmap(textureObject->target());
         
         // inform state that this texture is the current one bound.
         state.haveAppliedTextureAttribute(state.getActiveTextureUnit(), this);
@@ -1513,14 +2247,6 @@ void Texture::generateMipmap(State& state) const
     
 }
 
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-//  Static map to manage the deletion of texture objects are the right time.
-//////////////////////////////////////////////////////////////////////////////////////////////
-#include <map>
-#include <set>
-
-
 void Texture::compileGLObjects(State& state) const
 {
     apply(state);
@@ -1529,22 +2255,23 @@ void Texture::compileGLObjects(State& state) const
 void Texture::resizeGLObjectBuffers(unsigned int maxSize)
 {
     _textureObjectBuffer.resize(maxSize);
+    _texParametersDirtyList.resize(maxSize);
+    _texMipmapGenerationDirtyList.resize(maxSize);
 }
 
 void Texture::releaseGLObjects(State* state) const
 {
-//    if (state) osg::notify(osg::NOTICE)<<"Texture::releaseGLObjects contextID="<<state->getContextID()<<std::endl;
-//    else osg::notify(osg::NOTICE)<<"Texture::releaseGLObjects no State "<<std::endl;
+//    if (state) OSG_NOTICE<<"Texture::releaseGLObjects contextID="<<state->getContextID()<<std::endl;
+//    else OSG_NOTICE<<"Texture::releaseGLObjects no State "<<std::endl;
 
     if (!state) const_cast<Texture*>(this)->dirtyTextureObject();
     else
     {
         unsigned int contextID = state->getContextID();
-        if (_textureObjectBuffer[contextID].valid() && getTextureObjectManager()) 
+        if (_textureObjectBuffer[contextID].valid())
         {
-            OpenThreads::ScopedLock<OpenThreads::Mutex> lock(getTextureObjectManager()->_mutex);
-            
-            getTextureObjectManager()->_textureObjectListMap[contextID].push_back(_textureObjectBuffer[contextID]);
+            Texture::releaseTextureObject(contextID, _textureObjectBuffer[contextID].get());
+
             _textureObjectBuffer[contextID] = 0;
         }
     }
@@ -1563,123 +2290,73 @@ void Texture::setExtensions(unsigned int contextID,Extensions* extensions)
 
 Texture::Extensions::Extensions(unsigned int contextID)
 {
-    setupGLExtensions(contextID);
-}
-
-Texture::Extensions::Extensions(const Extensions& rhs):
-    Referenced()
-{
-    _isMultiTexturingSupported = rhs._isMultiTexturingSupported;
-    _isTextureFilterAnisotropicSupported = rhs._isTextureFilterAnisotropicSupported;
-    _isTextureCompressionARBSupported = rhs._isTextureCompressionARBSupported;
-    _isTextureCompressionS3TCSupported = rhs._isTextureCompressionS3TCSupported;
-    _isTextureMirroredRepeatSupported = rhs._isTextureMirroredRepeatSupported;
-    _isTextureEdgeClampSupported = rhs._isTextureEdgeClampSupported;
-    _isTextureBorderClampSupported = rhs._isTextureBorderClampSupported;
-    _isGenerateMipMapSupported = rhs._isGenerateMipMapSupported;
-
-    _maxTextureSize = rhs._maxTextureSize;
-
-    _glCompressedTexImage2D = rhs._glCompressedTexImage2D;
-
-    _isShadowSupported = rhs._isShadowSupported;
-    _isShadowAmbientSupported = rhs._isShadowAmbientSupported;
-
-    _isClientStorageSupported = rhs._isClientStorageSupported;
-
-    _isNonPowerOfTwoTextureMipMappedSupported = rhs._isNonPowerOfTwoTextureMipMappedSupported;
-    _isNonPowerOfTwoTextureNonMipMappedSupported = rhs._isNonPowerOfTwoTextureNonMipMappedSupported;
-
-    _isTextureIntegerEXTSupported = rhs._isTextureIntegerEXTSupported;
-}
-
-void Texture::Extensions::lowestCommonDenominator(const Extensions& rhs)
-{
-    if (!rhs._isMultiTexturingSupported) _isMultiTexturingSupported = false;
-    
-    if (!rhs._isTextureFilterAnisotropicSupported) _isTextureFilterAnisotropicSupported = false;
-    if (!rhs._isTextureMirroredRepeatSupported) _isTextureMirroredRepeatSupported = false;
-    if (!rhs._isTextureEdgeClampSupported) _isTextureEdgeClampSupported = false;
-    if (!rhs._isTextureBorderClampSupported) _isTextureBorderClampSupported = false;
-    
-    if (!rhs._isTextureCompressionARBSupported) _isTextureCompressionARBSupported = false;
-    if (!rhs._isTextureCompressionS3TCSupported) _isTextureCompressionS3TCSupported = false;
-    
-    if (!rhs._isGenerateMipMapSupported) _isGenerateMipMapSupported = false;
-
-    if (rhs._maxTextureSize<_maxTextureSize) _maxTextureSize = rhs._maxTextureSize;
-    if (rhs._numTextureUnits<_numTextureUnits) _numTextureUnits = rhs._numTextureUnits;
-
-    if (!rhs._glCompressedTexImage2D) _glCompressedTexImage2D = 0;
-    if (!rhs._glCompressedTexSubImage2D) _glCompressedTexSubImage2D = 0;
-    if (!rhs._glGetCompressedTexImage) _glGetCompressedTexImage = 0;
-
-    if (!rhs._isShadowSupported) _isShadowSupported = false;
-    if (!rhs._isShadowAmbientSupported) _isShadowAmbientSupported = false;
-    
-    if (!rhs._isClientStorageSupported) _isClientStorageSupported = false;
-
-    if (!rhs._isNonPowerOfTwoTextureMipMappedSupported) _isNonPowerOfTwoTextureMipMappedSupported = false;
-    if (!rhs._isNonPowerOfTwoTextureNonMipMappedSupported) _isNonPowerOfTwoTextureNonMipMappedSupported = false;
-
-    if (!rhs._isTextureIntegerEXTSupported) _isTextureIntegerEXTSupported = false;
-}
-
-void Texture::Extensions::setupGLExtensions(unsigned int contextID)
-{
     const char* version = (const char*) glGetString( GL_VERSION );
     if (!version)
     {
-        osg::notify(osg::FATAL)<<"Error: In Texture::Extensions::setupGLExtensions(..) OpenGL version test failed, requires valid graphics context."<<std::endl;
+        OSG_FATAL<<"Error: In Texture::Extensions::setupGLExtensions(..) OpenGL version test failed, requires valid graphics context."<<std::endl;
         return;
     }
     
     const char* renderer = (const char*) glGetString(GL_RENDERER);
     std::string rendererString(renderer ? renderer : "");
+
+    bool builtInSupport = OSG_GLES2_FEATURES || OSG_GL3_FEATURES;
     
-    _isMultiTexturingSupported = isGLExtensionOrVersionSupported( contextID,"GL_ARB_multitexture", 1.3f) ||
+    _isMultiTexturingSupported = builtInSupport || OSG_GLES1_FEATURES || 
+                                 isGLExtensionOrVersionSupported( contextID,"GL_ARB_multitexture", 1.3f) ||
                                  isGLExtensionOrVersionSupported(contextID,"GL_EXT_multitexture", 1.3f);
                                  
     _isTextureFilterAnisotropicSupported = isGLExtensionSupported(contextID,"GL_EXT_texture_filter_anisotropic");
     
-    _isTextureCompressionARBSupported = isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_compression", 1.3f);
+    _isTextureCompressionARBSupported = builtInSupport || isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_compression", 1.3f);
     
     _isTextureCompressionS3TCSupported = isGLExtensionSupported(contextID,"GL_EXT_texture_compression_s3tc");
-    
-    _isTextureMirroredRepeatSupported = isGLExtensionOrVersionSupported(contextID,"GL_IBM_texture_mirrored_repeat", 1.4f) ||
+
+    _isTextureCompressionRGTCSupported = isGLExtensionSupported(contextID,"GL_EXT_texture_compression_rgtc");
+
+    _isTextureCompressionPVRTCSupported = isGLExtensionSupported(contextID,"GL_IMG_texture_compression_pvrtc");
+
+    _isTextureMirroredRepeatSupported = builtInSupport || 
+                                        isGLExtensionOrVersionSupported(contextID,"GL_IBM_texture_mirrored_repeat", 1.4f) ||
                                         isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_mirrored_repeat", 1.4f);
                                         
-    _isTextureEdgeClampSupported = isGLExtensionOrVersionSupported(contextID,"GL_EXT_texture_edge_clamp", 1.2f) || 
+    _isTextureEdgeClampSupported = builtInSupport ||
+                                   isGLExtensionOrVersionSupported(contextID,"GL_EXT_texture_edge_clamp", 1.2f) || 
                                    isGLExtensionOrVersionSupported(contextID,"GL_SGIS_texture_edge_clamp", 1.2f);
                                    
-    _isTextureBorderClampSupported = isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_border_clamp", 1.3f);
+    _isTextureBorderClampSupported = OSG_GL3_FEATURES || isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_border_clamp", 1.3f);
     
-    _isGenerateMipMapSupported = isGLExtensionOrVersionSupported(contextID,"GL_SGIS_generate_mipmap", 1.4f);
+    _isGenerateMipMapSupported = builtInSupport || isGLExtensionOrVersionSupported(contextID,"GL_SGIS_generate_mipmap", 1.4f);
+
+    _isTextureMultisampledSupported = isGLExtensionSupported(contextID,"GL_ARB_texture_multisample");
                                   
-    _isShadowSupported = isGLExtensionSupported(contextID,"GL_ARB_shadow");
+    _isShadowSupported = OSG_GL3_FEATURES || isGLExtensionSupported(contextID,"GL_ARB_shadow");
     
     _isShadowAmbientSupported = isGLExtensionSupported(contextID,"GL_ARB_shadow_ambient");
 
     _isClientStorageSupported = isGLExtensionSupported(contextID,"GL_APPLE_client_storage");
 
-    _isNonPowerOfTwoTextureNonMipMappedSupported = isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_non_power_of_two", 2.0);
+    _isNonPowerOfTwoTextureNonMipMappedSupported = builtInSupport || isGLExtensionOrVersionSupported(contextID,"GL_ARB_texture_non_power_of_two", 2.0) || isGLExtensionSupported(contextID,"GL_APPLE_texture_2D_limited_npot");
 
-    _isNonPowerOfTwoTextureMipMappedSupported = _isNonPowerOfTwoTextureNonMipMappedSupported;
+    _isNonPowerOfTwoTextureMipMappedSupported = builtInSupport || _isNonPowerOfTwoTextureNonMipMappedSupported;
     
-    _isTextureIntegerEXTSupported = isGLExtensionSupported(contextID, "GL_EXT_texture_integer");
+    _isTextureIntegerEXTSupported = OSG_GL3_FEATURES || isGLExtensionSupported(contextID, "GL_EXT_texture_integer");
 
+    #if 0
     if (rendererString.find("Radeon")!=std::string::npos || rendererString.find("RADEON")!=std::string::npos)
     {
         _isNonPowerOfTwoTextureMipMappedSupported = false;
-        osg::notify(osg::INFO)<<"Disabling _isNonPowerOfTwoTextureMipMappedSupported for ATI hardware."<<std::endl;
+        OSG_INFO<<"Disabling _isNonPowerOfTwoTextureMipMappedSupported for ATI hardware."<<std::endl;
     }
-
+    #endif
+    
     if (rendererString.find("GeForce FX")!=std::string::npos)
     {
         _isNonPowerOfTwoTextureMipMappedSupported = false;
-        osg::notify(osg::INFO)<<"Disabling _isNonPowerOfTwoTextureMipMappedSupported for GeForce FX hardware."<<std::endl;
+        OSG_INFO<<"Disabling _isNonPowerOfTwoTextureMipMappedSupported for GeForce FX hardware."<<std::endl;
     }
 
+    _maxTextureSize=0;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE,&_maxTextureSize);
 
     char *ptr;
@@ -1696,7 +2373,19 @@ void Texture::Extensions::setupGLExtensions(unsigned int contextID)
 
     if( _isMultiTexturingSupported )
     {
-       glGetIntegerv(GL_MAX_TEXTURE_UNITS,&_numTextureUnits);
+       _numTextureUnits = 0;
+       #if defined(OSG_GLES2_AVAILABLE) || defined(OSG_GL3_AVAILABLE)
+           glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS,&_numTextureUnits);
+       #else
+           if (osg::asciiToFloat(version)>=2.0)
+           {
+               glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS,&_numTextureUnits);
+           }
+           else
+           {
+               glGetIntegerv(GL_MAX_TEXTURE_UNITS,&_numTextureUnits);
+           }
+       #endif
     }
     else
     {
@@ -1706,73 +2395,17 @@ void Texture::Extensions::setupGLExtensions(unsigned int contextID)
     setGLExtensionFuncPtr(_glCompressedTexImage2D,"glCompressedTexImage2D","glCompressedTexImage2DARB");
     setGLExtensionFuncPtr(_glCompressedTexSubImage2D,"glCompressedTexSubImage2D","glCompressedTexSubImage2DARB");
     setGLExtensionFuncPtr(_glGetCompressedTexImage,"glGetCompressedTexImage","glGetCompressedTexImageARB");;
+    setGLExtensionFuncPtr(_glTexImage2DMultisample, "glTexImage2DMultisample", "glTexImage2DMultisampleARB");
 
     setGLExtensionFuncPtr(_glTexParameterIiv, "glTexParameterIiv", "glTexParameterIivARB");
     setGLExtensionFuncPtr(_glTexParameterIuiv, "glTexParameterIuiv", "glTexParameterIuivARB");
-    
+
+
     if (_glTexParameterIiv == NULL) setGLExtensionFuncPtr(_glTexParameterIiv, "glTexParameterIivEXT");
     if (_glTexParameterIuiv == NULL) setGLExtensionFuncPtr(_glTexParameterIuiv, "glTexParameterIuivEXT");
+
+    _isTextureMaxLevelSupported = ( getGLVersionNumber() >= 1.2f );
 }
 
 
-void Texture::Extensions::glTexParameterIiv(GLenum target, GLenum pname, const GLint* data) const
-{
-    if (_glTexParameterIiv)
-    {
-        _glTexParameterIiv(target, pname, data);
-    }
-    else
-    {
-        notify(WARN)<<"Error: glTexParameterIiv not supported by OpenGL driver"<<std::endl;
-    }
 }
-
-void Texture::Extensions::glTexParameterIuiv(GLenum target, GLenum pname, const GLuint* data) const
-{
-    if (_glTexParameterIuiv)
-    {
-        _glTexParameterIuiv(target, pname, data);
-    }
-    else
-    {
-        notify(WARN)<<"Error: glTexParameterIuiv not supported by OpenGL driver"<<std::endl;
-    }
-}
-
-void Texture::Extensions::glCompressedTexImage2D(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data) const
-{
-    if (_glCompressedTexImage2D)
-    {
-        _glCompressedTexImage2D(target, level, internalformat, width, height, border, imageSize, data);
-    }
-    else
-    {
-        notify(WARN)<<"Error: glCompressedTexImage2D not supported by OpenGL driver"<<std::endl;
-    }
-    
-}
-
-void Texture::Extensions::glCompressedTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const GLvoid *data) const
-{
-    if (_glCompressedTexSubImage2D)
-    {
-        _glCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, imageSize, data);
-    }
-    else
-    {
-        notify(WARN)<<"Error: glCompressedTexImage2D not supported by OpenGL driver"<<std::endl;
-    }
-    
-}
-void Texture::Extensions::glGetCompressedTexImage(GLenum target, GLint level, GLvoid *data) const
-{
-    if (_glGetCompressedTexImage)
-    {
-        _glGetCompressedTexImage(target, level, data);
-    }
-    else
-    {
-        notify(WARN)<<"Error: glGetCompressedTexImage not supported by OpenGL driver"<<std::endl;
-    }
-}
-

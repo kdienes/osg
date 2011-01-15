@@ -18,6 +18,7 @@
 
 #include <osgText/String>
 #include <osgText/KerningType>
+#include <osgText/Font>
 
 namespace osgText {
 
@@ -35,7 +36,35 @@ public:
     virtual const char* className() const { return "TextBase"; }
     virtual const char* libraryName() const { return "osgText"; }
 
-    
+    void setColor(const osg::Vec4& color);
+    const osg::Vec4& getColor() const { return _color; }
+
+    /** Set the Font to use to render the text.
+      * setFont(0) sets the use of the default font.*/
+    inline void setFont(Font* font=0) { setFont(osg::ref_ptr<Font>(font)); };
+
+    /** Set the Font to use to render the text.*/
+    void setFont(osg::ref_ptr<Font> font);
+
+    /** Set the font, loaded from the specified front file, to use to render the text,
+      * setFont("") sets the use of the default font.
+      * See the osgText::readFontFile function for how the font file will be located. */
+    void setFont(const std::string& fontfile);
+
+    /** Get the font. Return 0 if default is being used.*/
+    const Font* getFont() const { return _font.get(); }
+
+
+    /** Set the text style.*/
+    void setStyle(Style* style) { _style = style; }
+    /** Get the text style.*/
+    Style* getStyle() { return _style.get(); }
+    /** Get the const text style.*/
+    const Style* getStyle() const { return _style.get(); }
+
+    /** Get or create the text style.*/
+    Style* getOrCreateStyle() { if (!_style) _style = new Style; return _style.get(); }
+
     /** Set the Font reference width and height resolution in texels.
       * Note, the size may not be supported by current font, 
       * the closest supported font size will be selected.*/
@@ -74,10 +103,13 @@ public:
 
 
     /** Set the rendered character size in object coordinates.*/
-    void setCharacterSize(float height,float aspectRatio=1.0f);
-    
+    void setCharacterSize(float height);
+
+    /** Set the rendered character size in object coordinates.*/
+    void setCharacterSize(float height, float aspectRatio);
+
     float getCharacterHeight() const { return _characterHeight; }
-    float getCharacterAspectRatio() const { return _characterAspectRatio; }
+    float getCharacterAspectRatio() const { return _style.valid()? _style->getWidthRatio() : 1.0f; }
 
     enum CharacterSizeMode
     {
@@ -194,14 +226,23 @@ public:
 
     enum DrawModeMask
     {
-        TEXT        = 1, /// default
-        BOUNDINGBOX = 2,
-        ALIGNMENT   = 4
+        TEXT              = 1, /// default
+        BOUNDINGBOX       = 2,
+        FILLEDBOUNDINGBOX = 4,
+        ALIGNMENT         = 8
     };
 
     void setDrawMode(unsigned int mode);
     
     unsigned int getDrawMode() const { return _drawMode; }
+
+    void setBoundingBoxMargin(float margin);
+    
+    float getBoundingBoxMargin() const { return _textBBMargin; }
+
+    void setBoundingBoxColor(const osg::Vec4& color){ _textBBColor = color; }
+    
+    const osg::Vec4& getBoundingBoxColor() const { return _textBBColor; }
 
     
     void setKerningType(KerningType kerningType) { _kerningType = kerningType; }
@@ -239,9 +280,11 @@ protected:
     
     
     // members which have public access.
+    osg::Vec4                               _color;
+    osg::ref_ptr<Font>                      _font;
+    osg::ref_ptr<Style>                     _style;
     FontResolution                          _fontSize;
     float                                   _characterHeight;
-    float                                   _characterAspectRatio;
     CharacterSizeMode                       _characterSizeMode;
     float                                   _maximumWidth;
     float                                   _maximumHeight;
@@ -255,6 +298,8 @@ protected:
     bool                                    _autoRotateToScreen;
     Layout                                  _layout;
     unsigned int                            _drawMode;
+    float                                   _textBBMargin;
+    osg::Vec4                               _textBBColor;
     KerningType                             _kerningType;
     unsigned int                            _lineCount;
 

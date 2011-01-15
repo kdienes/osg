@@ -43,7 +43,7 @@ class OSG_EXPORT BlendColor : public StateAttribute
         virtual int compare(const StateAttribute& sa) const
         {
             // Check for equal types, then create the rhs variable
-            // used by the COMPARE_StateAttribute_Paramter macros below.
+            // used by the COMPARE_StateAttribute_Parameter macros below.
             COMPARE_StateAttribute_Types(BlendColor,sa)
 
             // Compare each parameter in turn against the rhs.
@@ -93,7 +93,7 @@ class OSG_EXPORT BlendColor : public StateAttribute
                 ~Extensions() {}
                 
 
-                typedef void (APIENTRY * GLBlendColorProc) (GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha);
+                typedef void (GL_APIENTRY * GLBlendColorProc) (GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha);
                 bool                _isBlendColorSupported;
                 GLBlendColorProc    _glBlendColor;
 

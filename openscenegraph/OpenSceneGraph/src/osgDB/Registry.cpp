@@ -43,10 +43,10 @@
     using std::tolower;
 #endif
 
-#ifdef OSG_DEBUG_POSTFIX
-    #define OSG_DEBUG_POSTFIX_WITH_QUOTES ADDQUOTES(OSG_DEBUG_POSTFIX)
+#ifdef OSG_LIBRARY_POSTFIX
+    #define OSG_LIBRARY_POSTFIX_WITH_QUOTES ADDQUOTES(OSG_LIBRARY_POSTFIX)
 #else
-    #define OSG_DEBUG_POSTFIX_WITH_QUOTES "d"
+    #define OSG_LIBRARY_POSTFIX_WITH_QUOTES ""
 #endif
 
 using namespace osg;
@@ -61,6 +61,10 @@ static osg::ApplicationUsageProxy Registry_e1(osg::ApplicationUsage::ENVIRONMENT
 #endif
 
 static osg::ApplicationUsageProxy Registry_e2(osg::ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_BUILD_KDTREES on/off","Enable/disable the automatic building of KdTrees for each loaded Geometry.");
+
+
+// from MimeTypes.cpp
+extern const char* builtinMimeTypeExtMappings[];
 
 
 class Registry::AvailableReaderWriterIterator
@@ -170,17 +174,17 @@ Registry* Registry::instance(bool erase)
 Registry::Registry()
 {
     // comment out because it was causing problems under OSX - causing it to crash osgconv when constructing ostream in osg::notify().
-    // notify(INFO) << "Constructing osg::Registry"<<std::endl;
+    // OSG_INFO << "Constructing osg::Registry"<<std::endl;
 
-    _buildKdTreesHint = ReaderWriter::Options::NO_PREFERENCE;
+    _buildKdTreesHint = Options::NO_PREFERENCE;
     _kdTreeBuilder = new osg::KdTreeBuilder;
     
     const char* kdtree_str = getenv("OSG_BUILD_KDTREES");
     if (kdtree_str)
     {
         bool switchOff = (strcmp(kdtree_str, "off")==0 || strcmp(kdtree_str, "OFF")==0 || strcmp(kdtree_str, "Off")==0 );
-        if (switchOff) _buildKdTreesHint = ReaderWriter::Options::DO_NOT_BUILD_KDTREES;
-        else _buildKdTreesHint = ReaderWriter::Options::BUILD_KDTREES;
+        if (switchOff) _buildKdTreesHint = Options::DO_NOT_BUILD_KDTREES;
+        else _buildKdTreesHint = Options::BUILD_KDTREES;
     }
 
     const char* ptr=0;
@@ -189,7 +193,7 @@ Registry::Registry()
     if( (ptr = getenv("OSG_EXPIRY_DELAY")) != 0)
     {
         _expiryDelay = osg::asciiToDouble(ptr);
-        osg::notify(osg::INFO)<<"Registry : Expiry delay = "<<_expiryDelay<<std::endl;
+        OSG_INFO<<"Registry : Expiry delay = "<<_expiryDelay<<std::endl;
     }
 
     const char* fileCachePath = getenv("OSG_FILE_CACHE");
@@ -225,9 +229,13 @@ Registry::Registry()
     }
 
     addFileExtensionAlias("osgs", "osg");
-    addFileExtensionAlias("shadow",  "osgShadow");
-    addFileExtensionAlias("terrain", "osgTerrain");
-    addFileExtensionAlias("view",  "osgViewer");
+    addFileExtensionAlias("osgt", "osg");
+    addFileExtensionAlias("osgb", "osg");
+    addFileExtensionAlias("osgx", "osg");
+
+    addFileExtensionAlias("osgShadow",  "shadow");
+    addFileExtensionAlias("osgTerrain", "terrain");
+    addFileExtensionAlias("osgViewer",  "view");
 
     addFileExtensionAlias("sgi",  "rgb");
     addFileExtensionAlias("rgba", "rgb");
@@ -235,18 +243,19 @@ Registry::Registry()
     addFileExtensionAlias("inta", "rgb");
     addFileExtensionAlias("bw",   "rgb");
 
-    addFileExtensionAlias("ivz",   "gz");
-    addFileExtensionAlias("ozg",   "gz");
+    addFileExtensionAlias("ivz",  "gz");
+    addFileExtensionAlias("ozg",  "gz");
     
-    addFileExtensionAlias("mag",   "dicom");
+    addFileExtensionAlias("mag",  "dicom");
     addFileExtensionAlias("ph",   "dicom");
-    addFileExtensionAlias("ima",   "dicom");
-    addFileExtensionAlias("dcm",   "dicom");
-    addFileExtensionAlias("dic",   "dicom");
+    addFileExtensionAlias("ima",  "dicom");
+    addFileExtensionAlias("dcm",  "dicom");
+    addFileExtensionAlias("dic",  "dicom");
 
     addFileExtensionAlias("gl",   "glsl");
-    addFileExtensionAlias("vert",   "glsl");
-    addFileExtensionAlias("frag",   "glsl");
+    addFileExtensionAlias("vert", "glsl");
+    addFileExtensionAlias("frag", "glsl");
+    addFileExtensionAlias("geom", "glsl");
 
 
 #if defined(DARWIN_IMAGEIO)
@@ -259,9 +268,28 @@ Registry::Registry()
     addFileExtensionAlias("png",  "imageio");
     addFileExtensionAlias("psd",  "imageio");
     addFileExtensionAlias("tga",  "imageio");
+
+#endif
+
+#if defined(DARWIN_QTKIT)
+    addFileExtensionAlias("mov",  "QTKit");
+    addFileExtensionAlias("mp4",  "QTKit");
+    addFileExtensionAlias("mov",  "QTKit");
+    addFileExtensionAlias("mpg",  "QTKit");
+    addFileExtensionAlias("mpeg",  "QTKit");
+    addFileExtensionAlias("mpv",  "QTKit");
+    addFileExtensionAlias("m4v",  "QTKit");
+    addFileExtensionAlias("3gp",  "QTKit");
+    addFileExtensionAlias("live", "QTKit");
+    // Requires Perian
+    addFileExtensionAlias("avi",  "QTKit");
+    addFileExtensionAlias("xvid",  "QTKit");
+    // Requires Flip4Mac
+    addFileExtensionAlias("wmv",  "QTKit");
 #endif
 
 #if defined(DARWIN_QUICKTIME)
+
     addFileExtensionAlias("jpg",  "qt");
     addFileExtensionAlias("jpe",  "qt");
     addFileExtensionAlias("jpeg", "qt");
@@ -271,17 +299,20 @@ Registry::Registry()
     addFileExtensionAlias("png",  "qt");
     addFileExtensionAlias("psd",  "qt");
     addFileExtensionAlias("tga",  "qt");
-    addFileExtensionAlias("mov",  "qt");
-    addFileExtensionAlias("avi",  "qt");
-    addFileExtensionAlias("mpg",  "qt");
     addFileExtensionAlias("flv",  "qt");
-    addFileExtensionAlias("mpv",  "qt");
     addFileExtensionAlias("dv",   "qt");
-    addFileExtensionAlias("mp4",  "qt");
-    addFileExtensionAlias("m4v",  "qt");
-    addFileExtensionAlias("3gp",  "qt");
-    // Add QuickTime live support for OSX
-    addFileExtensionAlias("live", "qt");
+    #if !defined(DARWIN_QTKIT)
+
+        addFileExtensionAlias("mov",  "qt");
+        addFileExtensionAlias("avi",  "qt");
+        addFileExtensionAlias("mpg",  "qt");
+        addFileExtensionAlias("mpv",  "qt");
+        addFileExtensionAlias("mp4",  "qt");
+        addFileExtensionAlias("m4v",  "qt");
+        addFileExtensionAlias("3gp",  "qt");
+        // Add QuickTime live support for OSX
+        addFileExtensionAlias("live", "qt");
+    #endif
 #else
     addFileExtensionAlias("jpg",  "jpeg");
     addFileExtensionAlias("jpe",  "jpeg");
@@ -289,6 +320,7 @@ Registry::Registry()
 
     // really need to decide this at runtime...
     #if defined(USE_XINE)
+
         addFileExtensionAlias("mov",  "xine");
         addFileExtensionAlias("mpg",  "xine");
         addFileExtensionAlias("ogv",  "xine");
@@ -300,11 +332,14 @@ Registry::Registry()
     #endif
 
     // support QuickTime for Windows
-    #if defined(USE_QUICKTIME)
-        addFileExtensionAlias("mov", "qt");
+    // Logic error here. It is possible for Apple to not define Quicktime and end up in
+    // this Quicktime for Windows block. So add an extra check to avoid QTKit clashes.
+    #if defined(USE_QUICKTIME) && !defined(DARWIN_QTKIT)
+
+        addFileExtensionAlias("mov",  "qt");
         addFileExtensionAlias("live", "qt");
-        addFileExtensionAlias("mpg", "qt");
-        addFileExtensionAlias("avi", "qt");
+        addFileExtensionAlias("mpg",  "qt");
+        addFileExtensionAlias("avi",  "qt");
     #endif
 #endif
 
@@ -321,14 +356,15 @@ Registry::Registry()
     #endif
     
     // add alias for the text/freetype plugin.
-    addFileExtensionAlias("ttf",   "freetype");  // true type
-    addFileExtensionAlias("ttc",   "freetype");  // true type
-    addFileExtensionAlias("cid",   "freetype");  // Postscript CID-Fonts
-    addFileExtensionAlias("cff",   "freetype");  // OpenType
-    addFileExtensionAlias("cef",   "freetype");  // OpenType
-    addFileExtensionAlias("fon",   "freetype");  // Windows bitmap fonts
-    addFileExtensionAlias("fnt",   "freetype");    // Windows bitmap fonts
-    
+    addFileExtensionAlias("ttf",    "freetype");  // true type
+    addFileExtensionAlias("ttc",    "freetype");  // true type
+    addFileExtensionAlias("cid",    "freetype");  // Postscript CID-Fonts
+    addFileExtensionAlias("cff",    "freetype");  // OpenType
+    addFileExtensionAlias("cef",    "freetype");  // OpenType
+    addFileExtensionAlias("fon",    "freetype");  // Windows bitmap fonts
+    addFileExtensionAlias("fnt",    "freetype");  // Windows bitmap fonts
+    addFileExtensionAlias("text3d", "freetype"); // use 3D Font instead of 2D Font
+
     // wont't add type1 and type2 until resolve extension collision with Performer binary and ascii files.
     // addFileExtensionAlias("pfb",   "freetype");  // type1 binary
     // addFileExtensionAlias("pfa",   "freetype");  // type2 ascii
@@ -339,6 +375,32 @@ Registry::Registry()
     addFileExtensionAlias("pgm", "pnm");
     addFileExtensionAlias("ppm", "pnm");
     
+
+    // add revision file mappings
+    addFileExtensionAlias("added",    "revisions");
+    addFileExtensionAlias("removed",  "revisions");
+    addFileExtensionAlias("modified", "revisions");
+
+
+
+
+    // add built-in mime-type extension mappings
+    for( int i=0; ; i+=2 )
+    {
+        std::string mimeType = builtinMimeTypeExtMappings[i];
+        if ( mimeType.length() == 0 )
+            break;
+        addMimeTypeExtensionMapping( mimeType, builtinMimeTypeExtMappings[i+1] );
+    }
+    
+    // register server protocols, so the curl can handle it, if necessary
+    registerProtocol("http");
+    registerProtocol("https");
+    registerProtocol("ftp");
+    registerProtocol("ftps");
+
+    _objectWrapperManager = new ObjectWrapperManager;
+    _deprecatedDotOsgWrapperManager = new DeprecatedDotOsgWrapperManager;
 }
 
 
@@ -349,7 +411,7 @@ Registry::~Registry()
 
 void Registry::destruct()
 {
-    // osg::notify(osg::NOTICE)<<"Registry::destruct()"<<std::endl;
+    // OSG_NOTICE<<"Registry::destruct()"<<std::endl;
 
     // clean up the SharedStateManager 
     _sharedStateManager = 0;
@@ -385,12 +447,12 @@ void Registry::initDataFilePathList()
   
     if( (ptr = getenv( "OSG_FILE_PATH" )) )
     {
-        //notify(DEBUG_INFO) << "OSG_FILE_PATH("<<ptr<<")"<<std::endl;
+        //OSG_NOTIFY(DEBUG_INFO) << "OSG_FILE_PATH("<<ptr<<")"<<std::endl;
         convertStringPathIntoFilePathList(ptr, filepath);
     }
     else if( (ptr = getenv( "OSGFILEPATH" )) )
     {
-        //notify(DEBUG_INFO) << "OSGFILEPATH("<<ptr<<")"<<std::endl;
+        //OSG_NOTIFY(DEBUG_INFO) << "OSGFILEPATH("<<ptr<<")"<<std::endl;
         convertStringPathIntoFilePathList(ptr, filepath);
     }
 
@@ -417,12 +479,12 @@ void Registry::initLibraryFilePathList()
     char* ptr;
     if( (ptr = getenv( "OSG_LIBRARY_PATH")) )
     {
-        //notify(DEBUG_INFO) << "OSG_LIBRARY_PATH("<<ptr<<")"<<std::endl;
+        //OSG_NOTIFY(DEBUG_INFO) << "OSG_LIBRARY_PATH("<<ptr<<")"<<std::endl;
         setLibraryFilePathList(ptr);
     }
     else if( (ptr = getenv( "OSG_LD_LIBRARY_PATH")) )
     {
-        //notify(DEBUG_INFO) << "OSG_LD_LIBRARY_PATH("<<ptr<<")"<<std::endl;
+        //OSG_NOTIFY(DEBUG_INFO) << "OSG_LD_LIBRARY_PATH("<<ptr<<")"<<std::endl;
         setLibraryFilePathList(ptr);
     }
     
@@ -455,113 +517,15 @@ void Registry::readCommandLine(osg::ArgumentParser& arguments)
 
     while(arguments.read("-O",value))
     {
-        setOptions(new ReaderWriter::Options(value));
+        setOptions(new Options(value));
     }
-}
-
-void Registry::addDotOsgWrapper(DotOsgWrapper* wrapper)
-{
-    if (wrapper==0L) return;
-
-    //notify(INFO) << "osg::Registry::addDotOsgWrapper("<<wrapper->getName()<<")"<< std::endl;
-    const DotOsgWrapper::Associates& assoc = wrapper->getAssociates();
-    
-    for(DotOsgWrapper::Associates::const_iterator itr=assoc.begin();
-                                                  itr!=assoc.end();
-                                                  ++itr)
-    {
-        //notify(INFO) << "    ("<<*itr<<")"<< std::endl;
-    }
-
-    const std::string& name = wrapper->getName();
-    const osg::Object* proto = wrapper->getPrototype();
-
-    _objectWrapperMap[name] = wrapper;
-    if (wrapper->getReadWriteMode()==DotOsgWrapper::READ_AND_WRITE) _classNameWrapperMap[name] = wrapper;
-    
-    if (proto)
-    {
-        std::string libraryName = proto->libraryName();
-        std::string compositeName = libraryName + "::" + name;
-
-        _objectWrapperMap[compositeName] = wrapper;
-        if (wrapper->getReadWriteMode()==DotOsgWrapper::READ_AND_WRITE) _classNameWrapperMap[compositeName] = wrapper;
-
-        if (dynamic_cast<const Image*>(proto))
-        {
-            _imageWrapperMap[name] = wrapper;
-            _imageWrapperMap[compositeName] = wrapper;
-        }
-        if (dynamic_cast<const Drawable*>(proto))
-        {
-              _drawableWrapperMap[name] = wrapper;
-              _drawableWrapperMap[compositeName] = wrapper;
-        }
-        if (dynamic_cast<const StateAttribute*>(proto))
-        {
-            _stateAttrWrapperMap[name] = wrapper;
-            _stateAttrWrapperMap[compositeName] = wrapper;
-        }
-        if (dynamic_cast<const Uniform*>(proto))
-        {
-            _uniformWrapperMap[name] = wrapper;
-            _uniformWrapperMap[compositeName] = wrapper;
-        }
-        if (dynamic_cast<const Node*>(proto))
-        {
-            _nodeWrapperMap[name] = wrapper;
-            _nodeWrapperMap[compositeName] = wrapper;
-        }
-        if (dynamic_cast<const Shader*>(proto))
-        {
-            _shaderWrapperMap[name] = wrapper;
-            _shaderWrapperMap[compositeName] = wrapper;
-        }
-
-
-    }
-}
-
-// need to change to delete all instances of wrapper, since we
-// now can have a wrapper entered twice with the addition of the
-// library::class composite name.
-void Registry::eraseWrapper(DotOsgWrapperMap& wrappermap,DotOsgWrapper* wrapper)
-{
-    typedef std::vector<DotOsgWrapperMap::iterator> EraseList;
-    EraseList eraseList;
-    for(DotOsgWrapperMap::iterator witr=wrappermap.begin();
-        witr!=wrappermap.end();
-        ++witr)
-    {
-        if (witr->second==wrapper) eraseList.push_back(witr);
-    }
-    for(EraseList::iterator eitr=eraseList.begin();
-        eitr!=eraseList.end();
-        ++eitr)
-    {
-        wrappermap.erase(*eitr);
-    }
-}
-
-void Registry::removeDotOsgWrapper(DotOsgWrapper* wrapper)
-{
-    if (wrapper==0L) return;
-
-    eraseWrapper(_objectWrapperMap,wrapper);
-    eraseWrapper(_classNameWrapperMap,wrapper);
-    eraseWrapper(_imageWrapperMap,wrapper);
-    eraseWrapper(_drawableWrapperMap,wrapper);
-    eraseWrapper(_uniformWrapperMap,wrapper);
-    eraseWrapper(_stateAttrWrapperMap,wrapper);
-    eraseWrapper(_nodeWrapperMap,wrapper);
-    eraseWrapper(_shaderWrapperMap,wrapper);
 }
 
 void Registry::addReaderWriter(ReaderWriter* rw)
 {
     if (rw==0L) return;
 
-    // notify(INFO) << "osg::Registry::addReaderWriter("<<rw->className()<<")"<< std::endl;
+    // OSG_NOTIFY(INFO) << "osg::Registry::addReaderWriter("<<rw->className()<<")"<< std::endl;
 
     OpenThreads::ScopedLock<OpenThreads::ReentrantMutex> lock(_pluginMutex);
 
@@ -574,7 +538,7 @@ void Registry::removeReaderWriter(ReaderWriter* rw)
 {
     if (rw==0L) return;
 
-//    notify(INFO) << "osg::Registry::removeReaderWriter();"<< std::endl;
+//    OSG_NOTIFY(INFO) << "osg::Registry::removeReaderWriter();"<< std::endl;
 
     OpenThreads::ScopedLock<OpenThreads::ReentrantMutex> lock(_pluginMutex);
 
@@ -592,12 +556,17 @@ void Registry::addFileExtensionAlias(const std::string mapExt, const std::string
     _extAliasMap[mapExt] = toExt;
 }
 
+void Registry::addMimeTypeExtensionMapping(const std::string fromMimeType, const std::string toExt)
+{
+    _mimeTypeExtMap[fromMimeType] = toExt;
+}
+
 bool Registry::readPluginAliasConfigurationFile( const std::string& file )
 {
     std::string fileName = osgDB::findDataFile( file );
     if (fileName.empty())
     {
-        osg::notify( osg::WARN) << "Can't find plugin alias config file \"" << file << "\"." << std::endl;
+        OSG_NOTIFY( osg::WARN) << "Can't find plugin alias config file \"" << file << "\"." << std::endl;
         return false;
     }
 
@@ -605,7 +574,7 @@ bool Registry::readPluginAliasConfigurationFile( const std::string& file )
     ifs.open( fileName.c_str() );
     if (!ifs.good())
     {
-        osg::notify( osg::WARN) << "Can't open plugin alias config file \"" << fileName << "\"." << std::endl;
+        OSG_NOTIFY( osg::WARN) << "Can't open plugin alias config file \"" << fileName << "\"." << std::endl;
         return false;
     }
 
@@ -623,7 +592,7 @@ bool Registry::readPluginAliasConfigurationFile( const std::string& file )
         if (spIdx == ln.npos)
         {
             // mapExt and toExt must be on the same line, separated by a space.
-            osg::notify( osg::WARN) << file << ", line " << lineNum << ": Syntax error: missing space in \"" << raw << "\"." << std::endl;
+            OSG_NOTIFY( osg::WARN) << file << ", line " << lineNum << ": Syntax error: missing space in \"" << raw << "\"." << std::endl;
             continue;
         }
 
@@ -669,30 +638,15 @@ std::string Registry::createLibraryNameForExtension(const std::string& ext)
 #endif
 
 #if defined(__CYGWIN__)
-    #ifdef _DEBUG
-        return prepend+"cygwin_"+"osgdb_"+lowercase_ext+OSG_DEBUG_POSTFIX_WITH_QUOTES+".dll";
-    #else
-        return prepend+"cygwin_"+"osgdb_"+lowercase_ext+".dll";
-    #endif
+    return prepend+"cygwin_"+"osgdb_"+lowercase_ext+OSG_LIBRARY_POSTFIX_WITH_QUOTES+".dll";
 #elif defined(__MINGW32__)
-    return prepend+"mingw_"+"osgdb_"+lowercase_ext+".dll";
+    return prepend+"mingw_"+"osgdb_"+lowercase_ext+OSG_LIBRARY_POSTFIX_WITH_QUOTES+".dll";
 #elif defined(WIN32)
-    #ifdef _DEBUG
-        return prepend+"osgdb_"+lowercase_ext+ OSG_DEBUG_POSTFIX_WITH_QUOTES +".dll";
-    #else
-        return prepend+"osgdb_"+lowercase_ext+".dll";
-    #endif
+    return prepend+"osgdb_"+lowercase_ext+OSG_LIBRARY_POSTFIX_WITH_QUOTES+".dll";
 #elif macintosh
-    return prepend+"osgdb_"+lowercase_ext;
-#elif defined(__hpux__)
-    // why don't we use PLUGIN_EXT from the makefiles here?
-    return prepend+"osgdb_"+lowercase_ext+".sl";
+    return prepend+"osgdb_"+lowercase_ext+OSG_LIBRARY_POSTFIX_WITH_QUOTES;
 #else
-    #ifdef _DEBUG
-         return prepend+"osgdb_"+lowercase_ext+ OSG_DEBUG_POSTFIX_WITH_QUOTES + ".so";
-    #else
-         return prepend+"osgdb_"+lowercase_ext+".so";
-    #endif
+    return prepend+"osgdb_"+lowercase_ext+OSG_LIBRARY_POSTFIX_WITH_QUOTES+ADDQUOTES(OSG_PLUGIN_EXTENSION);
 #endif
 
 }
@@ -700,26 +654,15 @@ std::string Registry::createLibraryNameForExtension(const std::string& ext)
 std::string Registry::createLibraryNameForNodeKit(const std::string& name)
 {
 #if defined(__CYGWIN__)
-    return "cyg"+name+".dll";
+    return "cyg"+name+OSG_LIBRARY_POSTFIX_WITH_QUOTES+".dll";
 #elif defined(__MINGW32__)
-    return "lib"+name+".dll";
+    return "lib"+name+OSG_LIBRARY_POSTFIX_WITH_QUOTES+".dll";
 #elif defined(WIN32)
-    #ifdef _DEBUG
-        return name+OSG_DEBUG_POSTFIX_WITH_QUOTES +".dll";
-    #else
-        return name+".dll";
-    #endif
+    return name+OSG_LIBRARY_POSTFIX_WITH_QUOTES+".dll";
 #elif macintosh
-    return name;
-#elif defined(__hpux__)
-    // why don't we use PLUGIN_EXT from the makefiles here?
-    return "lib"+name+".sl";
+    return name+OSG_LIBRARY_POSTFIX_WITH_QUOTES;
 #else
-    #ifdef _DEBUG
-        return "lib"+name+OSG_DEBUG_POSTFIX_WITH_QUOTES +".so";
-    #else
-        return "lib"+name+".so";
-    #endif
+    return "lib"+name+OSG_LIBRARY_POSTFIX_WITH_QUOTES + ADDQUOTES(OSG_PLUGIN_EXTENSION);
 #endif
 }
 
@@ -758,7 +701,7 @@ bool Registry::closeLibrary(const std::string& fileName)
 
 void Registry::closeAllLibraries()
 {
-    // osg::notify(osg::NOTICE)<<"Registry::closeAllLibraries()"<<std::endl;
+    // OSG_NOTICE<<"Registry::closeAllLibraries()"<<std::endl;
     OpenThreads::ScopedLock<OpenThreads::ReentrantMutex> lock(_pluginMutex);
     _dlList.clear();
 }
@@ -799,7 +742,7 @@ ReaderWriter* Registry::getReaderWriterForExtension(const std::string& ext)
     
     // now look for a plug-in to load the file.
     std::string libraryName = createLibraryNameForExtension(ext);
-    notify(INFO) << "Now checking for plug-in "<<libraryName<< std::endl;
+    OSG_NOTIFY(INFO) << "Now checking for plug-in "<<libraryName<< std::endl;
     if (loadLibrary(libraryName)==LOADED)
     {
         for(ReaderWriterList::iterator itr=_rwList.begin();
@@ -817,6 +760,15 @@ ReaderWriter* Registry::getReaderWriterForExtension(const std::string& ext)
 
 }
 
+ReaderWriter* Registry::getReaderWriterForMimeType(const std::string& mimeType)
+{
+    MimeTypeExtensionMap::const_iterator i = _mimeTypeExtMap.find( mimeType );
+    return i != _mimeTypeExtMap.end()?
+        getReaderWriterForExtension( i->second ) :
+        NULL;
+}
+
+#if 0
 struct concrete_wrapper: basic_type_wrapper 
 {
     virtual ~concrete_wrapper() {}
@@ -827,569 +779,13 @@ struct concrete_wrapper: basic_type_wrapper
     }
     const osg::Object *myobj_;
 };
-
-osg::Object* Registry::readObjectOfType(const osg::Object& compObj,Input& fr)
-{
-    return readObjectOfType(concrete_wrapper(&compObj), fr);
-}
-
-osg::Object* Registry::readObjectOfType(const basic_type_wrapper &btw,Input& fr)
-{
-    const char *str = fr[0].getStr();
-    if (str==NULL) return NULL;
-
-    if (fr[0].matchWord("Use"))
-    {
-        if (fr[1].isString())
-        {
-            Object* obj = fr.getObjectForUniqueID(fr[1].getStr());
-            if (obj && btw.matches(obj))
-            {
-                fr+=2;
-                return obj;
-            }
-        }
-        else return NULL;
-
-    }
-
-    std::string name = str;
-    DotOsgWrapperMap::iterator itr = _objectWrapperMap.find(name);
-    if (itr==_objectWrapperMap.end())
-    {
-        // not found so check if a library::class composite name.
-        std::string token = fr[0].getStr();
-        std::string::size_type posDoubleColon = token.rfind("::");
-        if (posDoubleColon != std::string::npos)
-        {
-            // we have a composite name so now strip off the library name
-            // are try to load it, and then retry the readObject to see
-            // if we can recognize the objects.
-            std::string libraryName = std::string(token,0,posDoubleColon);
-
-            // first try the standard nodekit library.
-            std::string nodeKitLibraryName = createLibraryNameForNodeKit(libraryName);
-            if (loadLibrary(nodeKitLibraryName)==LOADED) return readObjectOfType(btw,fr);
-            
-            // otherwise try the osgdb_ plugin library.
-            std::string pluginLibraryName = createLibraryNameForExtension(libraryName);
-            if (loadLibrary(pluginLibraryName)==LOADED) return readObjectOfType(btw,fr);
-        }
-    }
-    else if (fr[1].isOpenBracket())
-    {
-        DotOsgWrapper* wrapper = itr->second.get();
-        const osg::Object* proto = wrapper->getPrototype();
-        if (proto==NULL)
-        {
-            osg::notify(osg::WARN)<<"Token "<<fr[0].getStr()<<" read, but has no prototype, cannot load."<< std::endl;
-            return NULL;
-        }
-        
-        if (!btw.matches(proto))
-        {
-            return NULL;
-        }
-
-        // record the number of nested brackets move the input iterator
-        // over the name { tokens.
-        int entry = fr[0].getNoNestedBrackets();
-        fr+=2;
-
-        const DotOsgWrapper::Associates& assoc = wrapper->getAssociates();
-        osg::Object* obj = proto->cloneType();
-
-        while(!fr.eof() && fr[0].getNoNestedBrackets()>entry)
-        {
-            bool iteratorAdvanced = false;
-            if (fr[0].matchWord("UniqueID") && fr[1].isString())
-            {
-                fr.registerUniqueIDForObject(fr[1].getStr(),obj);
-                fr += 2;
-                iteratorAdvanced = true;
-            }
-
-            // read the local data by iterating through the associate
-            // list, mapping the associate names to DotOsgWrapper's which
-            // in turn have the appropriate functions.
-            for(DotOsgWrapper::Associates::const_iterator aitr=assoc.begin();
-                                                          aitr!=assoc.end();
-                                                          ++aitr)
-            {
-                DotOsgWrapperMap::iterator mitr = _objectWrapperMap.find(*aitr);
-                if (mitr==_objectWrapperMap.end())
-                {
-                    // not found so check if a library::class composite name.
-                    std::string token = *aitr;
-                    std::string::size_type posDoubleColon = token.rfind("::");
-                    if (posDoubleColon != std::string::npos)
-                    {
-                        // we have a composite name so now strip off the library name
-                        // and try to load it, and then retry the find to see
-                        // if we can recognize the objects.
-                        std::string libraryName = std::string(token,0,posDoubleColon);
-
-                        // first try the standard nodekit library.
-                        std::string nodeKitLibraryName = createLibraryNameForNodeKit(libraryName);
-                        if (loadLibrary(nodeKitLibraryName)==LOADED)
-                        {
-                            mitr = _objectWrapperMap.find(*aitr);
-                            if (mitr==_objectWrapperMap.end())
-                            {
-                                // otherwise try the osgdb_ plugin library.
-                                std::string pluginLibraryName = createLibraryNameForExtension(libraryName);
-                                if (loadLibrary(pluginLibraryName)==LOADED)
-                                {
-                                    mitr = _objectWrapperMap.find(*aitr);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (mitr!=_objectWrapperMap.end())
-                {
-                    // get the function to read the data...
-                    DotOsgWrapper::ReadFunc rf = mitr->second->getReadFunc();
-                    if (rf && (*rf)(*obj,fr)) iteratorAdvanced = true;
-                }
-
-            }
-
-            if (!iteratorAdvanced) fr.advanceOverCurrentFieldOrBlock();
-        }
-        ++fr;                        // step over trailing '}'
-        
-        return obj;
-        
-    }
-    return 0L;
-}
-
-//
-// read object from input iterator.
-//
-osg::Object* Registry::readObject(DotOsgWrapperMap& dowMap,Input& fr)
-{
-    const char *str = fr[0].getStr();
-    if (str==NULL) return NULL;
-
-    std::string name = str;
-    DotOsgWrapperMap::iterator itr = dowMap.find(name);
-    if (itr==dowMap.end())
-    {
-        // not found so check if a library::class composite name.
-        std::string token = fr[0].getStr();
-        std::string::size_type posDoubleColon = token.rfind("::");
-        if (posDoubleColon != std::string::npos)
-        {
-            // we have a composite name so now strip off the library name
-            // are try to load it, and then retry the readObject to see
-            // if we can recognize the objects.
-        
-            std::string libraryName = std::string(token,0,posDoubleColon);
-
-            // first try the standard nodekit library.
-            std::string nodeKitLibraryName = createLibraryNameForNodeKit(libraryName);
-            if (loadLibrary(nodeKitLibraryName)==LOADED) return readObject(dowMap,fr);
-            
-            // otherwise try the osgdb_ plugin library.
-            std::string pluginLibraryName = createLibraryNameForExtension(libraryName);
-            if (loadLibrary(pluginLibraryName)==LOADED) return readObject(dowMap,fr);
-        }
-    }
-    else if (fr[1].isOpenBracket())
-    {
-    
-        DotOsgWrapper* wrapper = itr->second.get();
-        const osg::Object* proto = wrapper->getPrototype();
-        if (proto==NULL)
-        {
-            osg::notify(osg::WARN)<<"Token "<<fr[0].getStr()<<" read, but has no prototype, cannot load."<< std::endl;
-            return NULL;
-        }
-
-        // record the number of nested brackets move the input iterator
-        // over the name { tokens.
-        int entry = fr[0].getNoNestedBrackets();
-        fr+=2;
-
-        const DotOsgWrapper::Associates& assoc = wrapper->getAssociates();
-        osg::Object* obj = proto->cloneType();
-
-        while(!fr.eof() && fr[0].getNoNestedBrackets()>entry)
-        {
-            bool iteratorAdvanced = false;
-            if (fr[0].matchWord("UniqueID") && fr[1].isString())
-            {
-                fr.registerUniqueIDForObject(fr[1].getStr(),obj);
-                fr += 2;
-                iteratorAdvanced = true;
-            }
-
-            // read the local data by iterating through the associate
-            // list, mapping the associate names to DotOsgWrapper's which
-            // in turn have the appropriate functions.
-            for(DotOsgWrapper::Associates::const_iterator aitr=assoc.begin();
-                                                          aitr!=assoc.end();
-                                                          ++aitr)
-            {
-                DotOsgWrapperMap::iterator mitr = _objectWrapperMap.find(*aitr);
-                if (mitr==_objectWrapperMap.end())
-                {
-                    // not found so check if a library::class composite name.
-                    std::string token = *aitr;
-                    std::string::size_type posDoubleColon = token.rfind("::");
-                    if (posDoubleColon != std::string::npos)
-                    {
-
-                        // we have a composite name so now strip off the library name
-                        // are try to load it, and then retry the find to see
-                        // if we can recognize the objects.
-
-                        std::string libraryName = std::string(token,0,posDoubleColon);
-
-                        // first try the standard nodekit library.
-                        std::string nodeKitLibraryName = createLibraryNameForNodeKit(libraryName);
-                        if (loadLibrary(nodeKitLibraryName)==LOADED) 
-                        {
-                            mitr = _objectWrapperMap.find(*aitr);
-                        }
-
-                        if (mitr==_objectWrapperMap.end())
-                        {
-                            // otherwise try the osgdb_ plugin library.
-                            std::string pluginLibraryName = createLibraryNameForExtension(libraryName);
-                            if (loadLibrary(pluginLibraryName)==LOADED)
-                            {
-                                mitr = _objectWrapperMap.find(*aitr);
-                            }
-                        }
-
-                    }
-                }
-
-                if (mitr!=_objectWrapperMap.end())
-                {
-                    // get the function to read the data...
-                    DotOsgWrapper::ReadFunc rf = mitr->second->getReadFunc();
-                    if (rf && (*rf)(*obj,fr)) iteratorAdvanced = true;
-                }
-
-            }
-
-            if (!iteratorAdvanced) fr.advanceOverCurrentFieldOrBlock();
-        }
-        ++fr;                        // step over trailing '}'
-        
-        return obj;
-        
-    }
-
-    return 0L;
-}
-
-//
-// read object from input iterator.
-//
-Object* Registry::readObject(Input& fr)
-{
-    if (fr[0].matchWord("Use"))
-    {
-        if (fr[1].isString())
-        {
-            Object* obj = fr.getObjectForUniqueID(fr[1].getStr());
-            if (obj) fr+=2;
-            return obj;
-        }
-        else return NULL;
-
-    }
-
-    return readObject(_objectWrapperMap,fr);
-}
-
-
-//
-// read image from input iterator.
-//
-Image* Registry::readImage(Input& fr)
-{
-    if (fr[0].matchWord("Use"))
-    {
-        if (fr[1].isString())
-        {
-            Image* image = dynamic_cast<Image*>(fr.getObjectForUniqueID(fr[1].getStr()));
-            if (image) fr+=2;
-            return image;
-        }
-        else return NULL;
-
-    }
-
-    osg::Object* obj = readObject(_imageWrapperMap,fr);
-    osg::Image* image = dynamic_cast<Image*>(obj);
-    if (image) return image;
-    else if (obj) obj->unref();
-    
-    return NULL;
-}
-
-
-//
-// read drawable from input iterator.
-//
-Drawable* Registry::readDrawable(Input& fr)
-{
-    if (fr[0].matchWord("Use"))
-    {
-        if (fr[1].isString())
-        {
-            Drawable* drawable = dynamic_cast<Drawable*>(fr.getObjectForUniqueID(fr[1].getStr()));
-            if (drawable) fr+=2;
-            return drawable;
-        }
-        else return NULL;
-
-    }
-
-    osg::Object* obj = readObject(_drawableWrapperMap,fr);
-    osg::Drawable* drawable = dynamic_cast<Drawable*>(obj);
-    if (drawable) return drawable;
-    else if (obj) obj->unref();
-    
-    return NULL;
-}
-
-//
-// read drawable from input iterator.
-//
-StateAttribute* Registry::readStateAttribute(Input& fr)
-{
-
-    if (fr[0].matchWord("Use"))
-    {
-        if (fr[1].isString())
-        {
-            StateAttribute* attribute = dynamic_cast<StateAttribute*>(fr.getObjectForUniqueID(fr[1].getStr()));
-            if (attribute) fr+=2;
-            return attribute;
-        }
-        else return NULL;
-
-    }
-
-    return dynamic_cast<StateAttribute*>(readObject(_stateAttrWrapperMap,fr));
-}
-
-//
-// read drawable from input iterator.
-//
-Uniform* Registry::readUniform(Input& fr)
-{
-
-    if (fr[0].matchWord("Use"))
-    {
-        if (fr[1].isString())
-        {
-            Uniform* attribute = dynamic_cast<Uniform*>(fr.getObjectForUniqueID(fr[1].getStr()));
-            if (attribute) fr+=2;
-            return attribute;
-        }
-        else return NULL;
-
-    }
-
-    return dynamic_cast<Uniform*>(readObject(_uniformWrapperMap,fr));
-}
-
-//
-// read node from input iterator.
-//
-Node* Registry::readNode(Input& fr)
-{
-    if (fr[0].matchWord("Use"))
-    {
-        if (fr[1].isString())
-        {
-            Node* node = dynamic_cast<Node*>(fr.getObjectForUniqueID(fr[1].getStr()));
-            if (node) fr+=2;
-            return node;
-        }
-        else return NULL;
-
-    }
-
-    osg::Object* obj = readObject(_nodeWrapperMap,fr);
-    osg::Node* node = dynamic_cast<Node*>(obj);
-    if (node) return node;
-    else if (obj) obj->unref();
-    
-    return NULL;
-}
-
-//
-// read image from input iterator.
-//
-Shader* Registry::readShader(Input& fr)
-{
-    if (fr[0].matchWord("Use"))
-    {
-        if (fr[1].isString())
-        {
-            Shader* shader = dynamic_cast<Shader*>(fr.getObjectForUniqueID(fr[1].getStr()));
-            if (shader) fr+=2;
-            return shader;
-        }
-        else return NULL;
-
-    }
-
-    osg::Object* obj = readObject(_shaderWrapperMap,fr);
-    osg::Shader* shader = dynamic_cast<Shader*>(obj);
-    if (shader) return shader;
-    else if (obj) obj->unref();
-    
-    return NULL;
-}
-
-//
-// Write object to output 
-//
-bool Registry::writeObject(const osg::Object& obj,Output& fw)
-{
-
-    if (obj.referenceCount()>1)
-    {
-        std::string uniqueID;
-        if (fw.getUniqueIDForObject(&obj,uniqueID))
-        {
-            fw.writeUseID( uniqueID );
-            return true;
-        }
-    }
-
-    const std::string classname( obj.className() );
-    const std::string libraryName( obj.libraryName() );
-    const std::string compositeName( libraryName + "::" + classname );
-
-    // try composite name first
-    DotOsgWrapperMap::iterator itr = _classNameWrapperMap.find(compositeName);
-
-    if (itr==_classNameWrapperMap.end())
-    {
-        // first try the standard nodekit library.
-        std::string nodeKitLibraryName = createLibraryNameForNodeKit(libraryName);
-        if (loadLibrary(nodeKitLibraryName)==LOADED) return writeObject(obj,fw);
-
-        // otherwise try the osgdb_ plugin library.
-        std::string pluginLibraryName = createLibraryNameForExtension(libraryName);
-        if (loadLibrary(pluginLibraryName)==LOADED) return writeObject(obj,fw);
-
-        // otherwise try simple class name
-        if (itr == _classNameWrapperMap.end()) 
-            itr = _classNameWrapperMap.find(classname);
-    }
-
-    if (itr!=_classNameWrapperMap.end())
-    { 
-        DotOsgWrapper* wrapper = itr->second.get();
-        const DotOsgWrapper::Associates& assoc = wrapper->getAssociates();
-
-        if (libraryName=="osg")
-        {
-            // member of the core osg, so no need to have composite library::class name.
-            fw.writeBeginObject( wrapper->getName() );
-        }
-        else
-        {
-            // member of the node kit so must use composite library::class name.
-            std::string::size_type posDoubleColon = wrapper->getName().find("::");
-            if (posDoubleColon != std::string::npos)
-            {
-                fw.writeBeginObject( wrapper->getName() );
-            }
-            else
-            {
-                fw.writeBeginObject( libraryName + "::" + wrapper->getName() );
-            }
-        }
-        fw.moveIn();
-
-
-        // write out the unique ID if required.
-        if (obj.referenceCount()>1)
-        {
-            std::string uniqueID;
-            fw.createUniqueIDForObject(&obj,uniqueID);
-            fw.registerUniqueIDForObject(&obj,uniqueID);
-            fw.writeUniqueID( uniqueID );
-        }
-
-        // read the local data by iterating through the associate
-        // list, mapping the associate names to DotOsgWrapper's which
-        // in turn have the appropriate functions.
-        for(DotOsgWrapper::Associates::const_iterator aitr=assoc.begin();
-                                                      aitr!=assoc.end();
-                                                      ++aitr)
-        {
-            DotOsgWrapperMap::iterator mitr = _objectWrapperMap.find(*aitr);
-            if (mitr==_objectWrapperMap.end())
-            {
-                // not found so check if a library::class composite name.
-                std::string token = *aitr;
-                std::string::size_type posDoubleColon = token.rfind("::");
-                if (posDoubleColon != std::string::npos)
-                {
-
-                    // we have a composite name so now strip off the library name
-                    // are try to load it, and then retry the find to see
-                    // if we can recognize the objects.
-
-                    std::string libraryName = std::string(token,0,posDoubleColon);
-
-                    // first try the standard nodekit library.
-                    std::string nodeKitLibraryName = createLibraryNameForNodeKit(libraryName);
-                    if (loadLibrary(nodeKitLibraryName)==LOADED) 
-                    {
-                        mitr = _objectWrapperMap.find(*aitr);
-                    }
-
-                    if (mitr==_objectWrapperMap.end())
-                    {
-                        // otherwise try the osgdb_ plugin library.
-                        std::string pluginLibraryName = createLibraryNameForExtension(libraryName);
-                        if (loadLibrary(pluginLibraryName)==LOADED)
-                        {
-                            mitr = _objectWrapperMap.find(*aitr);
-                        }
-                    }
-
-                }
-            }
-            if (mitr!=_objectWrapperMap.end())
-            {
-                // get the function to read the data...
-                DotOsgWrapper::WriteFunc wf = mitr->second->getWriteFunc();
-                if (wf) (*wf)(obj,fw);
-            }
-
-        }
-
-        fw.moveOut();
-        fw.writeEndObject();
-
-        return true;
-    }
-    
-    return false;
-}
+#endif
 
 
 
 struct Registry::ReadObjectFunctor : public Registry::ReadFunctor
 {
-    ReadObjectFunctor(const std::string& filename, const ReaderWriter::Options* options):ReadFunctor(filename,options) {}
+    ReadObjectFunctor(const std::string& filename, const Options* options):ReadFunctor(filename,options) {}
 
     virtual ReaderWriter::ReadResult doRead(ReaderWriter& rw) const { return rw.readObject(_filename, _options); }    
     virtual bool isValid(ReaderWriter::ReadResult& readResult) const { return readResult.validObject(); }
@@ -1398,7 +794,7 @@ struct Registry::ReadObjectFunctor : public Registry::ReadFunctor
 
 struct Registry::ReadImageFunctor : public Registry::ReadFunctor
 {
-    ReadImageFunctor(const std::string& filename, const ReaderWriter::Options* options):ReadFunctor(filename,options) {}
+    ReadImageFunctor(const std::string& filename, const Options* options):ReadFunctor(filename,options) {}
 
     virtual ReaderWriter::ReadResult doRead(ReaderWriter& rw)const  { return rw.readImage(_filename, _options); }    
     virtual bool isValid(ReaderWriter::ReadResult& readResult) const { return readResult.validImage(); }
@@ -1407,7 +803,7 @@ struct Registry::ReadImageFunctor : public Registry::ReadFunctor
 
 struct Registry::ReadHeightFieldFunctor : public Registry::ReadFunctor
 {
-    ReadHeightFieldFunctor(const std::string& filename, const ReaderWriter::Options* options):ReadFunctor(filename,options) {}
+    ReadHeightFieldFunctor(const std::string& filename, const Options* options):ReadFunctor(filename,options) {}
 
     virtual ReaderWriter::ReadResult doRead(ReaderWriter& rw) const { return rw.readHeightField(_filename, _options); }    
     virtual bool isValid(ReaderWriter::ReadResult& readResult) const { return readResult.validHeightField(); }
@@ -1416,7 +812,7 @@ struct Registry::ReadHeightFieldFunctor : public Registry::ReadFunctor
 
 struct Registry::ReadNodeFunctor : public Registry::ReadFunctor
 {
-    ReadNodeFunctor(const std::string& filename, const ReaderWriter::Options* options):ReadFunctor(filename,options) {}
+    ReadNodeFunctor(const std::string& filename, const Options* options):ReadFunctor(filename,options) {}
 
     virtual ReaderWriter::ReadResult doRead(ReaderWriter& rw) const { return rw.readNode(_filename, _options); }    
     virtual bool isValid(ReaderWriter::ReadResult& readResult) const { return readResult.validNode(); }
@@ -1426,7 +822,7 @@ struct Registry::ReadNodeFunctor : public Registry::ReadFunctor
 
 struct Registry::ReadArchiveFunctor : public Registry::ReadFunctor
 {
-    ReadArchiveFunctor(const std::string& filename, ReaderWriter::ArchiveStatus status, unsigned int indexBlockSizeHint, const ReaderWriter::Options* options):
+    ReadArchiveFunctor(const std::string& filename, ReaderWriter::ArchiveStatus status, unsigned int indexBlockSizeHint, const Options* options):
         ReadFunctor(filename,options),
         _status(status),
         _indexBlockSizeHint(indexBlockSizeHint) {}
@@ -1442,7 +838,7 @@ struct Registry::ReadArchiveFunctor : public Registry::ReadFunctor
 
 struct Registry::ReadShaderFunctor : public Registry::ReadFunctor
 {
-    ReadShaderFunctor(const std::string& filename, const ReaderWriter::Options* options):ReadFunctor(filename,options) {}
+    ReadShaderFunctor(const std::string& filename, const Options* options):ReadFunctor(filename,options) {}
 
     virtual ReaderWriter::ReadResult doRead(ReaderWriter& rw)const  { return rw.readShader(_filename, _options); }    
     virtual bool isValid(ReaderWriter::ReadResult& readResult) const { return readResult.validShader(); }
@@ -1461,6 +857,95 @@ void Registry::addArchiveExtension(const std::string ext)
     _archiveExtList.push_back(ext);
 }
 
+std::string Registry::findDataFileImplementation(const std::string& filename, const Options* options, CaseSensitivity caseSensitivity)
+{
+    if (filename.empty()) return filename;
+
+    // if data file contains a server address then we can't find it in local directories so return empty string.
+    if (containsServerAddress(filename)) return std::string();
+
+    if(fileExists(filename))
+    {
+        OSG_DEBUG << "FindFileInPath(" << filename << "): returning " << filename << std::endl;
+        return filename;
+    }
+
+    std::string fileFound;
+
+    if (options && !options->getDatabasePathList().empty())
+    {
+        fileFound = findFileInPath(filename, options->getDatabasePathList(), caseSensitivity);
+        if (!fileFound.empty()) return fileFound;
+    }
+
+    const FilePathList& filepath = Registry::instance()->getDataFilePathList();
+    if (!filepath.empty())
+    {
+        fileFound = findFileInPath(filename, filepath,caseSensitivity);
+        if (!fileFound.empty()) return fileFound;
+    }
+
+
+    // if a directory is included in the filename, get just the (simple) filename itself and try that
+    std::string simpleFileName = getSimpleFileName(filename);
+    if (simpleFileName!=filename)
+    {
+
+        if(fileExists(simpleFileName))
+        {
+            OSG_DEBUG << "FindFileInPath(" << filename << "): returning " << filename << std::endl;
+            return simpleFileName;
+        }
+
+        if (options && !options->getDatabasePathList().empty())
+        {
+            fileFound = findFileInPath(simpleFileName, options->getDatabasePathList(), caseSensitivity);
+            if (!fileFound.empty()) return fileFound;
+        }
+
+        if (!filepath.empty())
+        {
+            fileFound = findFileInPath(simpleFileName, filepath,caseSensitivity);
+            if (!fileFound.empty()) return fileFound;
+        }
+
+    }
+
+    // return empty string.
+    return std::string();
+}
+
+std::string Registry::findLibraryFileImplementation(const std::string& filename, const Options* options, CaseSensitivity caseSensitivity)
+{
+    if (filename.empty())
+        return filename;
+
+    const FilePathList& filepath = Registry::instance()->getLibraryFilePathList();
+
+    std::string fileFound = findFileInPath(filename, filepath,caseSensitivity);
+    if (!fileFound.empty())
+        return fileFound;
+
+    if(fileExists(filename))
+    {
+        OSG_DEBUG << "FindFileInPath(" << filename << "): returning " << filename << std::endl;
+        return filename;
+    }
+
+    // if a directory is included in the filename, get just the (simple) filename itself and try that
+    std::string simpleFileName = getSimpleFileName(filename);
+    if (simpleFileName!=filename)
+    {
+        std::string fileFound = findFileInPath(simpleFileName, filepath,caseSensitivity);
+        if (!fileFound.empty()) return fileFound;
+    }
+
+    // failed return empty string.
+    return std::string();
+}
+
+
+
 ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
 {
     for(ArchiveExtensionList::iterator aitr=_archiveExtList.begin();
@@ -1476,9 +961,9 @@ ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
             std::string::size_type endArchive = positionArchive + archiveExtension.length();
             std::string archiveName( readFunctor._filename.substr(0,endArchive));
             std::string fileName(readFunctor._filename.substr(endArchive+1,std::string::npos));
-            osg::notify(osg::INFO)<<"Contains archive : "<<readFunctor._filename<<std::endl;
-            osg::notify(osg::INFO)<<"         archive : "<<archiveName<<std::endl;
-            osg::notify(osg::INFO)<<"         filename : "<<fileName<<std::endl;
+            OSG_INFO<<"Contains archive : "<<readFunctor._filename<<std::endl;
+            OSG_INFO<<"         archive : "<<archiveName<<std::endl;
+            OSG_INFO<<"         filename : "<<fileName<<std::endl;
         
             ReaderWriter::ReadResult result = openArchiveImplementation(archiveName,ReaderWriter::READ, 4096, readFunctor._options);
         
@@ -1486,7 +971,7 @@ ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
 
             osgDB::Archive* archive = result.getArchive();
         
-            osg::ref_ptr<ReaderWriter::Options> options = new ReaderWriter::Options;
+            osg::ref_ptr<Options> options = new Options;
             options->setDatabasePath(archiveName);
 
             return archive->readObject(fileName,options.get());
@@ -1518,6 +1003,7 @@ ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
             ++ritr)
         {
             if (ritr->status()==ReaderWriter::ReadResult::FILE_NOT_HANDLED) ++num_FILE_NOT_HANDLED;
+            else if (ritr->status()==ReaderWriter::ReadResult::NOT_IMPLEMENTED) ++num_FILE_NOT_HANDLED;//Freetype and others
             else if (ritr->status()==ReaderWriter::ReadResult::FILE_NOT_FOUND) ++num_FILE_NOT_FOUND;
             else if (ritr->status()==ReaderWriter::ReadResult::ERROR_IN_READING_FILE) ++num_ERROR_IN_READING_FILE;
         }
@@ -1528,7 +1014,7 @@ ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
             {
                 if (ritr->status()==ReaderWriter::ReadResult::ERROR_IN_READING_FILE)
                 {
-                    // osg::notify(osg::NOTICE)<<"Warning: error reading file \""<<readFunctor._filename<<"\""<<std::endl;
+                    // OSG_NOTICE<<"Warning: error reading file \""<<readFunctor._filename<<"\""<<std::endl;
                     return *ritr;
                 }
             }
@@ -1540,7 +1026,7 @@ ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
                 {
                     if (ritr->status()==ReaderWriter::ReadResult::FILE_NOT_FOUND)
                     {
-                        //osg::notify(osg::NOTICE)<<"Warning: could not find file \""<<readFunctor._filename<<"\""<<std::endl;
+                        //OSG_NOTICE<<"Warning: could not find file \""<<readFunctor._filename<<"\""<<std::endl;
                         return *ritr;
                     }
                 }
@@ -1599,7 +1085,7 @@ ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
             {
                 if (ritr->status()==ReaderWriter::ReadResult::ERROR_IN_READING_FILE)
                 {
-                    // osg::notify(osg::NOTICE)<<"Warning: error reading file \""<<readFunctor._filename<<"\""<<std::endl;
+                    // OSG_NOTICE<<"Warning: error reading file \""<<readFunctor._filename<<"\""<<std::endl;
                     return *ritr;
                 }
             }
@@ -1608,7 +1094,7 @@ ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
             {
                 if (ritr->status()==ReaderWriter::ReadResult::FILE_NOT_FOUND)
                 {
-                    // osg::notify(osg::NOTICE)<<"Warning: could not find file \""<<readFunctor._filename<<"\""<<std::endl;
+                    // OSG_NOTICE<<"Warning: could not find file \""<<readFunctor._filename<<"\""<<std::endl;
                     return *ritr;
                 }
             }
@@ -1622,10 +1108,17 @@ ReaderWriter::ReadResult Registry::read(const ReadFunctor& readFunctor)
     return results.front();
 }
 
-ReaderWriter::ReadResult Registry::readImplementation(const ReadFunctor& readFunctor, bool useObjectCache)
+ReaderWriter::ReadResult Registry::readImplementation(const ReadFunctor& readFunctor,Options::CacheHintOptions cacheHint)
 {
     std::string file(readFunctor._filename);
 
+    bool useObjectCache=false;
+    //Note CACHE_ARCHIVES has a different object that it caches to so it will never be used here
+    if (cacheHint!=Options::CACHE_ARCHIVES)
+    {
+        const Options* options=readFunctor._options;
+        useObjectCache=options ? (options->getObjectCacheHint()&cacheHint)!=0: false;
+    }
     if (useObjectCache)
     {
         // search for entry in the object cache.
@@ -1634,7 +1127,7 @@ ReaderWriter::ReadResult Registry::readImplementation(const ReadFunctor& readFun
             ObjectCache::iterator oitr=_objectCache.find(file);
             if (oitr!=_objectCache.end())
             {
-                notify(INFO)<<"returning cached instanced of "<<file<<std::endl;
+                OSG_NOTIFY(INFO)<<"returning cached instanced of "<<file<<std::endl;
                 if (readFunctor.isValid(oitr->second.first.get())) return ReaderWriter::ReadResult(oitr->second.first.get(), ReaderWriter::ReadResult::FILE_LOADED_FROM_CACHE);
                 else return ReaderWriter::ReadResult("Error file does not contain an osg::Object");
             }
@@ -1644,12 +1137,12 @@ ReaderWriter::ReadResult Registry::readImplementation(const ReadFunctor& readFun
         if (rr.validObject()) 
         {
             // update cache with new entry.
-            notify(INFO)<<"Adding to object cache "<<file<<std::endl;
+            OSG_NOTIFY(INFO)<<"Adding to object cache "<<file<<std::endl;
             addEntryToObjectCache(file,rr.getObject());
         }
         else
         {
-            notify(INFO)<<"No valid object found for "<<file<<std::endl;
+            OSG_NOTIFY(INFO)<<"No valid object found for "<<file<<std::endl;
         }
 
         return rr;
@@ -1657,36 +1150,23 @@ ReaderWriter::ReadResult Registry::readImplementation(const ReadFunctor& readFun
     }
     else
     {
-        ObjectCache tmpObjectCache;
-        
-        {
-            OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_objectCacheMutex);
-            tmpObjectCache.swap(_objectCache);
-        }
-        
         ReaderWriter::ReadResult rr = read(readFunctor);
-
-        {
-            OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_objectCacheMutex);
-            tmpObjectCache.swap(_objectCache);
-        }
-        
         return rr;
     }
 }
 
 
-ReaderWriter::ReadResult Registry::openArchiveImplementation(const std::string& fileName, ReaderWriter::ArchiveStatus status, unsigned int indexBlockSizeHint, const ReaderWriter::Options* options)
+ReaderWriter::ReadResult Registry::openArchiveImplementation(const std::string& fileName, ReaderWriter::ArchiveStatus status, unsigned int indexBlockSizeHint, const Options* options)
 {
     osgDB::Archive* archive = getFromArchiveCache(fileName);
     if (archive) return archive;
 
-    ReaderWriter::ReadResult result = readImplementation(ReadArchiveFunctor(fileName, status, indexBlockSizeHint, options),false);
+    ReaderWriter::ReadResult result = readImplementation(ReadArchiveFunctor(fileName, status, indexBlockSizeHint, options),Options::CACHE_ARCHIVES);
 
     // default to using caching archive if no options structure provided, but if options are provided use archives
     // only if supplied.
     if (result.validArchive() &&
-        (!options || (options->getObjectCacheHint() & ReaderWriter::Options::CACHE_ARCHIVES)) )
+        (!options || (options->getObjectCacheHint() & Options::CACHE_ARCHIVES)) )
     {
         addToArchiveCache(fileName,result.getArchive());
     }
@@ -1694,13 +1174,12 @@ ReaderWriter::ReadResult Registry::openArchiveImplementation(const std::string& 
 }
 
 
-ReaderWriter::ReadResult Registry::readObjectImplementation(const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::ReadResult Registry::readObjectImplementation(const std::string& fileName,const Options* options)
 {
-    return readImplementation(ReadObjectFunctor(fileName, options),
-                              options ? (options->getObjectCacheHint()&ReaderWriter::Options::CACHE_OBJECTS)!=0: false);
+    return readImplementation(ReadObjectFunctor(fileName, options),Options::CACHE_OBJECTS);
 }
 
-ReaderWriter::WriteResult Registry::writeObjectImplementation(const Object& obj,const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::WriteResult Registry::writeObjectImplementation(const Object& obj,const std::string& fileName,const Options* options)
 {
     // record the errors reported by readerwriters.
     typedef std::vector<ReaderWriter::WriteResult> Results;
@@ -1747,13 +1226,12 @@ ReaderWriter::WriteResult Registry::writeObjectImplementation(const Object& obj,
 
 
 
-ReaderWriter::ReadResult Registry::readImageImplementation(const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::ReadResult Registry::readImageImplementation(const std::string& fileName,const Options* options)
 {
-    return readImplementation(ReadImageFunctor(fileName, options),
-                              options ? (options->getObjectCacheHint()&ReaderWriter::Options::CACHE_IMAGES)!=0: false);
+    return readImplementation(ReadImageFunctor(fileName, options),Options::CACHE_IMAGES);
 }
 
-ReaderWriter::WriteResult Registry::writeImageImplementation(const Image& image,const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::WriteResult Registry::writeImageImplementation(const Image& image,const std::string& fileName,const Options* options)
 {
     // record the errors reported by readerwriters.
     typedef std::vector<ReaderWriter::WriteResult> Results;
@@ -1801,13 +1279,12 @@ ReaderWriter::WriteResult Registry::writeImageImplementation(const Image& image,
 }
 
 
-ReaderWriter::ReadResult Registry::readHeightFieldImplementation(const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::ReadResult Registry::readHeightFieldImplementation(const std::string& fileName,const Options* options)
 {
-    return readImplementation(ReadHeightFieldFunctor(fileName, options),
-                              options ? (options->getObjectCacheHint()&ReaderWriter::Options::CACHE_HEIGHTFIELDS)!=0: false);
+    return readImplementation(ReadHeightFieldFunctor(fileName, options),Options::CACHE_HEIGHTFIELDS);
 }
 
-ReaderWriter::WriteResult Registry::writeHeightFieldImplementation(const HeightField& HeightField,const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::WriteResult Registry::writeHeightFieldImplementation(const HeightField& HeightField,const std::string& fileName,const Options* options)
 {
     // record the errors reported by readerwriters.
     typedef std::vector<ReaderWriter::WriteResult> Results;
@@ -1855,26 +1332,24 @@ ReaderWriter::WriteResult Registry::writeHeightFieldImplementation(const HeightF
 }
 
 
-ReaderWriter::ReadResult Registry::readNodeImplementation(const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::ReadResult Registry::readNodeImplementation(const std::string& fileName,const Options* options)
 {
 #if 0
 
     osg::Timer_t startTick = osg::Timer::instance()->tick();
-    ReaderWriter::ReadResult result = readImplementation(ReadNodeFunctor(fileName, options),
-                              options ? (options->getObjectCacheHint()&ReaderWriter::Options::CACHE_NODES)!=0: false);
+    ReaderWriter::ReadResult result = readImplementation(ReadNodeFunctor(fileName, options),Options::CACHE_NODES);
     osg::Timer_t endTick = osg::Timer::instance()->tick();
-    osg::notify(osg::NOTICE)<<"time to load "<<fileName<<" "<<osg::Timer::instance()->delta_m(startTick, endTick)<<"ms"<<std::endl;
+    OSG_NOTICE<<"time to load "<<fileName<<" "<<osg::Timer::instance()->delta_m(startTick, endTick)<<"ms"<<std::endl;
     return result;
 
 #else
 
-    return readImplementation(ReadNodeFunctor(fileName, options),
-                              options ? (options->getObjectCacheHint()&ReaderWriter::Options::CACHE_NODES)!=0: false);
+    return readImplementation(ReadNodeFunctor(fileName, options),Options::CACHE_NODES);
                               
 #endif
 }
 
-ReaderWriter::WriteResult Registry::writeNodeImplementation(const Node& node,const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::WriteResult Registry::writeNodeImplementation(const Node& node,const std::string& fileName,const Options* options)
 {
     // record the errors reported by readerwriters.
     typedef std::vector<ReaderWriter::WriteResult> Results;
@@ -1924,13 +1399,12 @@ ReaderWriter::WriteResult Registry::writeNodeImplementation(const Node& node,con
     return results.front();
 }
 
-ReaderWriter::ReadResult Registry::readShaderImplementation(const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::ReadResult Registry::readShaderImplementation(const std::string& fileName,const Options* options)
 {
-    return readImplementation(ReadShaderFunctor(fileName, options),
-                              options ? (options->getObjectCacheHint()&ReaderWriter::Options::CACHE_SHADERS)!=0: false);
+    return readImplementation(ReadShaderFunctor(fileName, options),Options::CACHE_SHADERS);
 }
 
-ReaderWriter::WriteResult Registry::writeShaderImplementation(const Shader& shader,const std::string& fileName,const ReaderWriter::Options* options)
+ReaderWriter::WriteResult Registry::writeShaderImplementation(const Shader& shader,const std::string& fileName,const Options* options)
 {
     // record the errors reported by readerwriters.
     typedef std::vector<ReaderWriter::WriteResult> Results;
@@ -2097,3 +1571,15 @@ SharedStateManager* Registry::getOrCreateSharedStateManager()
     
     return _sharedStateManager.get();
 }
+
+
+void Registry::registerProtocol(const std::string& protocol) 
+{  
+    _registeredProtocols.insert( convertToLowerCase(protocol) ); 
+}
+        
+bool Registry::isProtocolRegistered(const std::string& protocol) 
+{ 
+    return (_registeredProtocols.find( convertToLowerCase(protocol) ) != _registeredProtocols.end()); 
+}
+

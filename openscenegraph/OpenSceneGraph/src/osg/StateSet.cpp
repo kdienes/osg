@@ -21,11 +21,14 @@
 #include <osg/CullFace>
 #include <osg/FrontFace>
 #include <osg/PolygonMode>
+#include <osg/Material>
 #include <osg/BlendFunc>
 #include <osg/Depth>
 #include <osg/Drawable>
 #include <osg/Node>
 
+#include <osg/TexGen>
+#include <osg/Texture1D>
 #include <osg/TextureCubeMap>
 #include <osg/TextureRectangle>
 #include <osg/Texture2DArray>
@@ -234,11 +237,11 @@ void StateSet::computeDataVariance()
 
     if (dynamic)
     {
-        osg::notify(osg::NOTICE)<<"StateSet::computeDataVariance setting to DYNAMIC"<<std::endl;
+        OSG_NOTICE<<"StateSet::computeDataVariance setting to DYNAMIC"<<std::endl;
     }
     else
     {
-        osg::notify(osg::NOTICE)<<"StateSet::computeDataVariance to STATIC"<<std::endl;
+        OSG_NOTICE<<"StateSet::computeDataVariance to STATIC"<<std::endl;
     }
 #endif
 
@@ -251,7 +254,7 @@ void StateSet::computeDataVariance()
 
 void StateSet::addParent(osg::Object* object)
 {
-    // osg::notify(osg::DEBUG_FP)<<"Adding parent"<<std::endl;
+    // OSG_DEBUG_FP<<"Adding parent"<<std::endl;
     OpenThreads::ScopedPointerLock<OpenThreads::Mutex> lock(getRefMutex());
 
     _parents.push_back(object);
@@ -425,8 +428,10 @@ int StateSet::compare(const StateSet& rhs,bool compareAttributeContents) const
     {
         if      (lhs_uniform_itr->first<rhs_uniform_itr->first) return -1;
         else if (rhs_uniform_itr->first<lhs_uniform_itr->first) return 1;
-        if      (lhs_uniform_itr->second<rhs_uniform_itr->second) return -1;
-        else if (rhs_uniform_itr->second<lhs_uniform_itr->second) return 1;
+        if      (*lhs_uniform_itr->second.first<*rhs_uniform_itr->second.first) return -1;
+        else if (*rhs_uniform_itr->second.first<*lhs_uniform_itr->second.first) return 1;
+        if      (lhs_uniform_itr->second.second<rhs_uniform_itr->second.second) return -1;
+        else if (rhs_uniform_itr->second.second<lhs_uniform_itr->second.second) return 1;
         ++lhs_uniform_itr;
         ++rhs_uniform_itr;
     }
@@ -528,12 +533,17 @@ void StateSet::setGlobalDefaults()
 
 
     setMode(GL_DEPTH_TEST,StateAttribute::ON);
-    // setAttributeAndModes(new AlphaFunc,StateAttribute::OFF);
     setAttributeAndModes(new BlendFunc,StateAttribute::OFF);
 
-    Material *material       = new Material;
-    material->setColorMode(Material::AMBIENT_AND_DIFFUSE);
-    setAttributeAndModes(material,StateAttribute::ON);
+    #if defined(OSG_GL_FIXED_FUNCTION_AVAILABLE)
+
+        // setAttributeAndModes(new AlphaFunc,StateAttribute::OFF);
+
+        Material *material       = new Material;
+        material->setColorMode(Material::AMBIENT_AND_DIFFUSE);
+        setAttributeAndModes(material,StateAttribute::ON);
+        
+    #endif
 }
 
 
@@ -777,17 +787,17 @@ void StateSet::setMode(StateAttribute::GLMode mode, StateAttribute::GLModeValue 
 {
     if (getTextureGLModeSet().isTextureMode(mode))
     {
-        notify(NOTICE)<<"Warning: texture mode '"<<mode<<"'passed to setMode(mode,value), "<<std::endl;
-        notify(NOTICE)<<"         assuming setTextureMode(unit=0,mode,value) instead."<<std::endl;
-        notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+        OSG_NOTICE<<"Warning: texture mode '"<<mode<<"'passed to setMode(mode,value), "<<std::endl;
+        OSG_NOTICE<<"         assuming setTextureMode(unit=0,mode,value) instead."<<std::endl;
+        OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
 
         setTextureMode(0,mode,value);
     }
     else if (mode == GL_COLOR_MATERIAL)
     {
-        notify(NOTICE)<<"Error: Setting mode 'GL_COLOR_MATERIAL' via osg::StateSet::setMode(mode,value) ignored.\n";
-        notify(NOTICE)<<"       The mode 'GL_COLOR_MATERIAL' is set by the osg::Material StateAttribute.\n";
-        notify(NOTICE)<<"       Setting this as a mode fools osg's State tracking."<<std::endl;
+        OSG_NOTICE<<"Error: Setting mode 'GL_COLOR_MATERIAL' via osg::StateSet::setMode(mode,value) ignored.\n";
+        OSG_NOTICE<<"       The mode 'GL_COLOR_MATERIAL' is set by the osg::Material StateAttribute.\n";
+        OSG_NOTICE<<"       Setting this mode would confuse osg's State tracking."<<std::endl;
     }
     else
     {
@@ -799,17 +809,17 @@ void StateSet::removeMode(StateAttribute::GLMode mode)
 {
     if (getTextureGLModeSet().isTextureMode(mode))
     {
-        notify(NOTICE)<<"Warning: texture mode '"<<mode<<"'passed to setModeToInherit(mode), "<<std::endl;
-        notify(NOTICE)<<"         assuming setTextureModeToInherit(unit=0,mode) instead."<<std::endl;
-        notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+        OSG_NOTICE<<"Warning: texture mode '"<<mode<<"'passed to setModeToInherit(mode), "<<std::endl;
+        OSG_NOTICE<<"         assuming setTextureModeToInherit(unit=0,mode) instead."<<std::endl;
+        OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
 
         removeTextureMode(0,mode);
     }
     else if (mode == GL_COLOR_MATERIAL)
     {
-        notify(NOTICE)<<"Error: Setting mode 'GL_COLOR_MATERIAL' via osg::StateSet::removeMode(mode) ignored.\n";
-        notify(NOTICE)<<"       The mode 'GL_COLOR_MATERIAL' is set by the osg::Material StateAttribute.\n";
-        notify(NOTICE)<<"       Setting this as a mode fools osg's State tracking."<<std::endl;
+        OSG_NOTICE<<"Error: Setting mode 'GL_COLOR_MATERIAL' via osg::StateSet::removeMode(mode) ignored.\n";
+        OSG_NOTICE<<"       The mode 'GL_COLOR_MATERIAL' is set by the osg::Material StateAttribute.\n";
+        OSG_NOTICE<<"       Setting this mode would confuse osg's State tracking."<<std::endl;
     }
     else
     {
@@ -826,9 +836,9 @@ StateAttribute::GLModeValue StateSet::getMode(StateAttribute::GLMode mode) const
     }
     else
     {
-        notify(NOTICE)<<"Warning: texture mode '"<<mode<<"'passed to getMode(mode), "<<std::endl;
-        notify(NOTICE)<<"         assuming getTextureMode(unit=0,mode) instead."<<std::endl;
-        notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+        OSG_NOTICE<<"Warning: texture mode '"<<mode<<"'passed to getMode(mode), "<<std::endl;
+        OSG_NOTICE<<"         assuming getTextureMode(unit=0,mode) instead."<<std::endl;
+        OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
 
         return getTextureMode(0,mode);
     }
@@ -844,9 +854,9 @@ void StateSet::setAttribute(StateAttribute *attribute, StateAttribute::OverrideV
         }
         else
         {
-            notify(NOTICE)<<"Warning: texture attribute '"<<attribute->className()<<"'passed to setAttribute(attr,value), "<<std::endl;
-            notify(NOTICE)<<"         assuming setTextureAttribute(unit=0,attr,value) instead."<<std::endl;
-            notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+            OSG_NOTICE<<"Warning: texture attribute '"<<attribute->className()<<"'passed to setAttribute(attr,value), "<<std::endl;
+            OSG_NOTICE<<"         assuming setTextureAttribute(unit=0,attr,value) instead."<<std::endl;
+            OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
 
             setTextureAttribute(0,attribute,value);
         }
@@ -871,9 +881,9 @@ void StateSet::setAttributeAndModes(StateAttribute *attribute, StateAttribute::G
         }
         else
         {
-            notify(NOTICE)<<"Warning: texture attribute '"<<attribute->className()<<"' passed to setAttributeAndModes(attr,value), "<<std::endl;
-            notify(NOTICE)<<"         assuming setTextureAttributeAndModes(unit=0,attr,value) instead."<<std::endl;
-            notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+            OSG_NOTICE<<"Warning: texture attribute '"<<attribute->className()<<"' passed to setAttributeAndModes(attr,value), "<<std::endl;
+            OSG_NOTICE<<"         assuming setTextureAttributeAndModes(unit=0,attr,value) instead."<<std::endl;
+            OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
 
             setTextureAttributeAndModes(0,attribute,value);
         }
@@ -1097,9 +1107,9 @@ void StateSet::setTextureMode(unsigned int unit,StateAttribute::GLMode mode, Sta
     }
     else
     {
-        notify(NOTICE)<<"Warning: non-texture mode '"<<mode<<"'passed to setTextureMode(unit,mode,value), "<<std::endl;
-        notify(NOTICE)<<"         assuming setMode(mode,value) instead."<<std::endl;
-        notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+        OSG_NOTICE<<"Warning: non-texture mode '"<<mode<<"'passed to setTextureMode(unit,mode,value), "<<std::endl;
+        OSG_NOTICE<<"         assuming setMode(mode,value) instead."<<std::endl;
+        OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
 
         setMode(mode,value);
     }
@@ -1114,9 +1124,9 @@ void StateSet::removeTextureMode(unsigned int unit,StateAttribute::GLMode mode)
     }
     else
     {
-        notify(NOTICE)<<"Warning: non-texture mode '"<<mode<<"'passed to setTextureModeToInherit(unit,mode), "<<std::endl;
-        notify(NOTICE)<<"         assuming setModeToInherit(unit=0,mode) instead."<<std::endl;
-        notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+        OSG_NOTICE<<"Warning: non-texture mode '"<<mode<<"'passed to setTextureModeToInherit(unit,mode), "<<std::endl;
+        OSG_NOTICE<<"         assuming setModeToInherit(unit=0,mode) instead."<<std::endl;
+        OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
 
         removeMode(mode);
     }
@@ -1132,9 +1142,9 @@ StateAttribute::GLModeValue StateSet::getTextureMode(unsigned int unit,StateAttr
     }
     else
     {
-        notify(NOTICE)<<"Warning: non-texture mode '"<<mode<<"'passed to geTexturetMode(unit,mode), "<<std::endl;
-        notify(NOTICE)<<"         assuming getMode(mode) instead."<<std::endl;
-        notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+        OSG_NOTICE<<"Warning: non-texture mode '"<<mode<<"'passed to geTexturetMode(unit,mode), "<<std::endl;
+        OSG_NOTICE<<"         assuming getMode(mode) instead."<<std::endl;
+        OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
 
         return getMode(mode);
     }
@@ -1150,9 +1160,9 @@ void StateSet::setTextureAttribute(unsigned int unit,StateAttribute *attribute, 
         }
         else
         {
-            notify(NOTICE)<<"Warning: texture attribute '"<<attribute->className()<<"' passed to setTextureAttribute(unit,attr,value), "<<std::endl;
-            notify(NOTICE)<<"         assuming setAttribute(attr,value) instead."<<std::endl;
-            notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+            OSG_NOTICE<<"Warning: texture attribute '"<<attribute->className()<<"' passed to setTextureAttribute(unit,attr,value), "<<std::endl;
+            OSG_NOTICE<<"         assuming setAttribute(attr,value) instead."<<std::endl;
+            OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
             setAttribute(attribute,value);
         }
     }
@@ -1178,9 +1188,9 @@ void StateSet::setTextureAttributeAndModes(unsigned int unit,StateAttribute *att
         }
         else
         {
-            notify(NOTICE)<<"Warning: non texture attribute '"<<attribute->className()<<"' passed to setTextureAttributeAndModes(unit,attr,value), "<<std::endl;
-            notify(NOTICE)<<"         assuming setAttributeAndModes(attr,value) instead."<<std::endl;
-            notify(NOTICE)<<"         please change calling code to use appropriate call."<<std::endl;
+            OSG_NOTICE<<"Warning: non texture attribute '"<<attribute->className()<<"' passed to setTextureAttributeAndModes(unit,attr,value), "<<std::endl;
+            OSG_NOTICE<<"         assuming setAttributeAndModes(attr,value) instead."<<std::endl;
+            OSG_NOTICE<<"         please change calling code to use appropriate call."<<std::endl;
             setAttribute(attribute,value);
         }
     }
@@ -1316,11 +1326,16 @@ void StateSet::setThreadSafeRefUnref(bool threadSafe)
 
 void StateSet::compileGLObjects(State& state) const
 {
+    bool checkForGLErrors = state.getCheckForGLErrors()==osg::State::ONCE_PER_ATTRIBUTE;
     for(AttributeList::const_iterator itr = _attributeList.begin();
         itr!=_attributeList.end();
         ++itr)
     {
         itr->second.first->compileGLObjects(state);
+        if (checkForGLErrors && state.checkGLErrors("StateSet::compileGLObejcts() compiling attribute"))
+        {
+            OSG_NOTICE<<"    GL Error when compiling "<<itr->second.first->className()<<std::endl;
+        }
     }
 
     for(TextureAttributeList::const_iterator taitr=_textureAttributeList.begin();
@@ -1332,6 +1347,10 @@ void StateSet::compileGLObjects(State& state) const
             ++itr)
         {
             itr->second.first->compileGLObjects(state);
+            if (checkForGLErrors && state.checkGLErrors("StateSet::compileGLObejcts() compiling texture attribute"))
+            {
+                OSG_NOTICE<<"    GL Error when compiling "<<itr->second.first->className()<<std::endl;
+            }
         }
     }
 }
@@ -1621,7 +1640,7 @@ const StateSet::RefAttributePair* StateSet::getAttributePair(const AttributeList
 
 void StateSet::setUpdateCallback(Callback* ac)
 {
-    //osg::notify(osg::INFO)<<"Setting StateSet callbacks"<<std::endl;
+    //OSG_INFO<<"Setting StateSet callbacks"<<std::endl;
 
     if (_updateCallback==ac) return;
     
@@ -1633,13 +1652,13 @@ void StateSet::setUpdateCallback(Callback* ac)
     
     if (delta!=0 && _numChildrenRequiringUpdateTraversal==0)
     {
-        //osg::notify(osg::INFO)<<"Going to set StateSet parents"<<std::endl;
+        //OSG_INFO<<"Going to set StateSet parents"<<std::endl;
 
         for(ParentList::iterator itr=_parents.begin();
             itr!=_parents.end();
             ++itr)
         {
-            //osg::notify(osg::INFO)<<"Setting StateSet parent"<<std::endl;
+            //OSG_INFO<<"Setting StateSet parent"<<std::endl;
 
             osg::Drawable* drawable = dynamic_cast<osg::Drawable*>(*itr);
             if (drawable) 
@@ -1660,7 +1679,7 @@ void StateSet::setUpdateCallback(Callback* ac)
 
 void StateSet::runUpdateCallbacks(osg::NodeVisitor* nv)
 {
-    //osg::notify(osg::INFO)<<"Running StateSet callbacks"<<std::endl;
+    //OSG_INFO<<"Running StateSet callbacks"<<std::endl;
 
     if (_updateCallback.valid()) (*_updateCallback)(this,nv);
 

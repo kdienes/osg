@@ -1,7 +1,7 @@
-/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2004 Robert Osfield 
+/* -*-c++-*- OpenSceneGraph - Copyright (C) 1998-2004 Robert Osfield
  *
- * This application is open source and may be redistributed and/or modified   
- * freely and without restriction, both in commericial and non commericial
+ * This application is open source and may be redistributed and/or modified
+ * freely and without restriction, both in commercial and non commercial
  * applications, as long as this copyright notice is maintained.
  * 
  * This application is distributed in the hope that it will be useful,
@@ -51,11 +51,11 @@ static bool getFilenameAndParams(const std::string& input, std::string& filename
         params = input.substr(pos+1, std::string::npos );
         if( params.empty() )
         {
-            osg::notify(osg::WARN) << "Missing parameters for " EXTENSION_NAME " pseudo-loader" << std::endl;
+            OSG_WARN << "Missing parameters for " EXTENSION_NAME " pseudo-loader" << std::endl;
             return false;
         }
 
-        // clear the params sting of any brackets.
+        // clear the params string of any brackets.
         std::string::size_type params_pos = params.size();
         for(; params_pos>0; )
         {
@@ -81,10 +81,10 @@ static bool getFilenameAndParams(const std::string& input, std::string& filename
  * This pseudo-loader make it simple to change the size of a saved model
  * by specifying a correcting scale factor as part of the filename.
  *
- * Usage: <modelfile.ext>.<sx>,<sy>,<sz>.globe
- *        <modelfile.ext>.<su>.globe
+ * Usage: <modelfile.ext>.<sx>,<sy>,<sz>.scale
+ *        <modelfile.ext>.<su>.scale
  * where:
- *      <modelfile.ext> = an model filename.
+ *      <modelfile.ext> = a model filename.
  *      <sx> = scale factor along the X axis.
  *      <sy> = scale factor along the Y axis.
  *      <sz> = scale factor along the Z axis.
@@ -104,7 +104,7 @@ public:
     virtual const char* className() const { return "scaling pseudo-loader"; }
 
     virtual bool acceptsExtension(const std::string& extension) const
-    { 
+    {
         return osgDB::equalCaseInsensitive( extension, EXTENSION_NAME );
     }
 
@@ -114,7 +114,7 @@ public:
         if( !acceptsExtension(ext) )
             return ReadResult::FILE_NOT_HANDLED;
 
-        osg::notify(osg::INFO) << "ReaderWriterSCALE( \"" << fileName << "\" )" << std::endl;
+        OSG_INFO << "ReaderWriterSCALE( \"" << fileName << "\" )" << std::endl;
 
         // strip the pseudo-loader extension
         std::string tmpName = osgDB::getNameLessExtension( fileName );
@@ -130,12 +130,12 @@ public:
 
         if( subFileName.empty())
         {
-            osg::notify(osg::WARN) << "Missing subfilename for " EXTENSION_NAME " pseudo-loader" << std::endl;
+            OSG_WARN << "Missing subfilename for " EXTENSION_NAME " pseudo-loader" << std::endl;
             return ReadResult::FILE_NOT_HANDLED;
         }
 
-        osg::notify(osg::INFO) << " params = \"" << params << "\"" << std::endl;
-        osg::notify(osg::INFO) << " subFileName = \"" << subFileName << "\"" << std::endl;
+        OSG_INFO << " params = \"" << params << "\"" << std::endl;
+        OSG_INFO << " subFileName = \"" << subFileName << "\"" << std::endl;
 
         float sx, sy, sz;
         int count = sscanf( params.c_str(), "%f,%f,%f", &sx, &sy, &sz );
@@ -147,7 +147,7 @@ public:
         }
         else if( count != 3 )
         {
-            osg::notify(osg::WARN) << "Bad parameters for " EXTENSION_NAME " pseudo-loader: \"" << params << "\"" << std::endl;
+            OSG_WARN << "Bad parameters for " EXTENSION_NAME " pseudo-loader: \"" << params << "\"" << std::endl;
             return ReadResult::FILE_NOT_HANDLED;
         }
 
@@ -156,7 +156,7 @@ public:
         if( !node )
         {
             // propagate the read failure upwards
-            osg::notify(osg::WARN) << "Subfile \"" << subFileName << "\" could not be loaded" << std::endl;
+            OSG_WARN << "Subfile \"" << subFileName << "\" could not be loaded" << std::endl;
             return ReadResult::FILE_NOT_HANDLED;
         }
 
@@ -165,10 +165,12 @@ public:
         xform->setMatrix( osg::Matrix::scale( sx, sy, sz ) );
         xform->addChild( node );
 
-        // turn on GL_NORMALIZE to prevent problems with scaled normals
-        osg::StateSet* ss = xform->getOrCreateStateSet();
-        ss->setMode( GL_NORMALIZE, osg::StateAttribute::ON );
-
+        #ifndef OSG_GLES2_AVAILABLE
+            // turn on GL_NORMALIZE to prevent problems with scaled normals
+            osg::StateSet* ss = xform->getOrCreateStateSet();
+            ss->setMode( GL_NORMALIZE, osg::StateAttribute::ON );
+        #endif
+        
         return xform;
     }
 };

@@ -1,7 +1,7 @@
 // -*-c++-*-
 
 /*
- * $Id: mesh.cpp 7747 2007-12-24 15:19:52Z robert $
+ * $Id: mesh.cpp 11746 2010-09-09 10:09:31Z robert $
  *
  * Loader for DirectX .x files.
  * Copyright (c)2002-2006 Ulrich Hertlein <u.hertlein@sandbox.de>
@@ -146,7 +146,7 @@ bool Mesh::generateNormals(float /*creaseAngle*/)
                 }
             }
 
-        //osg::notify(osg::INFO) << "vertex " << vi << " used by " << polyCount << " faces\n";
+        //OSG_INFO << "vertex " << vi << " used by " << polyCount << " faces\n";
         if (polyCount > 1) {
             float polyCountRecip = 1.0f / (float) polyCount;
             normal.x *= polyCountRecip;
@@ -168,7 +168,7 @@ bool Mesh::generateNormals(float /*creaseAngle*/)
 }
 
 // Parse 'Mesh'
-void Mesh::parseMesh(ifstream& fin)
+void Mesh::parseMesh(std::istream& fin)
 {
     char buf[256];
     vector<string> token;
@@ -207,7 +207,7 @@ void Mesh::parseMesh(ifstream& fin)
 
             if (nVertices != _vertices.size())
             {
-                osg::notify(osg::WARN) << "DirectX loader: Error reading vertices; " << _vertices.size() << " instead of " << nVertices << endl;
+                OSG_WARN << "DirectX loader: Error reading vertices; " << _vertices.size() << " instead of " << nVertices << endl;
             }
         }
         else if (nFaces == 0) {
@@ -217,16 +217,16 @@ void Mesh::parseMesh(ifstream& fin)
 
             if (nFaces != _faces.size())
             {
-                osg::notify(osg::WARN) << "DirectX loader: Error reading mesh; " << _faces.size() << " instead of " << nFaces << endl;
+                OSG_WARN << "DirectX loader: Error reading mesh; " << _faces.size() << " instead of " << nFaces << endl;
             }
         }
         else
-            osg::notify(osg::INFO) << "!!! " << buf << endl;
+            OSG_INFO << "!!! " << buf << endl;
     }
 }
 
 // Parse 'MeshMaterialList'
-void Mesh::parseMeshMaterialList(ifstream& fin)
+void Mesh::parseMeshMaterialList(std::istream& fin)
 {
     char buf[256];
     vector<string> token;
@@ -244,7 +244,20 @@ void Mesh::parseMeshMaterialList(ifstream& fin)
 
         // check for "{ <material name> }" for a
         // material which was declared globally 
-        Material * material = _obj->findMaterial(token[0]);
+        string materialName = token[0];
+        // could be given as "{ someName }" which more than 1 tokens
+        if (materialName == "{" && token.size()>1)
+        {
+            materialName = token[1];
+        }
+        // or could be given as "{someName}" which would be in token[0]
+        else if (materialName.size() > 2 && materialName[0] == '{' && materialName[materialName.size()-1] == '}')
+        {
+            // remove curly brackets
+            materialName = materialName.substr(1, materialName.size()-2);
+        }
+        Material * material = _obj->findMaterial(materialName);
+
         if (material)
         {
             _materialList->material.push_back(*material);
@@ -281,19 +294,19 @@ void Mesh::parseMeshMaterialList(ifstream& fin)
 
             if (nFaceIndices != _materialList->faceIndices.size())
             {
-                osg::notify(osg::WARN) << "DirectX loader: Error reading face indices; " << nFaceIndices << " instead of " << _materialList->faceIndices.size() << endl;
+                OSG_WARN << "DirectX loader: Error reading face indices; " << nFaceIndices << " instead of " << _materialList->faceIndices.size() << endl;
             }
         }
     }
 
     if (nMaterials != _materialList->material.size())
     {
-        osg::notify(osg::WARN) << "DirectX loader: Error reading material list; " << nMaterials << " instead of " << _materialList->material.size() << endl;
+        OSG_WARN << "DirectX loader: Error reading material list; " << nMaterials << " instead of " << _materialList->material.size() << endl;
     }
 }
 
 // Parse 'MeshNormals'
-void Mesh::parseMeshNormals(ifstream& fin)
+void Mesh::parseMeshNormals(std::istream& fin)
 {
     char buf[256];
     vector<string> token;
@@ -322,7 +335,7 @@ void Mesh::parseMeshNormals(ifstream& fin)
 
             if (nNormals != _normals->normals.size())
             {
-                osg::notify(osg::WARN) << "DirectX loader: Error reading normals; " << nNormals << " instead of " << _normals->normals.size() << endl;
+                OSG_WARN << "DirectX loader: Error reading normals; " << nNormals << " instead of " << _normals->normals.size() << endl;
             }
 
 #define NORMALIZE_NORMALS
@@ -338,14 +351,14 @@ void Mesh::parseMeshNormals(ifstream& fin)
 
             if (nFaceNormals != _normals->faceNormals.size())
             {
-                osg::notify(osg::WARN) << "DirectX loader: Error reading face normals; " << nFaceNormals << " instead of " << _normals->faceNormals.size() << endl;
+                OSG_WARN << "DirectX loader: Error reading face normals; " << nFaceNormals << " instead of " << _normals->faceNormals.size() << endl;
             }
         }
     }
 }
 
 // Read 'MeshTextureCoords'
-void Mesh::readMeshTexCoords(ifstream& fin)
+void Mesh::readMeshTexCoords(std::istream& fin)
 {
     char buf[256];
     vector<string> token;
@@ -374,7 +387,7 @@ void Mesh::readMeshTexCoords(ifstream& fin)
 
         if (nTextureCoords != _textureCoords->size())
         {
-            osg::notify(osg::INFO) << "DirectX loader: Error reading texcoords; " << _textureCoords->size() << " instead of " << nTextureCoords << endl;
+            OSG_INFO << "DirectX loader: Error reading texcoords; " << _textureCoords->size() << " instead of " << nTextureCoords << endl;
             delete _textureCoords;
             _textureCoords = 0;
         }

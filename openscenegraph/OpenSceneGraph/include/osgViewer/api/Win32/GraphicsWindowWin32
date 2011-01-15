@@ -20,16 +20,12 @@
 #define OSGVIEWER_GRAPHICSWINDOWWIN32 1
 
 #include <osgViewer/GraphicsWindow>
-
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT    0x0500
-#endif
-#include <windows.h>
+#include <osgViewer/api/Win32/GraphicsHandleWin32>
 
 namespace osgViewer
 {
 
-class OSGVIEWER_EXPORT GraphicsWindowWin32 : public osgViewer::GraphicsWindow
+class OSGVIEWER_EXPORT GraphicsWindowWin32 : public osgViewer::GraphicsWindow, public osgViewer::GraphicsHandleWin32
 {
     public:
 
@@ -90,34 +86,34 @@ class OSGVIEWER_EXPORT GraphicsWindowWin32 : public osgViewer::GraphicsWindow
         
         /** Set mouse cursor to a specific shape.*/
         virtual void setCursor(MouseCursor cursor);
-        
+
+        /** Set sync-to-vblank. */
+        virtual void setSyncToVBlank(bool on);
+
         /** Handle a native (Win32) windowing event as received from the system */
         virtual LRESULT handleNativeWindowingEvent( HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam );
         
         /** WindowData is used to pass in the Win32 window handle attached the GraphicsContext::Traits structure.*/
         struct WindowData : public osg::Referenced
         {
-            WindowData(HWND window):
-                _hwnd(window) {}
+            WindowData(HWND window, bool installEventHandler = true):
+                _hwnd(window), _installEventHandler(installEventHandler) {}
                 
             HWND    _hwnd;
+            bool   _installEventHandler;
         };
-
-        /** Get native window.*/        
-        HWND getHWND() const { return _hwnd; }
-
-        HDC getHDC() const { return _hdc; }
-
-        /** Get native OpenGL graphics context.*/        
-        HGLRC getWGLContext() const { return _hglrc; }
         
     protected:
     
         void init();
+
+        void registerWindow();
+        void unregisterWindow();
         
         bool registerWindowProcedure();
         bool unregisterWindowProcedure();
         
+        HGLRC createContextImplementation();
         bool createWindow();
         bool setWindow( HWND handle );
         
@@ -143,11 +139,10 @@ class OSGVIEWER_EXPORT GraphicsWindowWin32 : public osgViewer::GraphicsWindow
                 
         void transformMouseXY(float& x, float& y);
         
+        void setCursorImpl(MouseCursor cursor);
+
         HCURSOR getOrCreateCursor(MouseCursor mouseShape);
         
-        HWND            _hwnd;
-        HDC             _hdc;
-        HGLRC           _hglrc;
         HCURSOR         _currentCursor;
         
         WNDPROC         _windowProcedure;

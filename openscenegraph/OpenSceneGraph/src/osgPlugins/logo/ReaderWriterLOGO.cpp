@@ -39,6 +39,15 @@ class Logos: public osg::Drawable
             {
                 Logos *logos = dynamic_cast <Logos *>(drawable);
                 osgUtil::CullVisitor *cv = dynamic_cast<osgUtil::CullVisitor *>(visitor);
+                if (!cv) return true;
+
+                unsigned int contextID = cv->getState()!=0 ? cv->getState()->getContextID() : 0;
+                if(contextID != logos->getContextID())
+                {
+                    // logo not appropiate for window assigned to the cull visitor so cull it.
+                    return true;
+                }
+
                 if( logos != NULL && cv != NULL )
                 {
                     osg::Viewport *vp = cv->getViewport();
@@ -86,6 +95,8 @@ class Logos: public osg::Drawable
 
         virtual void drawImplementation(osg::RenderInfo& renderInfo) const
         {
+        #if !defined(OSG_GLES1_AVAILABLE) && !defined(OSG_GLES2_AVAILABLE) && !defined(OSG_GL3_AVAILABLE)
+
             if( renderInfo.getContextID() != _contextID ) 
                 return;
 
@@ -155,20 +166,29 @@ class Logos: public osg::Drawable
             glPopMatrix();
             glMatrixMode( GL_PROJECTION );
             glPopMatrix();
-            glMatrixMode( GL_MODELVIEW );
+            glMatrixMode( GL_MODELVIEW );            
+        #else
+            OSG_NOTICE<<"Warning: Logos::drawImplementation(..) not supported."<<std::endl;
+        #endif
         }
 
         void addLogo( RelativePosition pos, std::string name )
         {
             osg::ref_ptr<osg::Image> image = osgDB::readRefImageFile( name.c_str() );
             if( image.valid())
-                _logos[pos].push_back( image ); 
+            {
+                _logos[pos].push_back( image );
+            }
             else
-                osg::notify(osg::WARN)<< "Logos::addLogo image file not found : " << name << ".\n";
+            {
+                OSG_WARN<< "Logos::addLogo image file not found : " << name << ".\n";
+            }
         }
 
         osg::Viewport *getViewport() { return _viewport.get(); }
+
         void setContextID( unsigned int id ) { _contextID = id; }
+        unsigned int getContextID() { return _contextID; }
 
         bool hasLogos()
         {
@@ -215,11 +235,11 @@ class LOGOReaderWriter : public osgDB::ReaderWriter
             if (fileName.empty()) 
                 return ReadResult::FILE_NOT_FOUND;
 
-            osg::notify(osg::INFO)<< "ReaderWriterLOGO::readNode( "<<fileName.c_str()<<" )\n";
+            OSG_INFO<< "ReaderWriterLOGO::readNode( "<<fileName.c_str()<<" )\n";
 
             std::string filePath = osgDB::getFilePath(fileName);
             if (!filePath.empty()) {
-                osg::notify(osg::DEBUG_INFO)<< "Adding : " << filePath << " to the file data path\n";
+                OSG_DEBUG<< "Adding : " << filePath << " to the file data path\n";
                 osgDB::getDataFilePathList().push_back(filePath);
             }
 
@@ -264,13 +284,13 @@ class LOGOReaderWriter : public osgDB::ReaderWriter
                     int tn;
                     if( (fscanf( fp, "%d", &tn )) != 1 )
                     {
-                        osg::notify(osg::WARN) << "Error... Camera requires an integer argument\n";
+                        OSG_WARN << "Error... Camera requires an integer argument\n";
                         break;
                     }
                     
                     if (tn < 0)
                     {
-                        osg::notify(osg::WARN) << "Error... Camera requires an positive or null value argument\n";
+                        OSG_WARN << "Error... Camera requires an positive or null value argument\n";
                         break;
                     }
                     

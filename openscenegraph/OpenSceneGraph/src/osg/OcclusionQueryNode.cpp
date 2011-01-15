@@ -48,6 +48,8 @@ static OcclusionQueryBufferedExtensions s_OQ_bufferedExtensions;
 //   of these classes existed in their own separate header and
 //   source files.)
 
+namespace osg
+{
 
 // Create and return a StateSet appropriate for performing an occlusion
 //   query test (disable lighting, texture mapping, etc). Probably some
@@ -109,68 +111,11 @@ initOQDebugState()
     return debugState;
 }
 
-
-// TestResult -- stores (per context) results of an occlusion query
-//   test performed by QueryGeometry. An OcclusionQueryNode has a
-//   Geode owning a single QueryGeometry that
-//   draws the occlusion query geometry. QueryGeometry keeps a
-//   TestResult per context to store the result/status of each query.
-// Accessed during the cull and draw traversals.
-class TestResult : public osg::Referenced
-{
-public:
-    TestResult() : _init( false ), _id( 0 ), _contextID( 0 ), _active( false ), _numPixels( 0 ) {}
-    ~TestResult() {}
-
-    bool _init;
-
-    // Query ID for this context.
-    GLuint _id;
-    // Context ID owning this query ID.
-    unsigned int _contextID;
-
-    // Set to true when a query gets issued and set to
-    //   false when the result is retrieved.
-    mutable bool _active;
-
-    // Result of last query.
-    GLint _numPixels;
-};
-
-// QueryGeometry -- A Drawable that performs an occlusion query,
-//   using its geometric data as the query geometry.
-class QueryGeometry : public osg::Geometry
-{
-public:
-    QueryGeometry( const std::string& oqnName=std::string("") );
-    ~QueryGeometry();
-
-    void reset();
-
-    // TBD implement copy constructor
-
-    virtual void drawImplementation( osg::RenderInfo& renderInfo ) const;
-
-    unsigned int getNumPixels( const osg::Camera* cam );
-
-
-    void releaseGLObjects( osg::State* state = 0 );
-    static void deleteQueryObject( unsigned int contextID, GLuint handle );
-    static void flushDeletedQueryObjects( unsigned int contextID, double currentTime, double& availableTime );
-    static void discardDeletedQueryObjects( unsigned int contextID );
-    
-protected:
-    typedef std::map< const osg::Camera*, TestResult > ResultMap;
-    mutable ResultMap _results;
-    mutable OpenThreads::Mutex _mapMutex;
-
-    // Needed for debug only
-    std::string _oqnName;
-};
+}
 
 struct RetrieveQueriesCallback : public osg::Camera::DrawCallback
 {
-    typedef std::vector<TestResult*> ResultsVector;
+    typedef std::vector<osg::TestResult*> ResultsVector;
     ResultsVector _results;
 
     RetrieveQueriesCallback( osg::Drawable::Extensions* ext=NULL )
@@ -206,11 +151,11 @@ struct RetrieveQueriesCallback : public osg::Camera::DrawCallback
             //   SceneView-based apps. Rely on the creating code to have passed
             //   in a valid Extensions pointer, and hope it's valid for any
             //   context that might be current.
-            osg::notify( osg::DEBUG_INFO ) << "osgOQ: RQCB: Using fallback path to obtain Extensions pointer." << std::endl;
+            OSG_DEBUG << "osgOQ: RQCB: Using fallback path to obtain Extensions pointer." << std::endl;
             ext = _extensionsFallback;
             if (!ext)
             {
-                osg::notify( osg::FATAL ) << "osgOQ: RQCB: Extensions pointer fallback is NULL." << std::endl;
+                OSG_FATAL << "osgOQ: RQCB: Extensions pointer fallback is NULL." << std::endl;
                 return;
             }
         }
@@ -218,7 +163,7 @@ struct RetrieveQueriesCallback : public osg::Camera::DrawCallback
         ResultsVector::const_iterator it = _results.begin();
         while (it != _results.end())
         {
-            TestResult* tr = const_cast<TestResult*>( *it );
+            osg::TestResult* tr = const_cast<osg::TestResult*>( *it );
 
             if (!tr->_active || !tr->_init)
             {
@@ -231,7 +176,7 @@ struct RetrieveQueriesCallback : public osg::Camera::DrawCallback
                 continue;
             }
 
-            osg::notify( osg::DEBUG_INFO ) <<
+            OSG_DEBUG <<
                 "osgOQ: RQCB: Retrieving..." << std::endl;
 
 #ifdef FORCE_QUERY_RESULT_AVAILABLE_BEFORE_RETRIEVAL
@@ -253,7 +198,7 @@ struct RetrieveQueriesCallback : public osg::Camera::DrawCallback
 
             ext->glGetQueryObjectiv( tr->_id, GL_QUERY_RESULT, &(tr->_numPixels) );
             if (tr->_numPixels < 0)
-                osg::notify( osg::WARN ) << "osgOQ: RQCB: " <<
+                OSG_WARN << "osgOQ: RQCB: " <<
                 "glGetQueryObjectiv returned negative value (" << tr->_numPixels << ")." << std::endl;
 
             // Either retrieve last frame's results, or ignore it because the
@@ -265,7 +210,7 @@ struct RetrieveQueriesCallback : public osg::Camera::DrawCallback
         }
 
         elapsedTime = timer.delta_s(start_tick,timer.tick());
-        osg::notify( osg::INFO ) << "osgOQ: RQCB: " << "Retrieved " << count <<
+        OSG_INFO << "osgOQ: RQCB: " << "Retrieved " << count <<
             " queries in " << elapsedTime << " seconds." << std::endl;
     }
 
@@ -274,7 +219,7 @@ struct RetrieveQueriesCallback : public osg::Camera::DrawCallback
         _results.clear();
     }
 
-    void add( TestResult* tr )
+    void add( osg::TestResult* tr )
     {
         _results.push_back( tr );
     }
@@ -303,7 +248,7 @@ struct ClearQueriesCallback : public osg::Camera::DrawCallback
     {
         if (!_rqcb)
         {
-            osg::notify( osg::FATAL ) << "osgOQ: CQCB: Invalid RQCB." << std::endl;
+            OSG_FATAL << "osgOQ: CQCB: Invalid RQCB." << std::endl;
             return;
         }
         _rqcb->reset();
@@ -321,6 +266,10 @@ typedef osg::buffered_object< QueryObjectList > DeletedQueryObjectCache;
 
 static OpenThreads::Mutex s_mutex_deletedQueryObjectCache;
 static DeletedQueryObjectCache s_deletedQueryObjectCache;
+
+namespace osg
+{
+
 
 QueryGeometry::QueryGeometry( const std::string& oqnName )
   : _oqnName( oqnName )
@@ -384,7 +333,7 @@ QueryGeometry::drawImplementation( osg::RenderInfo& renderInfo ) const
         RetrieveQueriesCallback* >( cam->getPostDrawCallback() );
     if (!rqcb)
     {
-        osg::notify( osg::FATAL ) << "osgOQ: QG: Invalid RQCB." << std::endl;
+        OSG_FATAL << "osgOQ: QG: Invalid RQCB." << std::endl;
         return;
     }
     rqcb->add( tr );
@@ -398,7 +347,7 @@ QueryGeometry::drawImplementation( osg::RenderInfo& renderInfo ) const
         tr->_init = true;
     }
 
-    osg::notify( osg::DEBUG_INFO ) <<
+    OSG_DEBUG <<
         "osgOQ: QG: Querying for: " << _oqnName << std::endl;
 
     ext->glBeginQuery( GL_SAMPLES_PASSED_ARB, tr->_id );
@@ -407,7 +356,7 @@ QueryGeometry::drawImplementation( osg::RenderInfo& renderInfo ) const
     tr->_active = true;
 
 
-    osg::notify( osg::DEBUG_INFO ) <<
+    OSG_DEBUG <<
         "osgOQ: QG. OQNName: " << _oqnName <<
         ", Ctx: " << contextID <<
         ", ID: " << tr->_id << std::endl;
@@ -415,8 +364,9 @@ QueryGeometry::drawImplementation( osg::RenderInfo& renderInfo ) const
     {
         GLenum err;
         if ((err = glGetError()) != GL_NO_ERROR)
-            osg::notify( osg::FATAL ) <<
-            "osgOQ: QG: OpenGL error: " << err << "." << std::endl;
+        {
+            OSG_FATAL << "osgOQ: QG: OpenGL error: " << err << "." << std::endl;
+        }
     }
 #endif
 
@@ -517,9 +467,6 @@ QueryGeometry::discardDeletedQueryObjects( unsigned int contextID )
 
 
 
-namespace osg
-{
-
 
 OcclusionQueryNode::OcclusionQueryNode()
   : _enabled( true ),
@@ -573,8 +520,7 @@ OcclusionQueryNode::getPassed( const osg::Camera* camera, osg::NodeVisitor& nv )
 
     if (_queryGeode->getDrawable( 0 ) == NULL)
     {
-        osg::notify( osg::FATAL ) <<
-            "osgOQ: OcclusionQueryNode: No QueryGeometry." << std::endl;
+        OSG_FATAL << "osgOQ: OcclusionQueryNode: No QueryGeometry." << std::endl;
         // Something's broke. Return true so we at least render correctly.
         return true;
     }
@@ -696,7 +642,7 @@ OcclusionQueryNode::setQueryStateSet( osg::StateSet* ss )
 {
     if (!_queryGeode)
     {
-        osg::notify( osg::WARN ) << "osgOQ: OcclusionQueryNode:: Invalid query support node." << std::endl;
+        OSG_WARN << "osgOQ: OcclusionQueryNode:: Invalid query support node." << std::endl;
         return;
     }
 
@@ -707,7 +653,7 @@ OcclusionQueryNode::getQueryStateSet()
 {
     if (!_queryGeode)
     {
-        osg::notify( osg::WARN ) << "osgOQ: OcclusionQueryNode:: Invalid query support node." << std::endl;
+        OSG_WARN << "osgOQ: OcclusionQueryNode:: Invalid query support node." << std::endl;
         return NULL;
     }
     return _queryGeode->getStateSet();
@@ -718,7 +664,7 @@ OcclusionQueryNode::getQueryStateSet() const
 {
     if (!_queryGeode)
     {
-        osg::notify( osg::WARN ) << "osgOQ: OcclusionQueryNode:: Invalid query support node." << std::endl;
+        OSG_WARN << "osgOQ: OcclusionQueryNode:: Invalid query support node." << std::endl;
         return NULL;
     }
     return _queryGeode->getStateSet();
@@ -729,7 +675,7 @@ OcclusionQueryNode::setDebugStateSet( osg::StateSet* ss )
 {
     if (!_debugGeode)
     {
-        osg::notify( osg::WARN ) << "osgOQ: OcclusionQueryNode:: Invalid debug support node." << std::endl;
+        OSG_WARN << "osgOQ: OcclusionQueryNode:: Invalid debug support node." << std::endl;
         return;
     }
     _debugGeode->setStateSet( ss );
@@ -740,7 +686,7 @@ OcclusionQueryNode::getDebugStateSet()
 {
     if (!_debugGeode.valid())
     {
-        osg::notify( osg::WARN ) << "osgOQ: OcclusionQueryNode:: Invalid debug support node." << std::endl;
+        OSG_WARN << "osgOQ: OcclusionQueryNode:: Invalid debug support node." << std::endl;
         return NULL;
     }
     return _debugGeode->getStateSet();
@@ -750,7 +696,7 @@ OcclusionQueryNode::getDebugStateSet() const
 {
     if (!_debugGeode.valid())
     {
-        osg::notify( osg::WARN ) << "osgOQ: OcclusionQueryNode:: Invalid debug support node." << std::endl;
+        OSG_WARN << "osgOQ: OcclusionQueryNode:: Invalid debug support node." << std::endl;
         return NULL;
     }
     return _debugGeode->getStateSet();

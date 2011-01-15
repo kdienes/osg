@@ -2,9 +2,10 @@
  * Copyright (C) 2003-2005 3Dlabs Inc. Ltd.
  * Copyright (C) 2004-2005 Nathan Cournia
  * Copyright (C) 2008 Zebra Imaging
+ * Copyright (C) 2010 VIRES Simulationstechnologie GmbH
  *
  * This application is open source and may be redistributed and/or modified   
- * freely and without restriction, both in commericial and non commericial
+ * freely and without restriction, both in commercial and non commercial
  * applications, as long as this copyright notice is maintained.
  * 
  * This application is distributed in the hope that it will be useful,
@@ -15,6 +16,7 @@
 
 /* file:        src/osg/Program.cpp
  * author:      Mike Weiblen 2008-01-19
+ *              Holger Helmich 2010-10-21
 */
 
 #include <list>
@@ -97,7 +99,8 @@ void Program::discardDeletedGlPrograms(unsigned int contextID)
 
 Program::Program() :
     _geometryVerticesOut(1), _geometryInputType(GL_TRIANGLES),
-    _geometryOutputType(GL_TRIANGLE_STRIP)
+    _geometryOutputType(GL_TRIANGLE_STRIP),
+    _patchVertices(3)
 {
 }
 
@@ -105,10 +108,28 @@ Program::Program() :
 Program::Program(const Program& rhs, const osg::CopyOp& copyop):
     osg::StateAttribute(rhs, copyop)
 {
-    osg::notify(osg::FATAL) << "how got here?" << std::endl;
+    for( unsigned int shaderIndex=0; shaderIndex < rhs.getNumShaders(); ++shaderIndex )
+    {
+        addShader( new osg::Shader( *rhs.getShader( shaderIndex ), copyop ) );
+    }
+
+    const osg::Program::AttribBindingList &abl = rhs.getAttribBindingList();
+    for( osg::Program::AttribBindingList::const_iterator attribute = abl.begin(); attribute != abl.end(); ++attribute )
+    {
+        addBindAttribLocation( attribute->first, attribute->second );
+    }
+
+    const osg::Program::FragDataBindingList &fdl = rhs.getFragDataBindingList();
+    for( osg::Program::FragDataBindingList::const_iterator fragdata = fdl.begin(); fragdata != fdl.end(); ++fragdata )
+    {
+        addBindFragDataLocation( fragdata->first, fragdata->second );
+    }
+
     _geometryVerticesOut = rhs._geometryVerticesOut;
     _geometryInputType = rhs._geometryInputType;
     _geometryOutputType = rhs._geometryOutputType;
+
+    _patchVertices = rhs._patchVertices;
 }
 
 
@@ -125,7 +146,7 @@ Program::~Program()
 int Program::compare(const osg::StateAttribute& sa) const
 {
     // check the types are equal and then create the rhs variable
-    // used by the COMPARE_StateAttribute_Parameter macro's below.
+    // used by the COMPARE_StateAttribute_Parameter macros below.
     COMPARE_StateAttribute_Types(Program,sa)
     
     if( _shaderList.size() < rhs._shaderList.size() ) return -1;
@@ -143,6 +164,9 @@ int Program::compare(const osg::StateAttribute& sa) const
     if( _geometryOutputType < rhs._geometryOutputType ) return -1;
     if( rhs._geometryOutputType < _geometryOutputType ) return 1;
 
+    if( _patchVertices < rhs._patchVertices ) return -1;
+    if( rhs._patchVertices < _patchVertices ) return 1;
+
     ShaderList::const_iterator litr=_shaderList.begin();
     ShaderList::const_iterator ritr=rhs._shaderList.begin();
     for(;
@@ -153,7 +177,7 @@ int Program::compare(const osg::StateAttribute& sa) const
         if (result!=0) return result;
     }
 
-    return 0; // passed all the above comparison macro's, must be equal.
+    return 0; // passed all the above comparison macros, must be equal.
 }
 
 
@@ -165,10 +189,10 @@ void Program::compileGLObjects( osg::State& state ) const
 
     for( unsigned int i=0; i < _shaderList.size(); ++i )
     {
-        _shaderList[i]->compileShader( contextID );
+        _shaderList[i]->compileShader( state );
     }
 
-    getPCP( contextID )->linkProgram();
+    getPCP( contextID )->linkProgram(state);
 }
 
 void Program::setThreadSafeRefUnref(bool threadSafe)
@@ -283,12 +307,45 @@ void Program::setParameter( GLenum pname, GLint value )
             break;
         case GL_GEOMETRY_OUTPUT_TYPE_EXT:
             _geometryOutputType = value;
-            dirtyProgram();    // needed?
+            //dirtyProgram();    // needed?
+            break;
+        case GL_PATCH_VERTICES:
+            _patchVertices = value;
+            dirtyProgram();
             break;
         default:
-            osg::notify(osg::WARN) << "setParameter invalid param " << pname << std::endl;
+            OSG_WARN << "setParameter invalid param " << pname << std::endl;
             break;
     }
+}
+
+void Program::setParameterfv( GLenum pname, const GLfloat* value )
+{
+    switch( pname )
+    {
+      // todo tessellation default level
+        case GL_PATCH_DEFAULT_INNER_LEVEL:
+            break;
+        case GL_PATCH_DEFAULT_OUTER_LEVEL:
+            break;
+        default:
+            OSG_WARN << "setParameter invalid param " << pname << std::endl;
+            break;
+    }
+}
+
+const GLfloat* Program::getParameterfv( GLenum pname ) const
+{
+    switch( pname )
+    {
+      ;
+      // todo tessellation default level
+      //        case GL_PATCH_DEFAULT_INNER_LEVEL: return _patchDefaultInnerLevel;
+      //        case GL_PATCH_DEFAULT_OUTER_LEVEL: return _patchDefaultOuterLevel;
+
+    }
+    OSG_WARN << "getParameter invalid param " << pname << std::endl;
+    return 0;
 }
 
 GLint Program::getParameter( GLenum pname ) const
@@ -298,8 +355,9 @@ GLint Program::getParameter( GLenum pname ) const
         case GL_GEOMETRY_VERTICES_OUT_EXT: return _geometryVerticesOut;
         case GL_GEOMETRY_INPUT_TYPE_EXT:   return _geometryInputType;
         case GL_GEOMETRY_OUTPUT_TYPE_EXT:  return _geometryOutputType;
+        case GL_PATCH_VERTICES:            return _patchVertices; 
     }
-    osg::notify(osg::WARN) << "getParameter invalid param " << pname << std::endl;
+    OSG_WARN << "getParameter invalid param " << pname << std::endl;
     return 0;
 }
 
@@ -327,6 +385,21 @@ void Program::removeBindFragDataLocation( const std::string& name )
     _fragDataBindingList.erase(name);
     dirtyProgram();
 }
+
+void Program::addBindUniformBlock(const std::string& name, GLuint index)
+{
+    _uniformBlockBindingList[name] = index;
+    dirtyProgram(); // XXX
+}
+
+void Program::removeBindUniformBlock(const std::string& name)
+{
+    _uniformBlockBindingList.erase(name);
+    dirtyProgram(); // XXX
+}
+
+
+
 
 void Program::apply( osg::State& state ) const
 {
@@ -394,7 +467,7 @@ bool Program::getGlProgramInfoLog(unsigned int contextID, std::string& log) cons
     return getPCP( contextID )->getInfoLog( log );
 }
 
-const Program::ActiveVarInfoMap& Program::getActiveUniforms(unsigned int contextID) const
+const Program::ActiveUniformMap& Program::getActiveUniforms(unsigned int contextID) const
 {
     return getPCP( contextID )->getActiveUniforms();
 }
@@ -432,16 +505,15 @@ void Program::PerContextProgram::requestLink()
 }
 
 
-void Program::PerContextProgram::linkProgram()
+void Program::PerContextProgram::linkProgram(osg::State& state)
 {
     if( ! _needsLink ) return;
     _needsLink = false;
 
-    osg::notify(osg::INFO)
-        << "Linking osg::Program \"" << _program->getName() << "\""
-        << " id=" << _glProgramHandle
-        << " contextID=" << _contextID
-        <<  std::endl;
+    OSG_INFO << "Linking osg::Program \"" << _program->getName() << "\""
+             << " id=" << _glProgramHandle
+             << " contextID=" << _contextID
+             <<  std::endl;
 
     if (_extensions->isGeometryShader4Supported())
     {
@@ -449,14 +521,20 @@ void Program::PerContextProgram::linkProgram()
         _extensions->glProgramParameteri( _glProgramHandle, GL_GEOMETRY_INPUT_TYPE_EXT, _program->_geometryInputType );
         _extensions->glProgramParameteri( _glProgramHandle, GL_GEOMETRY_OUTPUT_TYPE_EXT, _program->_geometryOutputType );
     }
-    
+
+    if (_extensions->areTessellationShadersSupported() )
+    {
+        _extensions->glPatchParameteri( GL_PATCH_VERTICES, _program->_patchVertices );
+        // todo: add default tessellation level
+    }
+
     // Detach removed shaders
     for( unsigned int i=0; i < _shadersToDetach.size(); ++i )
     {
         _shadersToDetach[i]->detachShader( _contextID, _glProgramHandle );
     }
     _shadersToDetach.clear();
-    
+
     // Attach new shaders
     for( unsigned int i=0; i < _shadersToAttach.size(); ++i )
     {
@@ -469,11 +547,25 @@ void Program::PerContextProgram::linkProgram()
     _lastAppliedUniformList.clear();
 
     // set any explicit vertex attribute bindings
-    const AttribBindingList& bindlist = _program->getAttribBindingList();
-    for( AttribBindingList::const_iterator itr = bindlist.begin();
-        itr != bindlist.end(); ++itr )
+    const AttribBindingList& programBindlist = _program->getAttribBindingList();
+    for( AttribBindingList::const_iterator itr = programBindlist.begin();
+        itr != programBindlist.end(); ++itr )
     {
-        _extensions->glBindAttribLocation( _glProgramHandle, itr->second, itr->first.c_str() );
+        OSG_INFO<<"Program's vertex attrib binding "<<itr->second<<", "<<itr->first<<std::endl;
+        _extensions->glBindAttribLocation( _glProgramHandle, itr->second, reinterpret_cast<const GLchar*>(itr->first.c_str()) );
+    }
+
+    // set any explicit vertex attribute bindings that are set up via osg::State, such as the vertex arrays
+    //  that have been aliase to vertex attrib arrays
+    if (state.getUseVertexAttributeAliasing())
+    {
+        const AttribBindingList& stateBindlist = state.getAttributeBindingList();
+        for( AttribBindingList::const_iterator itr = stateBindlist.begin();
+            itr != stateBindlist.end(); ++itr )
+        {
+            OSG_INFO<<"State's vertex attrib binding "<<itr->second<<", "<<itr->first<<std::endl;
+            _extensions->glBindAttribLocation( _glProgramHandle, itr->second, reinterpret_cast<const GLchar*>(itr->first.c_str()) );
+        }
     }
 
     // set any explicit frag data bindings
@@ -481,7 +573,7 @@ void Program::PerContextProgram::linkProgram()
     for( FragDataBindingList::const_iterator itr = fdbindlist.begin();
         itr != fdbindlist.end(); ++itr )
     {
-        _extensions->glBindFragDataLocation( _glProgramHandle, itr->second, itr->first.c_str() );
+        _extensions->glBindFragDataLocation( _glProgramHandle, itr->second, reinterpret_cast<const GLchar*>(itr->first.c_str()) );
     }
 
     // link the glProgram
@@ -491,12 +583,12 @@ void Program::PerContextProgram::linkProgram()
     _isLinked = (linked == GL_TRUE);
     if( ! _isLinked )
     {
-        osg::notify(osg::WARN) << "glLinkProgram \""<< _program->getName() << "\" FAILED" << std::endl;
+        OSG_WARN << "glLinkProgram \""<< _program->getName() << "\" FAILED" << std::endl;
 
         std::string infoLog;
         if( getInfoLog(infoLog) )
         {
-            osg::notify(osg::WARN) << "Program \""<< _program->getName() << "\" " 
+            OSG_WARN << "Program \""<< _program->getName() << "\" " 
                                       "infolog:\n" << infoLog << std::endl;
         }
         
@@ -507,9 +599,61 @@ void Program::PerContextProgram::linkProgram()
         std::string infoLog;
         if( getInfoLog(infoLog) )
         {
-            osg::notify(osg::INFO) << "Program \""<< _program->getName() << "\" "<<
+            OSG_INFO << "Program \""<< _program->getName() << "\" "<<
                                       "link succeded, infolog:\n" << infoLog << std::endl;
         }
+    }
+
+    if (_extensions->isUniformBufferObjectSupported())
+    {
+        GLuint activeUniformBlocks = 0;
+        GLsizei maxBlockNameLen = 0;
+        _extensions->glGetProgramiv(_glProgramHandle, GL_ACTIVE_UNIFORM_BLOCKS,
+                                    reinterpret_cast<GLint*>(&activeUniformBlocks));
+        _extensions->glGetProgramiv(_glProgramHandle,
+                                    GL_ACTIVE_UNIFORM_MAX_LENGTH,
+                                    &maxBlockNameLen);
+        if (maxBlockNameLen > 0)
+        {
+            std::vector<GLchar> blockName(maxBlockNameLen);
+            for (GLuint i = 0; i < activeUniformBlocks; ++i)
+            {
+                GLsizei len = 0;
+                GLint blockSize = 0;
+                _extensions->glGetActiveUniformBlockName(_glProgramHandle, i,
+                                                         maxBlockNameLen, &len,
+                                                         &blockName[0]);
+                _extensions->glGetActiveUniformBlockiv(_glProgramHandle, i,
+                                                       GL_UNIFORM_BLOCK_DATA_SIZE,
+                                                       &blockSize);
+                _uniformBlockMap
+                    .insert(UniformBlockMap::value_type(&blockName[0],
+                                                        UniformBlockInfo(i, blockSize)));
+            }
+        }
+        // Bind any uniform blocks
+        const UniformBlockBindingList& bindingList = _program->getUniformBlockBindingList();
+        for (UniformBlockMap::iterator itr = _uniformBlockMap.begin(),
+                 end = _uniformBlockMap.end();
+             itr != end;
+            ++itr)
+        {
+            const std::string& blockName = itr->first;
+            UniformBlockBindingList::const_iterator bitr = bindingList.find(blockName);
+            if (bitr != bindingList.end())
+            {
+                _extensions->glUniformBlockBinding(_glProgramHandle, itr->second._index,
+                                                   bitr->second);
+                OSG_INFO << "uniform block " << blockName << ": " << itr->second._index
+                         << " binding: " << bitr->second << "\n";
+            }
+            else
+            {
+                OSG_WARN << "uniform block " << blockName << " has no binding.\n";
+            }
+
+        }
+
     }
 
     // build _uniformInfoMap
@@ -532,10 +676,9 @@ void Program::PerContextProgram::linkProgram()
             
             if( loc != -1 )
             {
-                _uniformInfoMap[name] = ActiveVarInfo(loc,type,size);
+                _uniformInfoMap[Uniform::getNameID(reinterpret_cast<const char*>(name))] = ActiveVarInfo(loc,type,size);
 
-                osg::notify(osg::INFO)
-                    << "\tUniform \"" << name << "\""
+                OSG_INFO << "\tUniform \"" << name << "\""
                     << " loc="<< loc
                     << " size="<< size
                     << " type=" << Uniform::getTypename((Uniform::Type)type)
@@ -564,18 +707,17 @@ void Program::PerContextProgram::linkProgram()
             
             if( loc != -1 )
             {
-                _attribInfoMap[name] = ActiveVarInfo(loc,type,size);
+                _attribInfoMap[reinterpret_cast<char*>(name)] = ActiveVarInfo(loc,type,size);
 
-                osg::notify(osg::INFO)
-                    << "\tAttrib \"" << name << "\""
-                    << " loc=" << loc
-                    << " size=" << size
-                    << std::endl;
+                OSG_INFO << "\tAttrib \"" << name << "\""
+                         << " loc=" << loc
+                         << " size=" << size
+                         << std::endl;
             }
         }
         delete [] name;
     }
-    osg::notify(osg::INFO) << std::endl;
+    OSG_INFO << std::endl;
 }
 
 bool Program::PerContextProgram::validateProgram()
@@ -586,17 +728,16 @@ bool Program::PerContextProgram::validateProgram()
     if( validated == GL_TRUE)
         return true;
 
-    osg::notify(osg::INFO)
-        << "glValidateProgram FAILED \"" << _program->getName() << "\""
-        << " id=" << _glProgramHandle
-        << " contextID=" << _contextID
-        <<  std::endl;
+    OSG_WARN << "glValidateProgram FAILED \"" << _program->getName() << "\""
+             << " id=" << _glProgramHandle
+             << " contextID=" << _contextID
+             <<  std::endl;
 
     std::string infoLog;
     if( getInfoLog(infoLog) )
-        osg::notify(osg::INFO) << "infolog:\n" << infoLog << std::endl;
+        OSG_WARN << "infolog:\n" << infoLog << std::endl;
 
-    osg::notify(osg::INFO) << std::endl;
+    OSG_WARN << std::endl;
     
     return false;
 }

@@ -114,6 +114,17 @@ osg::BoundingBox MinimalShadowMap::ViewData::computeShadowReceivingCoarseBounds(
     return osg::BoundingBox();
 }
 
+void MinimalShadowMap::ViewData::aimShadowCastingCamera( 
+                                        const osg::BoundingSphere &bs,
+                                        const osg::Light *light,
+                                        const osg::Vec4 &lightPos,
+                                        const osg::Vec3 &lightDir,
+                                        const osg::Vec3 &lightUpVector 
+                                        /* by default = osg::Vec3( 0, 1 0 )*/ )
+{
+    BaseClass::ViewData::aimShadowCastingCamera( bs, light, lightPos, lightDir, lightUpVector );
+}
+
 void MinimalShadowMap::ViewData::aimShadowCastingCamera
  ( const osg::Light *light, const osg::Vec4 &lightPos,
    const osg::Vec3 &lightDir, const osg::Vec3 &lightUp )
@@ -148,8 +159,7 @@ void MinimalShadowMap::ViewData::aimShadowCastingCamera
 #endif
     } 
 
-    BaseClass::ViewData::aimShadowCastingCamera
-                                    ( bb, light, lightPos, lightDir, up );
+    aimShadowCastingCamera( osg::BoundingSphere( bb ), light, lightPos, lightDir, up );
 
     // Intersect scene Receiving Shadow Polytope with shadow camera frustum
     // Important for cases where Scene extend beyond shadow camera frustum
@@ -158,7 +168,7 @@ void MinimalShadowMap::ViewData::aimShadowCastingCamera
     osg::Matrix mvp = _camera->getViewMatrix() * _camera->getProjectionMatrix();
     cutScenePolytope( osg::Matrix::inverse( mvp ),  mvp );
 
-    MinimalShadowMap::ViewData::frameShadowCastingCamera
+    frameShadowCastingCamera
             ( _cv->getRenderStage()->getCamera(), _camera.get(), 0 );
 }
 
@@ -180,7 +190,13 @@ void MinimalShadowMap::ViewData::frameShadowCastingCamera
 
         osg::Matrix transform = osg::Matrix::inverse( mvp );
 
-        osg::Vec3d normal = osg::Matrix::transform3x3( osg::Vec3d(0,0,-1), transform );
+        // Code below was working only for directional lights ie when projection was ortho
+        // osg::Vec3d normal = osg::Matrix::transform3x3( osg::Vec3d( 0,0,-1)., transfrom );
+
+        // So I replaced it with safer code working with spot lights as well
+        osg::Vec3d normal = 
+            osg::Vec3d(0,0,-1) * transform - osg::Vec3d(0,0,1) * transform;
+
         normal.normalize();
         _sceneReceivingShadowPolytope.extrude( normal * *_minLightMarginPtr );
 
@@ -191,7 +207,7 @@ void MinimalShadowMap::ViewData::frameShadowCastingCamera
         // space (-1..1), it may get "twisted" by precisely adjusted shadow cam 
         // projection in second pass. 
 
-        if ( pass == 0 ) 
+        if ( pass == 0 && _frameShadowCastingCameraPasses > 1 )
         { // Make sure extruded polytope does not extend beyond light frustum
             osg::Polytope lightFrustum;
             lightFrustum.setToUnitFrustum();
@@ -255,7 +271,7 @@ void MinimalShadowMap::ViewData::cullShadowReceivingScene( )
             _cv->clampProjectionMatrix( _clampedProjection, n, f );
     } 
 
-    // Aditionally clamp far plane if shadows are don't need to be cast as 
+    // Aditionally clamp far plane if shadows don't need to be cast as 
     // far as main projection far plane 
     if( 0 < *_maxFarPlanePtr )
         clampProjection( _clampedProjection, 0.f, *_maxFarPlanePtr );
@@ -288,6 +304,8 @@ void MinimalShadowMap::ViewData::init( ThisClass *st, osgUtil::CullVisitor *cv )
     _modellingSpaceToWorldPtr = &st->_modellingSpaceToWorld;
     _minLightMarginPtr        = &st->_minLightMargin;
     _maxFarPlanePtr           = &st->_maxFarPlane;
+
+    _frameShadowCastingCameraPasses = 1;
 }
 
 void MinimalShadowMap::ViewData::cutScenePolytope
@@ -422,9 +440,7 @@ void MinimalShadowMap::ViewData::clampProjection
     if( !perspective && !projection.getOrtho( l, r, b, t, n, f ) )
     {
         // What to do here ?
-        osg::notify( osg::WARN ) 
-            << "MinimalShadowMap::clampProjectionFarPlane failed - non standard matrix"
-            << std::endl;
+        OSG_WARN << "MinimalShadowMap::clampProjectionFarPlane failed - non standard matrix" << std::endl;
 
     } else if( n < new_near || new_far < f ) {
 
@@ -466,9 +482,7 @@ void MinimalShadowMap::ViewData::extendProjection
   bool frustum = projection.getFrustum( l,r,b,t,n,f );
 
   if( !frustum && !projection.getOrtho( l,r,b,t,n,f ) ) {
-    osg::notify( osg::WARN )
-        << " Awkward projection matrix. ComputeExtendedProjection failed"
-        << std::endl;
+    OSG_WARN << " Awkward projection matrix. ComputeExtendedProjection failed" << std::endl;
     return;
   }
 

@@ -1,20 +1,10 @@
 
 # FIXME: For OS X, need flag for Framework or dylib
-IF   (DYNAMIC_OPENSCENEGRAPH)
+IF(DYNAMIC_OPENSCENEGRAPH)
     ADD_DEFINITIONS(-DOSGUTIL_LIBRARY)
-ELSE (DYNAMIC_OPENSCENEGRAPH)
+ELSE()
     ADD_DEFINITIONS(-DOSG_LIBRARY_STATIC)
-ENDIF(DYNAMIC_OPENSCENEGRAPH)
-
-
-#
-# MSFBO resolve blit to depth buffer control.
-#
-OPTION(OSG_MULTISAMPLE_FBO_RESOLVE_IGNORES_DEPTH "Set to ON to ignore depth when resolving multisampled FBO rendering. This is a workaround for a crash on OS X with NVIDIA driver 1.5.49." OFF)
-IF(OSG_MULTISAMPLE_FBO_RESOLVE_IGNORES_DEPTH)
-    ADD_DEFINITIONS(-DOSG_MULTISAMPLE_FBO_RESOLVE_IGNORES_DEPTH)
-ENDIF(OSG_MULTISAMPLE_FBO_RESOLVE_IGNORES_DEPTH)
-
+ENDIF()
 
 SET(LIB_NAME osgUtil)
 SET(HEADER_PATH ${OpenSceneGraph_SOURCE_DIR}/include/${LIB_NAME})
@@ -32,12 +22,15 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/HighlightMapGenerator
     ${HEADER_PATH}/IntersectionVisitor
     ${HEADER_PATH}/IntersectVisitor
+    ${HEADER_PATH}/IncrementalCompileOperation
     ${HEADER_PATH}/LineSegmentIntersector
+    ${HEADER_PATH}/MeshOptimizers
     ${HEADER_PATH}/OperationArrayFunctor
     ${HEADER_PATH}/Optimizer
     ${HEADER_PATH}/PlaneIntersector
     ${HEADER_PATH}/PolytopeIntersector
     ${HEADER_PATH}/PositionalStateContainer
+    ${HEADER_PATH}/PrintVisitor
     ${HEADER_PATH}/ReflectionMapGenerator
     ${HEADER_PATH}/RenderBin
     ${HEADER_PATH}/RenderLeaf
@@ -45,6 +38,7 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/ReversePrimitiveFunctor
     ${HEADER_PATH}/SceneView
     ${HEADER_PATH}/SceneGraphBuilder
+    ${HEADER_PATH}/ShaderGen
     ${HEADER_PATH}/Simplifier
     ${HEADER_PATH}/SmoothingVisitor
     ${HEADER_PATH}/StateGraph
@@ -72,16 +66,20 @@ ADD_LIBRARY(${LIB_NAME}
     HighlightMapGenerator.cpp
     IntersectionVisitor.cpp
     IntersectVisitor.cpp
+    IncrementalCompileOperation.cpp
     LineSegmentIntersector.cpp
+    MeshOptimizers.cpp
     Optimizer.cpp
     PlaneIntersector.cpp
     PolytopeIntersector.cpp
     PositionalStateContainer.cpp
+    PrintVisitor.cpp
     RenderBin.cpp
     RenderLeaf.cpp
     RenderStage.cpp
     ReversePrimitiveFunctor.cpp
     SceneView.cpp
+    ShaderGen.cpp
     Simplifier.cpp
     SmoothingVisitor.cpp
     SceneGraphBuilder.cpp
@@ -91,14 +89,26 @@ ADD_LIBRARY(${LIB_NAME}
     Tessellator.cpp
     TransformAttributeFunctor.cpp
     TransformCallback.cpp
-    TriStrip_graph_array.h
-    TriStrip_heap_array.h
-    TriStrip_tri_stripper.cpp
-    TriStrip_tri_stripper.h
+
+    tristripper/include/detail/graph_array.h
+    tristripper/include/detail/types.h
+    tristripper/include/detail/cache_simulator.h
+    tristripper/include/detail/policy.h
+    tristripper/include/detail/heap_array.h
+    tristripper/include/detail/connectivity_graph.h
+    tristripper/include/tri_stripper.h
+    tristripper/include/public_types.h
+    tristripper/src/tri_stripper.cpp
+    tristripper/src/policy.cpp
+    tristripper/src/connectivity_graph.cpp
+
     TriStripVisitor.cpp
     UpdateVisitor.cpp
     Version.cpp
+    ${OPENSCENEGRAPH_VERSIONINFO_RC}
 )
+
+INCLUDE_DIRECTORIES("tristripper/include")
 
 LINK_INTERNAL(${LIB_NAME}     
     osg

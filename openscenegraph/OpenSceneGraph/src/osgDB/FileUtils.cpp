@@ -26,6 +26,7 @@ typedef char TCHAR;
 
 #if defined(WIN32) && !defined(__CYGWIN__)
     #include <io.h>
+    #define WINBASE_DECLARE_GET_MODULE_HANDLE_EX
     #include <windows.h>
     #include <winbase.h>
     #include <sys/types.h>
@@ -46,6 +47,24 @@ typedef char TCHAR;
     // I'm not sure how we would handle this in raw Darwin
     // without the AvailablilityMacros.
     #include <AvailabilityMacros.h>
+
+    //>OSG_IOS
+    //IOS includes
+    #include "TargetConditionals.h"
+    
+    #if (TARGET_OS_IPHONE) 
+        #include <Availability.h>
+        // workaround a bug which appears when compiling for SDK < 4.0 and for the simulator
+        #ifdef __IPHONE_4_0 && (__IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_4_0)
+            #define stat64 stat
+        #else 
+            #if !TARGET_IPHONE_SIMULATOR
+                #define stat64 stat
+            #endif
+        #endif
+    #endif
+    //<OSG_IPHONE
+
     // 10.5 defines stat64 so we can't use this #define
     // By default, MAC_OS_X_VERSION_MAX_ALLOWED is set to the latest
     // system the headers know about. So I will use this as the control
@@ -95,6 +114,7 @@ namespace osgDB
 #define OSGDB_FILENAME_TO_STRING(s) osgDB::convertUTF16toUTF8(s)
 #define OSGDB_FILENAME_TEXT(x) L ## x
 #define OSGDB_WINDOWS_FUNCT(x) x ## W
+#define OSGDB_WINDOWS_FUNCT_STRING(x) #x "W"
 typedef wchar_t filenamechar;
 typedef std::wstring filenamestring;
 #else
@@ -102,6 +122,7 @@ typedef std::wstring filenamestring;
 #define OSGDB_FILENAME_TO_STRING(s) s
 #define OSGDB_FILENAME_TEXT(x) x
 #define OSGDB_WINDOWS_FUNCT(x) x ## A
+#define OSGDB_WINDOWS_FUNCT_STRING(x) #x "A"
 typedef char filenamechar;
 typedef std::string filenamestring;
 #endif
@@ -120,7 +141,7 @@ bool osgDB::makeDirectory( const std::string &path )
 {
     if (path.empty())
     {
-        osg::notify(osg::DEBUG_INFO) << "osgDB::makeDirectory(): cannot create an empty directory" << std::endl;
+        OSG_DEBUG << "osgDB::makeDirectory(): cannot create an empty directory" << std::endl;
         return false;
     }
     
@@ -135,7 +156,7 @@ bool osgDB::makeDirectory( const std::string &path )
             return true;
         else
         {
-            osg::notify(osg::DEBUG_INFO) << "osgDB::makeDirectory(): "  << 
+            OSG_DEBUG << "osgDB::makeDirectory(): "  <<
                     path << " already exists and is not a directory!" << std::endl;
             return false;
         }
@@ -162,7 +183,7 @@ bool osgDB::makeDirectory( const std::string &path )
                     break;
  
                 default:
-                    osg::notify(osg::DEBUG_INFO) << "osgDB::makeDirectory(): "  << strerror(errno) << std::endl;
+                    OSG_DEBUG << "osgDB::makeDirectory(): "  << strerror(errno) << std::endl;
                     return false;
             }
         }
@@ -187,7 +208,7 @@ bool osgDB::makeDirectory( const std::string &path )
         if( mkdir( dir.c_str(), 0755 )< 0 )
 #endif
         {
-            osg::notify(osg::DEBUG_INFO) << "osgDB::makeDirectory(): "  << strerror(errno) << std::endl;
+            OSG_DEBUG << "osgDB::makeDirectory(): "  << strerror(errno) << std::endl;
             return false;
         } 
         paths.pop();
@@ -221,7 +242,7 @@ bool osgDB::setCurrentWorkingDirectory( const std::string &newCurrentWorkingDire
 {
     if (newCurrentWorkingDirectory.empty())
     {
-        osg::notify(osg::DEBUG_INFO) << "osgDB::setCurrentWorkingDirectory(): called with empty string." << std::endl;
+        OSG_DEBUG << "osgDB::setCurrentWorkingDirectory(): called with empty string." << std::endl;
         return false;
     }
     
@@ -303,15 +324,15 @@ std::string osgDB::findFileInPath(const std::string& filename, const FilePathLis
         itr!=filepath.end();
         ++itr)
     {
-        osg::notify(osg::DEBUG_INFO) << "itr='" <<*itr<< "'\n";
+        OSG_DEBUG << "itr='" <<*itr<< "'\n";
         std::string path = itr->empty() ? filename : concatPaths(*itr, filename);
         
         path = getRealPath(path);
 
-        osg::notify(osg::DEBUG_INFO) << "FindFileInPath() : trying " << path << " ...\n";
+        OSG_DEBUG << "FindFileInPath() : trying " << path << " ...\n";
         if(fileExists(path)) 
         {
-            osg::notify(osg::DEBUG_INFO) << "FindFileInPath() : USING " << path << "\n";
+            OSG_DEBUG << "FindFileInPath() : USING " << path << "\n";
             return path;
         }
 #ifndef WIN32 
@@ -331,91 +352,17 @@ std::string osgDB::findFileInPath(const std::string& filename, const FilePathLis
 
 std::string osgDB::findDataFile(const std::string& filename,CaseSensitivity caseSensitivity)
 {
-    return findDataFile(filename,static_cast<ReaderWriter::Options*>(0),caseSensitivity);
+    return findDataFile(filename,static_cast<Options*>(0),caseSensitivity);
 }
 
-OSGDB_EXPORT std::string osgDB::findDataFile(const std::string& filename,const ReaderWriter::Options* options, CaseSensitivity caseSensitivity)
+OSGDB_EXPORT std::string osgDB::findDataFile(const std::string& filename,const Options* options, CaseSensitivity caseSensitivity)
 {
-    if (filename.empty()) return filename;
-    
-    if(fileExists(filename)) 
-    {
-        osg::notify(osg::DEBUG_INFO) << "FindFileInPath(" << filename << "): returning " << filename << std::endl;
-        return filename;
-    }
-
-    std::string fileFound;
-    
-    if (options && !options->getDatabasePathList().empty())
-    {
-        fileFound = findFileInPath(filename, options->getDatabasePathList(), caseSensitivity);
-        if (!fileFound.empty()) return fileFound;
-    }
-
-    const FilePathList& filepath = Registry::instance()->getDataFilePathList();
-    if (!filepath.empty())
-    {
-        fileFound = findFileInPath(filename, filepath,caseSensitivity);
-        if (!fileFound.empty()) return fileFound;
-    }
-    
-
-    // if a directory is included in the filename, get just the (simple) filename itself and try that
-    std::string simpleFileName = getSimpleFileName(filename);
-    if (simpleFileName!=filename)
-    {
-
-        if(fileExists(simpleFileName)) 
-        {
-            osg::notify(osg::DEBUG_INFO) << "FindFileInPath(" << filename << "): returning " << filename << std::endl;
-            return simpleFileName;
-        }
-
-        if (options && !options->getDatabasePathList().empty())
-        {
-            fileFound = findFileInPath(simpleFileName, options->getDatabasePathList(), caseSensitivity);
-            if (!fileFound.empty()) return fileFound;
-        }
-
-        if (!filepath.empty())
-        {
-            fileFound = findFileInPath(simpleFileName, filepath,caseSensitivity);
-            if (!fileFound.empty()) return fileFound;
-        }
-
-    }
-
-    // return empty string.
-    return std::string();
+    return Registry::instance()->findDataFile(filename, options, caseSensitivity);
 }
 
 std::string osgDB::findLibraryFile(const std::string& filename,CaseSensitivity caseSensitivity)
 {
-    if (filename.empty()) 
-        return filename; 
-
-    const FilePathList& filepath = Registry::instance()->getLibraryFilePathList();
-
-    std::string fileFound = findFileInPath(filename, filepath,caseSensitivity);
-    if (!fileFound.empty()) 
-        return fileFound;
-
-    if(fileExists(filename)) 
-    {
-        osg::notify(osg::DEBUG_INFO) << "FindFileInPath(" << filename << "): returning " << filename << std::endl;
-        return filename;
-    }
-
-    // if a directory is included in the filename, get just the (simple) filename itself and try that
-    std::string simpleFileName = getSimpleFileName(filename);
-    if (simpleFileName!=filename)
-    {
-        std::string fileFound = findFileInPath(simpleFileName, filepath,caseSensitivity);
-        if (!fileFound.empty()) return fileFound;
-    }
-
-    // failed return empty string.
-    return std::string();
+    return Registry::instance()->findLibraryFile(filename, osgDB::Registry::instance()->getOptions(), caseSensitivity);
 }
 
 std::string osgDB::findFileInDirectory(const std::string& fileName,const std::string& dirName,CaseSensitivity caseSensitivity)
@@ -460,7 +407,7 @@ std::string osgDB::findFileInDirectory(const std::string& fileName,const std::st
         realFileName = getSimpleFileName(fileName);
     }
 
-    osg::notify(osg::DEBUG_INFO) << "findFileInDirectory() : looking for " << realFileName << " in " << realDirName << "...\n";
+    OSG_DEBUG << "findFileInDirectory() : looking for " << realFileName << " in " << realDirName << "...\n";
 
     if (realDirName.empty())
     {
@@ -601,6 +548,108 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
 #endif // unix getDirectoryContexts
 
 
+osgDB::DirectoryContents osgDB::expandWildcardsInFilename(const std::string& filename)
+{
+    osgDB::DirectoryContents contents;
+
+    std::string dir = osgDB::getFilePath(filename);
+    std::string filenameOnly = filename.substr(dir.length(), std::string::npos);
+    std::string left = filenameOnly.substr(0, filenameOnly.find('*'));
+    std::string right = filenameOnly.substr(filenameOnly.find('*')+1, std::string::npos);
+
+    if (dir.empty())
+        dir = osgDB::getCurrentWorkingDirectory();
+
+    osgDB::DirectoryContents dirContents = osgDB::getDirectoryContents(dir);
+    for (unsigned int i = 0; i < dirContents.size(); ++i)
+    {
+        std::string filenameInDir = dirContents[i];
+
+        if (filenameInDir == "." ||
+            filenameInDir == "..")
+        {
+            continue;
+        }
+
+        if ((filenameInDir.find(left) == 0 || left.empty()) &&
+            (filenameInDir.find(right) == filenameInDir.length() - right.length() || right.empty()))
+        {
+            contents.push_back( dir + osgDB::getNativePathSeparator() + filenameInDir );
+        }
+    }
+
+    return contents;
+}
+
+osgDB::FileOpResult::Value osgDB::copyFile(const std::string & source, const std::string & destination)
+{
+    if (source.empty() || destination.empty())
+    {
+        OSG_INFO << "copyFile(): Empty file name." << std::endl;
+        return FileOpResult::BAD_ARGUMENT;
+    }
+
+    // Check if source and destination are the same
+    if (source == destination || osgDB::getRealPath(source) == osgDB::getRealPath(destination))
+    {
+        OSG_INFO << "copyFile(): Source and destination point to the same file: source=" << source << ", destination=" << destination << std::endl;
+        return FileOpResult::SOURCE_EQUALS_DESTINATION;
+    }
+
+    // Check if source file exists
+    if (!osgDB::fileExists(source))
+    {
+        OSG_INFO << "copyFile(): Source file does not exist: " << source << std::endl;
+        return FileOpResult::SOURCE_MISSING;
+    }
+
+    // Open source file
+    osgDB::ifstream fin(source.c_str(), std::ios::in | std::ios::binary);
+    if (!fin)
+    {
+        OSG_NOTICE << "copyFile(): Can't read source file: " << source << std::endl;
+        return FileOpResult::SOURCE_NOT_OPENED;        // Return success since it's not an output error.
+    }
+
+    // Ensure the directory exists or else the FBX SDK will fail
+    if (!osgDB::makeDirectoryForFile(destination))
+    {
+        OSG_INFO << "Can't create directory for file '" << destination << "'. Copy may fail creating the file." << std::endl;
+    }
+
+    // Open destination file
+    osgDB::ofstream fout(destination.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!fout)
+    {
+        OSG_NOTICE << "copyFile(): Can't write destination file: " << destination << std::endl;
+        return FileOpResult::DESTINATION_NOT_OPENED;
+    }
+
+    // Copy file
+    const unsigned int BUFFER_SIZE = 10240;
+    osgDB::ifstream::char_type buffer[BUFFER_SIZE];
+    for(; fin.good() && fout.good() && !fin.eof(); )
+    {
+        fin.read(buffer, BUFFER_SIZE);
+        fout.write(buffer, fin.gcount());
+    }
+
+    if (!fout.good())
+    {
+        OSG_NOTICE << "copyFile(): Error writing destination file: " << destination << std::endl;
+        return FileOpResult::WRITE_ERROR;
+    }
+
+    if (!fin.eof())
+    {
+        OSG_NOTICE << "copyFile(): Error reading source file: " << source << std::endl;
+        return FileOpResult::READ_ERROR;
+    }
+
+    return FileOpResult::OK;
+}
+
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Implementation of appendPlatformSpecificLibraryFilePaths(..)
@@ -689,11 +738,50 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
         }
         else
         {
-            osg::notify(osg::WARN) << "Could not get application directory "
+            OSG_WARN << "Could not get application directory "
                 "using Win32 API. It will not be searched." << std::endl;
         }
 
-        //   2. The system directory. Use the GetSystemDirectory function to 
+        //   2. The directory that the dll that contains this function is in.
+        // For static builds, this will be the executable directory.
+
+        #if defined(_MSC_VER)
+            // Requires use of the GetModuleHandleEx() function which is available only on Windows XP or higher.
+            // In order to allow execution on older versions, we load the function dynamically from the library and
+            // use it only if it's available.
+            OSGDB_WINDOWS_FUNCT(PGET_MODULE_HANDLE_EX) pGetModuleHandleEx = reinterpret_cast<OSGDB_WINDOWS_FUNCT(PGET_MODULE_HANDLE_EX)>
+                (GetProcAddress( GetModuleHandleA("kernel32.dll"), OSGDB_WINDOWS_FUNCT_STRING(GetModuleHandleEx)));
+            if( pGetModuleHandleEx )
+            {
+                HMODULE thisModule = 0;
+                static filenamechar static_variable = 0;    // Variable that is located in DLL address space.
+
+                if( pGetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, &static_variable, &thisModule) )
+                {
+                    retval = OSGDB_WINDOWS_FUNCT(GetModuleFileName)(thisModule, path, size);
+                    if (retval != 0 && retval < size)
+                    {
+                        filenamestring pathstr(path);
+                        filenamestring dllDir(pathstr, 0,
+                                                pathstr.find_last_of(OSGDB_FILENAME_TEXT("\\/")));
+                        convertStringPathIntoFilePathList(OSGDB_FILENAME_TO_STRING(dllDir), filepath);
+                    }
+                    else
+                    {
+                        OSG_WARN << "Could not get dll directory "
+                            "using Win32 API. It will not be searched." << std::endl;
+                    }
+                    FreeLibrary(thisModule);
+                }
+                else
+                {
+                    OSG_WARN << "Could not get dll module handle "
+                        "using Win32 API. Dll directory will not be searched." << std::endl;
+                }
+            }
+        #endif
+
+        //   3. The system directory. Use the GetSystemDirectory function to 
         //      get the path of this directory.
         filenamechar systemDir[(UINT)size];
         retval = OSGDB_WINDOWS_FUNCT(GetSystemDirectory)(systemDir, (UINT)size);
@@ -705,15 +793,15 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
         }
         else
         {
-            osg::notify(osg::WARN) << "Could not get system directory using "
+            OSG_WARN << "Could not get system directory using "
                 "Win32 API, using default directory." << std::endl;
             convertStringPathIntoFilePathList("C:\\Windows\\System32", 
                                               filepath);
         }
 
-        //   3. The 16-bit system directory. There is no function that obtains 
+        //   4. The 16-bit system directory. There is no function that obtains 
         //      the path of this directory, but it is searched.
-        //   4. The Windows directory. Use the GetWindowsDirectory function to 
+        //   5. The Windows directory. Use the GetWindowsDirectory function to 
         //      get the path of this directory.
         filenamechar windowsDir[(UINT)size];
         retval = OSGDB_WINDOWS_FUNCT(GetWindowsDirectory)(windowsDir, (UINT)size);
@@ -726,17 +814,17 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
         }
         else
         {
-            osg::notify(osg::WARN) << "Could not get Windows directory using "
+            OSG_WARN << "Could not get Windows directory using "
                 "Win32 API, using default directory." << std::endl;
             convertStringPathIntoFilePathList("C:\\Windows", filepath);
             convertStringPathIntoFilePathList("C:\\Windows\\System", filepath);
         }
 
 
-        //   5. The current directory.
+        //   6. The current directory.
         convertStringPathIntoFilePathList(".", filepath);
 
-        //   6. The directories that are listed in the PATH environment 
+        //   7. The directories that are listed in the PATH environment 
         //      variable. Note that this does not include the per-application 
         //      path specified by the App Paths registry key.
         filenamechar* ptr;
@@ -757,9 +845,11 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
     }
     
 #elif defined(__APPLE__)
-
-    // #define COMPILE_COCOA_VERSION
-    #define COMPILE_CARBON_VERSION
+#if (TARGET_OS_IPHONE)
+    #define COMPILE_COCOA_VERSION
+#else
+     #define COMPILE_CARBON_VERSION
+#endif
     // WARNING: Cocoa version is currently untested.
     #ifdef COMPILE_COCOA_VERSION
         #include <Foundation/Foundation.h>
@@ -990,7 +1080,7 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
         }
         else
         {
-            osg::notify( osg::DEBUG_INFO ) << "Couldn't find the Application Bundle" << std::endl;
+            OSG_NOTIFY( osg::DEBUG_INFO ) << "Couldn't find the Application Bundle" << std::endl;
         }
 
         // Next, check the User's Application Support folder
@@ -1005,13 +1095,13 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
                 CFRelease( url );
             }
             else
-                osg::notify( osg::DEBUG_INFO ) << "Couldn't create CFURLRef for User's application support Path" << std::endl;
+                OSG_NOTIFY( osg::DEBUG_INFO ) << "Couldn't create CFURLRef for User's application support Path" << std::endl;
 
             url = NULL;
         }
         else
         {
-            osg::notify( osg::DEBUG_INFO ) << "Couldn't find the User's Application Support Path" << std::endl;
+            OSG_NOTIFY( osg::DEBUG_INFO ) << "Couldn't find the User's Application Support Path" << std::endl;
         }
 
         // Next, check the Local System's Application Support Folder
@@ -1027,13 +1117,13 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
                 CFRelease( url );
             }
             else
-                osg::notify( osg::DEBUG_INFO ) << "Couldn't create CFURLRef for local System's ApplicationSupport Path" << std::endl;
+                OSG_NOTIFY( osg::DEBUG_INFO ) << "Couldn't create CFURLRef for local System's ApplicationSupport Path" << std::endl;
 
             url = NULL;
         }
         else
         {
-            osg::notify( osg::DEBUG_INFO ) << "Couldn't find the Local System's Application Support Path" << std::endl;
+            OSG_NOTIFY( osg::DEBUG_INFO ) << "Couldn't find the Local System's Application Support Path" << std::endl;
         }
 
         // Finally, check the Network Application Support Folder
@@ -1051,14 +1141,14 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
                 CFRelease( url );
             }
             else
-                osg::notify( osg::DEBUG_INFO ) << "Couldn't create CFURLRef for network Application Support Path" << std::endl;
+                OSG_NOTIFY( osg::DEBUG_INFO ) << "Couldn't create CFURLRef for network Application Support Path" << std::endl;
 
             url = NULL;
         }
         else
         {
         // had to comment out as it segfauls the OSX app otherwise
-            // osg::notify( osg::DEBUG_INFO ) << "Couldn't find the Network Application Support Path" << std::endl;
+            // OSG_NOTIFY( osg::DEBUG_INFO ) << "Couldn't find the Network Application Support Path" << std::endl;
         }
     }
     #else
@@ -1124,7 +1214,7 @@ static void appendInstallationLibraryFilePaths(osgDB::FilePathList& filepath)
         }
         else
         {
-            osg::notify( osg::DEBUG_INFO ) << "Couldn't find the Application Bundle." << std::endl;
+            OSG_NOTIFY( osg::DEBUG_INFO ) << "Couldn't find the Application Bundle." << std::endl;
         }
     }
 #else

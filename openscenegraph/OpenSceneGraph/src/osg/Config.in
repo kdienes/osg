@@ -1,4 +1,4 @@
-/* -*-c++-*- OpenSceneGraph - Copyright (C) 2008 Robert Osfield 
+/* -*-c++-*- OpenSceneGraph - Copyright (C) 2008-2009 Robert Osfield
  *
  * This library is open source and may be redistributed and/or modified under  
  * the terms of the OpenSceneGraph Public License (OSGPL) version 0.0 or 
@@ -23,6 +23,7 @@
 #ifndef OSG_CONFIG
 #define OSG_CONFIG 1
 
+#cmakedefine OSG_NOTIFY_DISABLED
 #cmakedefine OSG_USE_FLOAT_MATRIX
 #cmakedefine OSG_USE_FLOAT_PLANE
 #cmakedefine OSG_USE_FLOAT_BOUNDINGSPHERE
@@ -31,5 +32,16 @@
 #cmakedefine OSG_USE_UTF8_FILENAME
 #cmakedefine OSG_DISABLE_MSVC_WARNINGS
 
+#cmakedefine OSG_GL1_AVAILABLE
+#cmakedefine OSG_GL2_AVAILABLE
+#cmakedefine OSG_GL3_AVAILABLE
+#cmakedefine OSG_GLES1_AVAILABLE
+#cmakedefine OSG_GLES2_AVAILABLE
+#cmakedefine OSG_GL_LIBRARY_STATIC
+#cmakedefine OSG_GL_DISPLAYLISTS_AVAILABLE
+#cmakedefine OSG_GL_MATRICES_AVAILABLE
+#cmakedefine OSG_GL_VERTEX_FUNCS_AVAILABLE
+#cmakedefine OSG_GL_VERTEX_ARRAY_FUNCS_AVAILABLE
+#cmakedefine OSG_GL_FIXED_FUNCTION_AVAILABLE
 
 #endif

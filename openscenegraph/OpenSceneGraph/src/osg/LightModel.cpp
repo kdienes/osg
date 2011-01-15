@@ -12,8 +12,10 @@
 */
 #include <string.h>
 #include <string>
+
 #include <osg/GL>
 #include <osg/LightModel>
+#include <osg/Notify>
 
 using namespace osg;
 
@@ -48,6 +50,12 @@ LightModel::~LightModel()
 
 void LightModel::apply(State&) const
 {
+#ifdef OSG_GL_FIXED_FUNCTION_AVAILABLE
+
+    #ifdef OSG_GLES1_AVAILABLE
+    #define glLightModeli glLightModelx
+    #endif
+
     glLightModelfv(GL_LIGHT_MODEL_AMBIENT,_ambient.ptr());
 
     static bool s_separateSpecularSupported = strncmp((const char*)glGetString(GL_VERSION),"1.2",3)>=0;
@@ -63,7 +71,13 @@ void LightModel::apply(State&) const
         }
     }
     
+    #ifndef OSG_GLES1_AVAILABLE
     glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER,_localViewer);
+    #endif
+
     glLightModeli(GL_LIGHT_MODEL_TWO_SIDE,_twoSided);
+#else
+    OSG_NOTICE<<"Warning: LightModel::apply(State&) - not supported."<<std::endl;
+#endif
 }
 

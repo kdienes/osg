@@ -27,8 +27,8 @@ public:
 	void write(DataOutputStream* out);
 	void read(DataInputStream* in);
 
-        void writeTerrainTechnique(DataOutputStream* out, osgTerrain::TerrainTechnique* technique);
-        osgTerrain::TerrainTechnique* readTerrainTechnique(DataInputStream* out);
+        static void writeTerrainTechnique(DataOutputStream* out, osgTerrain::TerrainTechnique* technique);
+        static osgTerrain::TerrainTechnique* readTerrainTechnique(DataInputStream* out);
         
 };
 

@@ -43,7 +43,7 @@ void BlendColor::apply(State& state) const
                                         
     if (!extensions->isBlendColorSupported())
     {
-        notify(WARN)<<"Warning: BlendColor::apply(..) failed, BlendColor is not support by OpenGL driver."<<std::endl;
+        OSG_WARN<<"Warning: BlendColor::apply(..) failed, BlendColor is not support by OpenGL driver."<<std::endl;
         return;
     }
 
@@ -89,7 +89,8 @@ void BlendColor::Extensions::lowestCommonDenominator(const Extensions& rhs)
 
 void BlendColor::Extensions::setupGLExtensions(unsigned int contextID)
 {
-    _isBlendColorSupported = isGLExtensionSupported(contextID,"GL_EXT_blend_color") ||
+    _isBlendColorSupported = OSG_GLES2_FEATURES || OSG_GL3_FEATURES ||
+                             isGLExtensionSupported(contextID,"GL_EXT_blend_color") ||
                              strncmp((const char*)glGetString(GL_VERSION),"1.2",3)>=0;
 
     setGLExtensionFuncPtr(_glBlendColor, "glBlendColor", "glBlendColorEXT");
@@ -103,7 +104,7 @@ void BlendColor::Extensions::glBlendColor(GLclampf red , GLclampf green , GLclam
     }
     else
     {
-        notify(WARN)<<"Error: glBlendColor not supported by OpenGL driver"<<std::endl;
+        OSG_WARN<<"Error: glBlendColor not supported by OpenGL driver"<<std::endl;
     }
 }
 

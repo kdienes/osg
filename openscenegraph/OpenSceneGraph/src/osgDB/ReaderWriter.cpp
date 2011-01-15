@@ -12,7 +12,9 @@
 */
 
 #include <osgDB/ReaderWriter>
+#include <osgDB/Registry>
 #include <osgDB/FileNameUtils>
+#include <osgDB/FileUtils>
 #include <osgDB/Archive>
 
 using namespace osgDB;
@@ -47,6 +49,7 @@ bool ReaderWriter::acceptsExtension(const std::string& extension) const
 
 void ReaderWriter::supportsProtocol(const std::string& fmt, const std::string& description)
 {
+    Registry::instance()->registerProtocol(fmt);
     _supportedProtocols[convertToLowerCase(fmt)] = description;
 }
 
@@ -58,4 +61,65 @@ void ReaderWriter::supportsExtension(const std::string& fmt, const std::string& 
 void ReaderWriter::supportsOption(const std::string& fmt, const std::string& description)
 {
     _supportedOptions[fmt] = description;
+}
+
+ReaderWriter::Features ReaderWriter::supportedFeatures() const
+{
+    int features = FEATURE_NONE;
+    std::string dummyFilename;
+
+    if (readObject(dummyFilename,0).status()!=ReadResult::NOT_IMPLEMENTED) features |= FEATURE_READ_OBJECT;
+    if (readImage(dummyFilename,0).status()!=ReadResult::NOT_IMPLEMENTED) features |= FEATURE_READ_IMAGE;
+    if (readHeightField(dummyFilename,0).status()!=ReadResult::NOT_IMPLEMENTED) features |= FEATURE_READ_HEIGHT_FIELD;
+    if (readShader(dummyFilename,0).status()!=ReadResult::NOT_IMPLEMENTED) features |= FEATURE_READ_SHADER;
+    if (readNode(dummyFilename,0).status()!=ReadResult::NOT_IMPLEMENTED) features |= FEATURE_READ_NODE;
+
+    osg::ref_ptr<osg::Image> image = new osg::Image;
+    osg::ref_ptr<osg::HeightField> hf = new osg::HeightField;
+    osg::ref_ptr<osg::Shader> shader = new osg::Shader;
+    osg::ref_ptr<osg::Node> node = new osg::Node;
+
+    if (writeObject(*image, dummyFilename,0).status()!=WriteResult::NOT_IMPLEMENTED) features |= FEATURE_WRITE_OBJECT;
+    if (writeImage(*image,dummyFilename,0).status()!=WriteResult::NOT_IMPLEMENTED) features |= FEATURE_WRITE_IMAGE;
+    if (writeHeightField(*hf,dummyFilename,0).status()!=WriteResult::NOT_IMPLEMENTED) features |= FEATURE_WRITE_HEIGHT_FIELD;
+    if (writeShader(*shader,dummyFilename,0).status()!=WriteResult::NOT_IMPLEMENTED) features |= FEATURE_WRITE_SHADER;
+    if (writeNode(*node, dummyFilename,0).status()!=WriteResult::NOT_IMPLEMENTED) features |= FEATURE_WRITE_NODE;
+
+    return Features(features);
+}
+
+ReaderWriter::FeatureList ReaderWriter::featureAsString(ReaderWriter::Features feature)
+{
+    typedef struct {
+        ReaderWriter::Features feature;
+        const char *s;
+    } FeatureStringList;
+
+    FeatureStringList list[] = { 
+        { FEATURE_READ_OBJECT, "readObject" },
+        { FEATURE_READ_IMAGE,  "readImage" },        
+        { FEATURE_READ_HEIGHT_FIELD, "readHeightField" },
+        { FEATURE_READ_NODE, "readNode" },          
+        { FEATURE_READ_SHADER, "readShader" },        
+        { FEATURE_WRITE_OBJECT, "writeObject" },
+        { FEATURE_WRITE_IMAGE, "writeImage" },        
+        { FEATURE_WRITE_HEIGHT_FIELD, "writeHeightField" },
+        { FEATURE_WRITE_NODE, "writeNode" },         
+        { FEATURE_WRITE_SHADER, "writeShader" },
+        { FEATURE_NONE,0 }
+    };
+
+    FeatureList result; 
+    
+    for(FeatureStringList *p=list; p->feature != 0; p++)
+    {
+        if ((feature & p->feature) != 0)
+            result.push_back(p->s);
+    }
+    return result;
+}
+
+bool ReaderWriter::fileExists(const std::string& filename, const Options* /*options*/) const
+{
+    return ::osgDB::fileExists(filename);
 }

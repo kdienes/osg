@@ -16,6 +16,8 @@
 #include "PagedLOD.h"
 #include "Node.h"
 
+#include <osgDB/Options>
+
 using namespace ive;
 
 void PagedLOD::write(DataOutputStream* out)
@@ -29,12 +31,16 @@ void PagedLOD::write(DataOutputStream* out)
         static_cast<ive::Node*>(node)->write(out);
     }
     else
-        throw Exception("PagedLOD::write(): Could not cast this osg::PagedLOD to an osg::Node.");
+        out_THROW_EXCEPTION("PagedLOD::write(): Could not cast this osg::PagedLOD to an osg::Node.");
 
     out->writeString(getDatabasePath());
     out->writeFloat(getRadius());
     out->writeUInt(getNumChildrenThatCannotBeExpired());
 
+    if ( out->getVersion() >= VERSION_0041 )
+    {
+        out->writeBool(getDisableExternalChildrenPaging());
+    }
 
     unsigned int numChildrenToWriteOut = 0;
 
@@ -117,7 +123,7 @@ void PagedLOD::read(DataInputStream* in)
             ((ive::Node*)(node))->read(in);
         }
         else
-            throw Exception("PagedLOD::read(): Could not cast this osg::PagedLOD to an osg::Node.");
+            in_THROW_EXCEPTION("PagedLOD::read(): Could not cast this osg::PagedLOD to an osg::Node.");
 
 
         if ( in->getVersion() >= VERSION_0006 )
@@ -137,6 +143,11 @@ void PagedLOD::read(DataInputStream* in)
 
         setRadius(in->readFloat());
         setNumChildrenThatCannotBeExpired(in->readUInt());
+
+        if ( in->getVersion() >= VERSION_0041 )
+        {
+            setDisableExternalChildrenPaging(in->readBool());
+        }
 
 
         // Read groups properties.
@@ -192,6 +203,6 @@ void PagedLOD::read(DataInputStream* in)
         }
     }
     else{
-        throw Exception("LOD::read(): Expected LOD identification.");
+        in_THROW_EXCEPTION("LOD::read(): Expected LOD identification.");
     }
 }

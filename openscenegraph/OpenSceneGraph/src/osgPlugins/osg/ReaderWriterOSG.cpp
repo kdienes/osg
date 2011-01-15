@@ -3,6 +3,7 @@
 #include <osg/Image>
 #include <osg/Group>
 #include <osg/Notify>
+#include <osg/Version>
 
 #include <osgDB/FileNameUtils>
 #include <osgDB/FileUtils>
@@ -14,6 +15,8 @@
 using namespace osg;
 using namespace osgDB;
 
+
+#if 0
 // pull in symbols from individual .o's to enable the static build to work
 USE_DOTOSGWRAPPER(AlphaFunc)
 USE_DOTOSGWRAPPER(AnimationPath)
@@ -99,20 +102,55 @@ USE_DOTOSGWRAPPER(Transform)
 USE_DOTOSGWRAPPER(Uniform)
 USE_DOTOSGWRAPPER(VertexProgram)
 USE_DOTOSGWRAPPER(Viewport)
+#endif
 
 class OSGReaderWriter : public ReaderWriter
 {
     public:
-    
-        OSGReaderWriter()
+
+        mutable OpenThreads::Mutex _mutex;
+        mutable bool _wrappersLoaded;
+
+        OSGReaderWriter():
+            _wrappersLoaded(false)
         {
+
             supportsExtension("osg","OpenSceneGraph Ascii file format");
             supportsExtension("osgs","Psuedo OpenSceneGraph file loaded, with file encoded in filename string");
             supportsOption("precision","Set the floating point precision when writing out files");
             supportsOption("OutputTextureFiles","Write out the texture images to file");
+            supportsOption("includeExternalReferences","Export option");
+            supportsOption("writeExternalReferenceFiles","Export option");
+
         }
-    
+
         virtual const char* className() const { return "OSG Reader/Writer"; }
+
+        bool loadWrappers() const
+        {
+#ifndef OSG_LIBRARY_STATIC
+            if (_wrappersLoaded) return true;
+
+            OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_mutex);
+            if (_wrappersLoaded) return true;
+
+            std::string filename = osgDB::Registry::instance()->createLibraryNameForExtension("deprecated_osg");
+            if (osgDB::Registry::instance()->loadLibrary(filename)==osgDB::Registry::LOADED)
+            {
+                OSG_INFO<<"OSGReaderWriter wrappers loaded OK"<<std::endl;
+                _wrappersLoaded = true;
+                return true;
+            }
+            else
+            {
+                OSG_NOTICE<<"OSGReaderWriter wrappers failed to load"<<std::endl;
+                _wrappersLoaded = true;
+                return false;
+            }
+#else
+            return true;
+#endif
+        }
 
         virtual ReadResult readObject(const std::string& file, const Options* opt) const
         {
@@ -144,6 +182,8 @@ class OSGReaderWriter : public ReaderWriter
 
         virtual ReadResult readObject(std::istream& fin, const Options* options) const
         {
+            loadWrappers();
+
             fin.imbue(std::locale::classic());
 
             Input fr;
@@ -206,6 +246,8 @@ class OSGReaderWriter : public ReaderWriter
         
         virtual ReadResult readNode(std::istream& fin, const Options* options) const
         {
+            loadWrappers();
+
             fin.imbue(std::locale::classic());
 
             Input fr;
@@ -280,6 +322,8 @@ class OSGReaderWriter : public ReaderWriter
             Output fout(fileName.c_str());
             if (fout)
             {
+                loadWrappers();
+
                 fout.setOptions(options);
 
                 setPrecision(fout,options);
@@ -295,9 +339,10 @@ class OSGReaderWriter : public ReaderWriter
 
         virtual WriteResult writeObject(const Object& obj,std::ostream& fout, const osgDB::ReaderWriter::Options* options) const
         {
-
             if (fout)
             {
+                loadWrappers();
+
                 Output foutput;
                 foutput.setOptions(options);
 
@@ -320,10 +365,11 @@ class OSGReaderWriter : public ReaderWriter
             std::string ext = getFileExtension(fileName);
             if (!acceptsExtension(ext)) return WriteResult::FILE_NOT_HANDLED;
 
-
             Output fout(fileName.c_str());
             if (fout)
             {
+                loadWrappers();
+
                 fout.setOptions(options);
 
                 fout.imbue(std::locale::classic());
@@ -339,10 +385,10 @@ class OSGReaderWriter : public ReaderWriter
 
         virtual WriteResult writeNode(const Node& node, std::ostream& fout, const osgDB::ReaderWriter::Options* options) const
         {
-
-
             if (fout)
             {
+                loadWrappers();
+
                 Output foutput;
                 foutput.setOptions(options);
 

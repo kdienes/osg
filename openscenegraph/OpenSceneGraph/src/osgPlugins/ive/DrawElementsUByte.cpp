@@ -28,12 +28,12 @@ void DrawElementsUByte::write(DataOutputStream* out){
         ((ive::PrimitiveSet*)(prim))->write(out);
     }
     else
-        throw Exception("DrawElementsUByte::write(): Could not cast this osg::DrawElementsUByte to an osg::PrimitiveSet.");
+        out_THROW_EXCEPTION("DrawElementsUByte::write(): Could not cast this osg::DrawElementsUByte to an osg::PrimitiveSet.");
     // Write DrawElementsUByte's properties.
 
     // Write array length and its elements.
     out->writeInt(size());
-    out->writeCharArray((const char*)&front(), size() * CHARSIZE);
+    if (size()!=0) out->writeCharArray((const char*)&front(), size() * CHARSIZE);
 }
 
 void DrawElementsUByte::read(DataInputStream* in){
@@ -48,15 +48,15 @@ void DrawElementsUByte::read(DataInputStream* in){
             ((ive::PrimitiveSet*)(prim))->read(in);
         }
         else
-            throw Exception("DrawElementsUByte::read(): Could not cast this osg::DrawElementsUByte to an osg::PrimitiveSet.");
+            in_THROW_EXCEPTION("DrawElementsUByte::read(): Could not cast this osg::DrawElementsUByte to an osg::PrimitiveSet.");
 
         // Read array length and its elements.
         int size = in->readInt();
         resize(size);
-        in->readCharArray((char*)&front(), size * CHARSIZE);
+        if (size!=0) in->readCharArray((char*)&front(), size * CHARSIZE);
 
     }
     else{
-        throw Exception("DrawElementsUByte::read(): Expected DrawElementsUByte identification.");
+        in_THROW_EXCEPTION("DrawElementsUByte::read(): Expected DrawElementsUByte identification.");
     }
 }

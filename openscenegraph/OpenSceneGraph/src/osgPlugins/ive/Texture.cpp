@@ -28,7 +28,7 @@ void Texture::write(DataOutputStream* out){
         ((ive::Object*)(obj))->write(out);
     }
     else
-        throw Exception("Texture::write(): Could not cast this osg::Texture to an osg::Object.");
+        out_THROW_EXCEPTION("Texture::write(): Could not cast this osg::Texture to an osg::Object.");
 
     // Write Texture's properties.
     out->writeInt(_wrap_s);
@@ -62,6 +62,13 @@ void Texture::write(DataOutputStream* out){
         out->writeInt(_sourceFormat);
         out->writeInt(_sourceType);
     }
+
+    if( out->getVersion() >= VERSION_0043 )
+    {
+      out->writeBool( _use_shadow_comparison );
+      out->writeInt( _shadow_compare_func );
+      out->writeInt( _shadow_texture_mode );
+    }
 }
 
 void Texture::read(DataInputStream* in)
@@ -79,7 +86,7 @@ void Texture::read(DataInputStream* in)
             ((ive::Object*)(obj))->read(in);
         }
         else
-            throw Exception("Texture::read(): Could not cast this osg::Texture to an osg::Object.");
+            in_THROW_EXCEPTION("Texture::read(): Could not cast this osg::Texture to an osg::Object.");
 
         // Read properties
         _wrap_s = (osg::Texture::WrapMode)in->readInt();
@@ -112,9 +119,16 @@ void Texture::read(DataInputStream* in)
             _sourceFormat = in->readInt();
             _sourceType = in->readInt();
         }
+
+        if( in->getVersion() >= VERSION_0043 )
+        {
+          _use_shadow_comparison = in->readBool();
+          _shadow_compare_func = (osg::Texture::ShadowCompareFunc)in->readInt();
+          _shadow_texture_mode = (osg::Texture::ShadowTextureMode)in->readInt();
+        }
     }
     else
     {
-        throw Exception("Texture::read(): Expected Texture identification.");
+        in_THROW_EXCEPTION("Texture::read(): Expected Texture identification.");
     }
 }

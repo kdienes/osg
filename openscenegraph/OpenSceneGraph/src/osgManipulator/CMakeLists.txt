@@ -1,9 +1,9 @@
 
-IF   (DYNAMIC_OPENSCENEGRAPH)
+IF(DYNAMIC_OPENSCENEGRAPH)
     ADD_DEFINITIONS(-DOSGMANIPULATOR_LIBRARY)
-ELSE (DYNAMIC_OPENSCENEGRAPH)
+ELSE()
     ADD_DEFINITIONS(-DOSG_LIBRARY_STATIC)
-ENDIF(DYNAMIC_OPENSCENEGRAPH)
+ENDIF()
 
 SET(LIB_NAME osgManipulator)
 SET(HEADER_PATH ${OpenSceneGraph_SOURCE_DIR}/include/${LIB_NAME})
@@ -22,6 +22,7 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/ScaleAxisDragger
     ${HEADER_PATH}/Selection
     ${HEADER_PATH}/TabBoxDragger
+    ${HEADER_PATH}/TabBoxTrackballDragger
     ${HEADER_PATH}/TabPlaneDragger
     ${HEADER_PATH}/TabPlaneTrackballDragger
     ${HEADER_PATH}/TrackballDragger
@@ -38,7 +39,6 @@ ADD_LIBRARY(${LIB_NAME}
     ${LIB_PUBLIC_HEADERS}
     AntiSquish.cpp
     Command.cpp
-    CommandManager.cpp
     Constraint.cpp
     Dragger.cpp
     Projector.cpp
@@ -47,8 +47,8 @@ ADD_LIBRARY(${LIB_NAME}
     Scale1DDragger.cpp
     Scale2DDragger.cpp
     ScaleAxisDragger.cpp
-    Selection.cpp
     TabBoxDragger.cpp
+    TabBoxTrackballDragger.cpp
     TabPlaneDragger.cpp
     TabPlaneTrackballDragger.cpp
     TrackballDragger.cpp
@@ -57,9 +57,11 @@ ADD_LIBRARY(${LIB_NAME}
     TranslateAxisDragger.cpp
     TranslatePlaneDragger.cpp
     Version.cpp
+    ${OPENSCENEGRAPH_VERSIONINFO_RC}
 )
 
 LINK_INTERNAL(${LIB_NAME}     
+    osgViewer
     osgGA
     osgUtil
     osg

@@ -1,9 +1,9 @@
 
-IF   (DYNAMIC_OPENSCENEGRAPH)
+IF(DYNAMIC_OPENSCENEGRAPH)
     ADD_DEFINITIONS(-DOSGPARTICLE_LIBRARY)
-ELSE (DYNAMIC_OPENSCENEGRAPH)
+ELSE()
     ADD_DEFINITIONS(-DOSG_LIBRARY_STATIC)
-ENDIF(DYNAMIC_OPENSCENEGRAPH)
+ENDIF()
 
 SET(LIB_NAME osgParticle)
 SET(HEADER_PATH ${OpenSceneGraph_SOURCE_DIR}/include/${LIB_NAME})
@@ -48,6 +48,15 @@ SET(LIB_PUBLIC_HEADERS
     ${HEADER_PATH}/SmokeTrailEffect
     ${HEADER_PATH}/VariableRateCounter
     ${HEADER_PATH}/Version
+    
+    ${HEADER_PATH}/CompositePlacer
+    ${HEADER_PATH}/AngularDampingOperator
+    ${HEADER_PATH}/DampingOperator
+    ${HEADER_PATH}/ExplosionOperator
+    ${HEADER_PATH}/OrbitOperator
+    ${HEADER_PATH}/DomainOperator
+    ${HEADER_PATH}/BounceOperator
+    ${HEADER_PATH}/SinkOperator
 )
 
 # FIXME: For OS X, need flag for Framework or dylib
@@ -74,6 +83,11 @@ ADD_LIBRARY(${LIB_NAME}
     SmokeEffect.cpp
     SmokeTrailEffect.cpp
     Version.cpp
+    
+    DomainOperator.cpp
+    BounceOperator.cpp
+    SinkOperator.cpp
+    ${OPENSCENEGRAPH_VERSIONINFO_RC}
 )
 
 LINK_INTERNAL(${LIB_NAME}     

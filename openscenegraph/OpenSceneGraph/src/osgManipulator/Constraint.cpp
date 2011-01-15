@@ -14,6 +14,7 @@
 
 #include <osgManipulator/Constraint>
 #include <osgManipulator/Command>
+#include <osgManipulator/Dragger>
 #include <osg/Vec2d>
 
 #include <math.h>
@@ -41,6 +42,12 @@ osg::Vec3d snap_point_to_grid(const osg::Vec3d& point, const osg::Vec3d& origin,
 
 void Constraint::computeLocalToWorldAndWorldToLocal() const
 {
+    if (!_refNode)
+    {
+        OSG_INFO<<"osgManipulator::Constraint::computeLocalToWorldAndWorldToLocal() error, _refNode is null"<<std::endl;
+        return;
+    }
+
     osg::NodePath pathToRoot;
     computeNodePathToRoot(const_cast<osg::Node&>(getReferenceNode()),pathToRoot);
     _localToWorld = osg::computeLocalToWorld(pathToRoot);
