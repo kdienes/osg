@@ -2,6 +2,8 @@ openscenegraph (2.9.10-1) experimental; urgency=low
 
   * Removed bug-555869-ftbfs_with_binutils_gold.dpatch since upstream has
     already taken care of the issue.
+  * Removed bug-528229.dpatch since the pkgconfig files are now also split
+    in upstream.
 
  --
 
