@@ -1,3 +1,2 @@
 override-soversions.dpatch
 remove-broken-FindGDAL.dpatch
-bug-580081-change-openthreads-version.dpatch
