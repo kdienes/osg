@@ -5,6 +5,7 @@ openscenegraph (2.9.10-1) experimental; urgency=low
   * Removed bug-528229.dpatch since the pkgconfig files are now also split
     in upstream.
   * Removed explicit dependency on GLU.
+  * Upstream no longer includes osgIntrospection (Closes: #592420).
 
  --
 
