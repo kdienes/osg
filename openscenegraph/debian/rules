@@ -189,8 +189,12 @@ clean-patched:
 	dh_testroot
 	rm -f build-stamp configure-stamp
 
-	# Upstream has a +x source file
-	chmod a-x OpenSceneGraph/examples/osgpointsprite/osgpointsprite.cpp
+	# Upstream has some +x source files
+	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/iphoneViewerAppDelegate.h
+	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/iphoneViewerAppDelegate.mm
+	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/main.m
+	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/osgIPhoneViewer-Info.plist
+	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/osgPlugins.h
 
 	# Add here commands to clean up after the build process.
 	rm -fr build
