@@ -6,6 +6,8 @@ openscenegraph (2.9.10-1) experimental; urgency=low
     in upstream.
   * Removed explicit dependency on GLU.
   * Upstream no longer includes osgIntrospection (Closes: #592420).
+  * Disabled zip plugin as its implementation stores an embedded copy of
+    zlib.
 
  --
 
