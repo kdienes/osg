@@ -9,6 +9,7 @@ openscenegraph (2.9.10-1) experimental; urgency=low
   * Disabled zip plugin as its implementation stores an embedded copy of
     zlib.
   * Enabled Qt support. Thanks James Goppert.
+  * Enabled SVG and PDF plugins. Thanks James Goppert.
 
  --
 
