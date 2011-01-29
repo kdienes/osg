@@ -16,6 +16,10 @@
  * These elements are licensed under OSGPL as above, with Copyright (C) 2001-2004  Don Burns.
  */
 
+// TODO:
+// implement http://www.opengl.org/registry/specs/OML/glx_swap_method.txt
+// Fix toggling of fullscreen to window mode as it does enable window decoration with recent linux window managers
+
 #include <osgViewer/api/X11/GraphicsWindowX11>
 #include <osgViewer/api/X11/PixelBufferX11>
 
@@ -1410,9 +1414,10 @@ void GraphicsWindowX11::checkEvents()
                 _modifierState = ev.xkey.state;
                 keyMapSetKey(_keyMap, ev.xkey.keycode);
                 int keySymbol = 0;
-                adaptKey(ev.xkey, keySymbol);
+                int unmodifiedKeySymbol = 0;
+                adaptKey(ev.xkey, keySymbol, unmodifiedKeySymbol);
 
-                getEventQueue()->keyPress(keySymbol, eventTime);
+                getEventQueue()->keyPress(keySymbol, eventTime, unmodifiedKeySymbol);
                 break;
             }
             
@@ -1441,9 +1446,10 @@ void GraphicsWindowX11::checkEvents()
                 _modifierState = ev.xkey.state;
                 keyMapClearKey(_keyMap, ev.xkey.keycode);
                 int keySymbol = 0;
-                adaptKey(ev.xkey, keySymbol);
+                int unmodifiedKeySymbol = 0;
+                adaptKey(ev.xkey, keySymbol, unmodifiedKeySymbol);
                 
-                getEventQueue()->keyRelease(keySymbol, eventTime);
+                getEventQueue()->keyRelease(keySymbol, eventTime, unmodifiedKeySymbol);
                 break;
             }
             
@@ -1514,7 +1520,7 @@ void GraphicsWindowX11::transformMouseXY(float& x, float& y)
     }
 }
 
-void GraphicsWindowX11::adaptKey(XKeyEvent& keyevent, int& keySymbol)
+void GraphicsWindowX11::adaptKey(XKeyEvent& keyevent, int& keySymbol, int& unmodifiedKeySymbol)
 {
     unsigned char buffer_return[32];
     int bytes_buffer = 32;
@@ -1526,6 +1532,8 @@ void GraphicsWindowX11::adaptKey(XKeyEvent& keyevent, int& keySymbol)
     {
         keySymbol = buffer_return[0];
     }
+
+    unmodifiedKeySymbol = XKeycodeToKeysym(keyevent.display, keyevent.keycode, 0);
 }
 
 // Function to inject artificial key presses/releases.
@@ -1549,18 +1557,19 @@ void GraphicsWindowX11::forceKey(int key, double time, bool state)
     event.same_screen = True;
 
     int keySymbol = 0;
+    int unmodifiedKeySymbol = 0;
     if (state)
     {
         event.type = KeyPress;
-        adaptKey(event, keySymbol);
-        getEventQueue()->keyPress(keySymbol, time);
+        adaptKey(event, keySymbol, unmodifiedKeySymbol);
+        getEventQueue()->keyPress(keySymbol, time, unmodifiedKeySymbol);
         keyMapSetKey(_keyMap, key);
     }
     else
     {
         event.type = KeyRelease;
-        adaptKey(event, keySymbol);
-        getEventQueue()->keyRelease(keySymbol, time);
+        adaptKey(event, keySymbol, unmodifiedKeySymbol);
+        getEventQueue()->keyRelease(keySymbol, time, unmodifiedKeySymbol);
         keyMapClearKey(_keyMap, key);
     }
 }

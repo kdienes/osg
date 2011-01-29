@@ -141,8 +141,12 @@ endif
 # OPENSCENEGRAPH_SOVERSION=65
 #
 # OpenSceneGraph 2.9.10
+# OPENTHREADS_SOVERSION=14
+# OPENSCENEGRAPH_SOVERSION=68
+#
+# OpenSceneGraph 2.9.11
 OPENTHREADS_SOVERSION=14
-OPENSCENEGRAPH_SOVERSION=68
+OPENSCENEGRAPH_SOVERSION=71
 
 build: patch build-stamp
 build-stamp: configure-stamp 
@@ -188,13 +192,6 @@ clean-patched:
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp configure-stamp
-
-	# Upstream has some +x source files
-	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/iphoneViewerAppDelegate.h
-	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/iphoneViewerAppDelegate.mm
-	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/main.m
-	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/osgIPhoneViewer-Info.plist
-	chmod a-x OpenSceneGraph/examples/osgviewerIPhone/osgPlugins.h
 
 	# Add here commands to clean up after the build process.
 	rm -fr build
@@ -380,7 +377,7 @@ binary-arch: build install
 #	dh_installinfo
 	dh_installman -p openscenegraph ${MANPAGES}
 	dh_install --sourcedir=debian/tmp --fail-missing
-	dh_install -plibopenscenegraph68 debian/lintian/libopenscenegraph68 usr/share/lintian/overrides
+	dh_install -plibopenscenegraph71 debian/lintian/libopenscenegraph71 usr/share/lintian/overrides
 	dh_link
 	dh_strip
 	dh_compress
