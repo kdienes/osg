@@ -11,7 +11,7 @@ openscenegraph (2.9.11-1) experimental; urgency=low
   * Enabled Qt support. Thanks James Goppert.
   * Enabled SVG and PDF plugins. Thanks James Goppert.
 
- --
+ -- Alberto Luaces <aluaces@udc.es>  Sat, 29 Jan 2011 11:36:29 +0100
 
 openscenegraph (2.8.3-6) unstable; urgency=low
 
