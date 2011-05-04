@@ -1,0 +1,2 @@
+override-soversions.patch
+disable-zip-plugin-with-embedded-zlib.patch
