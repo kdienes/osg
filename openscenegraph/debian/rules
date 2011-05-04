@@ -262,7 +262,34 @@ MANEXAMPLES = \
 	osgwidgetstyled.1 \
 	osgwidgettable.1 \
 	osgwidgetwindow.1 \
-	osgwindows.1
+	osgwindows.1 \
+	osgQtBrowser.1 \
+	osgQtWidgets.1 \
+	osganalysis.1 \
+	osganimationeasemotion.1 \
+	osganimationmorph.1 \
+	osgdatabaserevisions.1 \
+	osgfpdepth.1 \
+	osggpx.1 \
+	osggraphicscost.1 \
+	osgmultiviewpaging.1 \
+	osgoit.1 \
+	osgoutline.1 \
+	osgparticleshader.1 \
+	osgposter.1 \
+	osgqfont.1 \
+	osgshadercomposition.1 \
+	osgshadergen.1 \
+	osgtexturecompression.1 \
+	osgthreadedterrain.1 \
+	osguniformbuffer.1 \
+	osguserstats.1 \
+	osgvertexattributes.1 \
+	osgviewerGTK.1 \
+	osgviewerQtContext.1 \
+	osgviewerSDL.1 \
+	osgvirtualprogram.1 \
+	present3D.1
 
 install-arch: build-arch
 	dh_testdir
