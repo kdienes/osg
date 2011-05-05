@@ -1,3 +1,9 @@
+openscenegraph (2.9.11-2) experimental; urgency=low
+
+  * Fixed FTBFS by checking __FreeBSD_kernel__ (Closes: #621880).
+
+ --
+
 openscenegraph (2.9.11-1) experimental; urgency=low
 
   * Removed bug-555869-ftbfs_with_binutils_gold.dpatch since upstream has
