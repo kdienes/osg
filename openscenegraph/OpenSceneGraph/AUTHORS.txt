@@ -1,6 +1,6 @@
-OpenSceneGraph Library 2.9.10
+OpenSceneGraph Library 2.9.13
 
-443 Contributors:
+456 Contributors:
 
 Firstname Surname
 -----------------
@@ -12,42 +12,43 @@ Marco Jez
 Mathias Fröhlich
 Mike Weiblen
 Jean-Sebastien Guay
-Eric Wing
 Farshid Lashkari
+Eric Wing
 Ulrich Hertlein
 Cedric Pinson
 Brede Johansen
+Wang Rui
 Bob Kuehne
 Geoff Michel
-Wang Rui
 Michael Platings
-Eric Sokolowsky
-Wojciech Lewandowski
-David Callu
-Martin Lavery
-Trajce Nikolov
 Sukender 
+Wojciech Lewandowski
+Eric Sokolowsky
+David Callu
+Trajce Nikolov
+Tim Moore
+Martin Lavery
 Colin McDonald
 Tree 
 Luigi Calori
-Tim Moore
 Mike Wittman
 Roland Smeenk
 Roger James
-Jeremy Moles
 Chris Hanson
-Jason Beverage
-Paul Melis
+Jeremy Moles
 Mattias Helsing
-J.P. Delport
+Jason Beverage
 Andy Skinner
+Paul Melis
+Jan Peciva
+J.P. Delport
+David Fries
 Tom Jolley
 Pavel Moloshtan
 Jason Daly
-David Fries
 Philip Lowman
+Per Fahlberg
 Norman Vine
-Jan Peciva
 Art Tevs
 Alberto Luaces
 Serge Lages
@@ -55,19 +56,19 @@ Alberto Farre
 Sherman Wilcox
 Robert Milharcic
 Mathieu Marache
+Magnus Kessler
 Laurens Voerman
 André Garneau
 Adrian Egli
 Terry Welsh
 Ruben Lopez
 Randall Hopper
-Per Fahlberg
+Mourad Boufarguine
+Brad Christiansen
 Olaf Flebbe
-Magnus Kessler
 Gideon May
 Don Tidrow
 Chris Denham
-Brad Christiansen
 Stephane Lamoliatte
 Romano José Magacho da Silva
 Michael Gronager
@@ -75,30 +76,32 @@ Joakim Simonsson
 David Spilling
 Daniel Sjölie
 Bryan Thrall
+Glenn Waldron
 Fabien Lavignotte
 Melchior Franz
 Lionel Lagarde
 Jan Ciger
-Glenn Waldron
 Neil Hughes
-Mourad Boufarguine
 Mike Connell
 Martin Beckett
 Joran Jessurun
 Gino van den Bergen
 Frederic Marmond
+David Guthrie
 Csaba Halasz
 Boris Bralo
 Yefei He
+Torben Dannhauer
 Sondra Iverson
+Simon Julier
 Rune Schmidt Jensen
 Rainer Oder
+Rafa Gaitan
 Martin Naylor
 Martin Aumueller
 Mario Valle
 Luc Frauciel
 Gordon Tomlinson
-David Guthrie
 Cory Riddell
 Carlo Camporesi
 Ben Discoe
@@ -115,10 +118,10 @@ John Shue
 Chuck Seberino
 Brad Colbert
 Vivek Rajan
+Uwe Woessner
 Thom DeCarlo
 Tatsuhiro Nishioka
 Tanguy Fautré
-Simon Julier
 Sean Spicer
 Richard Schmidt
 Peter Hrenka
@@ -129,6 +132,7 @@ Mihai Radu
 Michael Hartman
 Martins Innus
 Maciej Krol
+Johannes Baeuerle
 Johan Nouvel
 Hartwig Wiesmann
 Frederic Bouvier
@@ -136,14 +140,13 @@ Donn Mielcarek
 Corbin Holtz
 Blasius Czink
 Toshiyuki Takahei
-Torben Dannhauer
 Tony Horrobin
 Sebastien Grignard
 Ryan Kawicki
 Romano Magacho
 Riccardo Corsi
-Rafa Gaitan
 Nico Kruithof
+Mikhail Izmestev
 Maria Ten
 Liang Aibin
 Leandro Motta Barros
@@ -159,8 +162,8 @@ Bruce Clay
 Andreas Goebel
 Alok Priyadarshi
 Alberto Barbati
+Alan Dickinson
 Vladimir Shabanov
-Uwe Woessner
 Tugkan Calapoglu
 Tim Daoust
 Thomas Hogarth
@@ -170,7 +173,6 @@ Santosh Gaikwad
 Rudolf Wiedemann
 Phil Atkin
 Nathan Monteleone
-Mikhail Izmestev
 Miguel Escriva
 Mattias Linde
 Mark Sciabica
@@ -205,6 +207,7 @@ Yuzhong Shen
 Warren Macchi
 Vincent Bourdier
 Terrex 
+Tassilo Glander
 Sylvain Marie
 Steve Lunsford
 Stephane Simon
@@ -214,6 +217,7 @@ Sebastian Messerschmidt
 Rene Molenaar
 Raymond de Vries
 Ralf Kern
+Piotr Gwiazdowski
 Pierre Haritchabalet
 Perry Miller
 Paul Obermeier
@@ -228,6 +232,7 @@ Mathias Fiedler
 Mathew May
 Martin Spott
 Martijn Kragtwijk
+Marius Heise
 Lukasz Izdebski
 Lilith Bryant
 Lars Nilsson
@@ -242,16 +247,21 @@ James Moliere
 Igor Kravtchenko
 Himar Carmona
 He Sicong
+Guy Volckaert
 Gustavo Wagner
+Guillaume Taze
 Guillaume Chouvenc
 Gerrick Bivins
 George Tarantilis
 Ferdi Smit
-Ewe Woessner
+Eric Buehler
+Eduardo Poyart
 Edgar Ellis
 David Ergo
 Daniel Trstenjak
+Craig Bosma
 Christophe Loustaunau
+Bradley Anderegg
 Brad Anderegg
 Aric Aumann
 Andrew Sampson
@@ -274,11 +284,11 @@ Valery Bickov
 Vaclav Bilek
 Tyge Løvset
 Troy Yee
+Tomas Hogarth
 Tomas Hnilica
 Todd Furlong
 Tino Schwarze
 Thomas Weidner
-Tassilo Glander
 Tan Dunning
 Stewart Andreason
 Steven Thomas
@@ -307,6 +317,7 @@ Ragnar Hammarqvist
 Qing Shen
 Piotr Rak
 Pierre Bourdin
+Philipp Svehla
 Philipp Siemoleit
 Philipp Mächler
 Petr Salinger
@@ -335,15 +346,16 @@ Max Rhiener
 Max Behensky
 Mauricio Hofmam
 Matthew May
+Matthew Johnson-Roberson
 Matt Green
 Matt Burke
 Mathias Walker
 Mathias Goldau
 Mason Menninger
+Martin von Gargern
 Martin Scheffler
 Martin Lambers
 Martin Beck
-Marius Heise
 Mario Guimaraes
 Marco Sciabica
 Marco Lehmann
@@ -358,18 +370,19 @@ Laura Cerritelli
 Kyle Centers
 Kristopher Bixler
 Konstantin Matveyev
+Kim Seokhwan
 Karsten Weiss
 Karl Heijdenberg
 Jutta Sauer
 Julian Scheid
 Juan Hernando
 Josh Portway
+Jorge Ciges
 John Tan
 John Grant
 John Donovan
 John Davis
 John Argentieri
-Johannes Bauerle
 Joan Abadie
 Jim Brooks
 Jeroen den Dekker
@@ -384,13 +397,13 @@ Holger Helmich
 Henrique Bucher
 Hautio Jari
 Gunter Huber
-Guillaume Taze
 Guillaume Millet
 Gregory Jaegy
 Graeme Harkness
 Gian Lorenzetto
 George Papagiannakis
 Galen Faidley
+Frederic Smith
 Frank Warmerdam
 Frank Midgley
 Frank Lindeman
@@ -399,7 +412,6 @@ Ferdinand Cornelissen
 Fajran Iman
 Fabien Dachicourt
 Erik Johnson
-Eduardo Poyart
 Eduardo Alberto
 Edmond Gheury
 Ed Ralston
@@ -407,6 +419,7 @@ Duvan Cope
 Duncan Cavens
 Drew Whitehouse
 Douglas A. Pouk
+Dietmar Funck
 Dean Iverson
 David Jung
 Danny Valente
@@ -414,7 +427,6 @@ Daniel Stien
 Dan Minor
 César L. B. Silveira
 Cyril Brulebois
-Craig Bosma
 Clay Fowler
 Chuck Sembroski
 Christopher Blaesius
@@ -426,24 +438,25 @@ Carlos Garcea
 Bruno Herbelin
 Brian Keener
 Brandon Hamm
-Bradley Anderegg
 Bora Utka
 Björn Hein
 Bill Prendergast
 Bernardt Duvenhage
 Benoit Laniel
+Benjamin Wasty
 Ben van Basten
 Bart Gallet
 Axel Volley
 Andy Preece
 Andrew Reyonolds
+Andreas Roth
 Andreas Jochens
 Andre Normann
 Almalric Alexandre
 Allen Bierbaum
+Alexander Sinditskiy
 Alberto Jaspe
 Alan Purvis
 Alan Ott
 Alan Harris
-Alan Dickinson
 Adam Richard

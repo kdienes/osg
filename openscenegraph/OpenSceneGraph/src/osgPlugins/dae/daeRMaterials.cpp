@@ -12,6 +12,7 @@
  */
 
 #include "daeReader.h"
+#include "ReaderWriterDAE.h"
 
 #include <dae.h>
 #include <dae/daeSIDResolver.h>
@@ -617,7 +618,7 @@ bool daeReader::processColorOrTextureType(const osg::StateSet* ss,
         else if (cot->getParam() != NULL)
         {
             domFloat4 f4;
-            if (GetFloat4Param(cot->getParam()->getRef(), f4))
+            if (cot->getParam()->getRef() != 0 && GetFloat4Param(cot->getParam()->getRef(), f4))
             {
                 mat->setAmbient( osg::Material::FRONT_AND_BACK, osg::Vec4( f4[0], f4[1], f4[2], f4[3] ) );
                 retVal = true;
@@ -884,7 +885,7 @@ std::string daeReader::processImagePath(const domImage* pDomImage) const
         {
             std::string path = pDomImage->getInit_from()->getValue().pathDir() +
                 pDomImage->getInit_from()->getValue().pathFile();
-            path = cdom::uriToNativePath(path);
+            path = ReaderWriterDAE::ConvertColladaCompatibleURIToFilePath(path);
             if (path.empty())
             {
                 OSG_WARN << "Unable to get path from URI." << std::endl;

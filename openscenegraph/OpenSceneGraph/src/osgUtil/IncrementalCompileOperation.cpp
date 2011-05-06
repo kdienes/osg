@@ -23,8 +23,9 @@
 #include <OpenThreads/ScopedLock>
 
 #include <algorithm>
-#include <stdlib.h>
 #include <iterator>
+#include <stdlib.h>
+#include <string.h>
 
 namespace osgUtil 
 {
@@ -46,6 +47,7 @@ namespace osgUtil
 
 static osg::ApplicationUsageProxy ICO_e1(osg::ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_MINIMUM_COMPILE_TIME_PER_FRAME <float>","minimum compile time alloted to compiling OpenGL objects per frame in database pager.");
 static osg::ApplicationUsageProxy UCO_e2(osg::ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_MAXIMUM_OBJECTS_TO_COMPILE_PER_FRAME <int>","maximum number of OpenGL objects to compile per frame in database pager.");
+static osg::ApplicationUsageProxy UCO_e3(osg::ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_FORCE_TEXTURE_DOWNLOAD <ON/OFF>","should the texture compiles be forced to download using a dummy Geometry.");
 
 /////////////////////////////////////////////////////////////////
 //
@@ -53,7 +55,8 @@ static osg::ApplicationUsageProxy UCO_e2(osg::ApplicationUsage::ENVIRONMENTAL_VA
 //
 StateToCompile::StateToCompile(GLObjectsVisitor::Mode mode):
     osg::NodeVisitor(osg::NodeVisitor::TRAVERSE_ALL_CHILDREN),
-    _mode(mode)
+    _mode(mode),
+    _assignPBOToImages(false)
 {
 }
 
@@ -136,6 +139,13 @@ void StateToCompile::apply(osg::StateSet& stateset)
         }
 
         osg::StateSet::TextureAttributeList& tal = stateset.getTextureAttributeList();
+
+#if 0
+        if (tal.size()>1)
+        {
+            tal.erase(tal.begin()+1,tal.end());
+        }
+#endif
         for(osg::StateSet::TextureAttributeList::iterator itr = tal.begin();
             itr != tal.end();
             ++itr)
@@ -160,6 +170,51 @@ void StateToCompile::apply(osg::StateSet& stateset)
 
 void StateToCompile::apply(osg::Texture& texture)
 {
+    if (_assignPBOToImages)
+    {
+        unsigned int numRequringPBO = 0;
+        osg::ref_ptr<osg::PixelBufferObject> pbo = 0;
+        for(unsigned int i=0; i<texture.getNumImages(); ++i)
+        {
+            osg::Image* image = texture.getImage(i);
+            if (image)
+            {
+                if (image->getPixelBufferObject())
+                {
+                    pbo = image->getPixelBufferObject();
+                }
+                else
+                {
+                    ++numRequringPBO;
+                }
+            }
+        }
+        if (numRequringPBO>0)
+        {
+            // assign pbo
+            if (!pbo)
+            {
+                if (!_pbo) _pbo = new osg::PixelBufferObject;
+                pbo = _pbo;
+            }
+
+            for(unsigned int i=0; i<texture.getNumImages(); ++i)
+            {
+                osg::Image* image = texture.getImage(i);
+                if (image)
+                {
+                    if (!image->getPixelBufferObject())
+                    {
+                        //OSG_NOTICE<<"Assigning PBO"<<std::endl;
+                        pbo->setCopyDataAndReleaseGLBufferObject(true);
+                        pbo->setUsage(GL_DYNAMIC_DRAW_ARB);
+                        image->setPixelBufferObject(pbo.get());
+                    }
+                }
+            }
+        }
+    }
+
     _textures.insert(&texture);
 }
 
@@ -174,7 +229,7 @@ IncrementalCompileOperation::CompileDrawableOp::CompileDrawableOp(osg::Drawable*
 
 double IncrementalCompileOperation::CompileDrawableOp::estimatedTimeForCompile(CompileInfo& compileInfo) const
 {
-    GraphicsCostEstimator* gce = compileInfo.incrementalCompileOperation->getGraphicsCostEstimator();
+    osg::GraphicsCostEstimator* gce = compileInfo.getState()->getGraphicsCostEstimator();
     osg::Geometry* geometry = _drawable->asGeometry();
     if (gce && geometry)
     {
@@ -197,7 +252,7 @@ IncrementalCompileOperation::CompileTextureOp::CompileTextureOp(osg::Texture* te
 
 double IncrementalCompileOperation::CompileTextureOp::estimatedTimeForCompile(CompileInfo& compileInfo) const
 {
-    GraphicsCostEstimator* gce = compileInfo.incrementalCompileOperation->getGraphicsCostEstimator();
+    osg::GraphicsCostEstimator* gce = compileInfo.getState()->getGraphicsCostEstimator();
     if (gce) return gce->estimateCompileCost(_texture.get()).first;
     else return 0.0;
 }
@@ -208,6 +263,8 @@ bool IncrementalCompileOperation::CompileTextureOp::compile(CompileInfo& compile
     osg::Geometry* forceDownloadGeometry = compileInfo.incrementalCompileOperation->getForceTextureDownloadGeometry();
     if (forceDownloadGeometry)
     {
+
+        //OSG_NOTICE<<"Force texture download"<<std::endl;
         if (forceDownloadGeometry->getStateSet())
         {
             compileInfo.getState()->apply(forceDownloadGeometry->getStateSet());
@@ -232,7 +289,7 @@ IncrementalCompileOperation::CompileProgramOp::CompileProgramOp(osg::Program* pr
 
 double IncrementalCompileOperation::CompileProgramOp::estimatedTimeForCompile(CompileInfo& compileInfo) const
 {
-    GraphicsCostEstimator* gce = compileInfo.incrementalCompileOperation->getGraphicsCostEstimator();
+    osg::GraphicsCostEstimator* gce = compileInfo.getState()->getGraphicsCostEstimator();
     if (gce) return gce->estimateCompileCost(_program.get()).first;
     else return 0.0;
 }
@@ -244,7 +301,10 @@ bool IncrementalCompileOperation::CompileProgramOp::compile(CompileInfo& compile
     return true;
 }
 
-IncrementalCompileOperation::CompileInfo::CompileInfo(osg::GraphicsContext* context, IncrementalCompileOperation* ico)
+IncrementalCompileOperation::CompileInfo::CompileInfo(osg::GraphicsContext* context, IncrementalCompileOperation* ico):
+    compileAll(false),
+    maxNumObjectsToCompile(0),
+    allocatedTime(0)
 {
     setState(context->getState());
     incrementalCompileOperation = ico;
@@ -285,7 +345,7 @@ bool IncrementalCompileOperation::CompileList::compile(CompileInfo& compileInfo)
 //#define USE_TIME_ESTIMATES
     
     for(CompileOps::iterator itr = _compileOps.begin();
-        itr != _compileOps.end() && compileInfo.availableTime()>0.0 && compileInfo.maxNumObjectsToCompile>0;
+        itr != _compileOps.end() && compileInfo.okToCompile();
     )
     {
         #ifdef USE_TIME_ESTIMATES
@@ -307,7 +367,9 @@ bool IncrementalCompileOperation::CompileList::compile(CompileInfo& compileInfo)
 
         #ifdef USE_TIME_ESTIMATES
         double actualCompileCost = timer.elapsedTime();
-        OSG_NOTICE<<"IncrementalCompileOperation::CompileList::compile() estimatedTimForCompile= "<<estimatedCompileCost<<", actual="<<actualCompileCost<<", ratio="<<(estimatedCompileCost/actualCompileCost)<<std::endl;
+        OSG_NOTICE<<"IncrementalCompileOperation::CompileList::compile() estimatedTimForCompile = "<<estimatedCompileCost*1000.0<<"ms, actual = "<<actualCompileCost*1000.0<<"ms";
+        if (estimatedCompileCost>0.0) OSG_NOTICE<<", ratio="<<(actualCompileCost/estimatedCompileCost);
+        OSG_NOTICE<<std::endl;
         #endif
     }
     return empty();
@@ -385,7 +447,9 @@ bool IncrementalCompileOperation::CompileSet::compile(CompileInfo& compileInfo)
 IncrementalCompileOperation::IncrementalCompileOperation():
     osg::GraphicsOperation("IncrementalCompileOperation",true),
     _flushTimeRatio(0.5),
-    _conservativeTimeRatio(0.5)
+    _conservativeTimeRatio(0.5),
+    _currentFrameNumber(0),
+    _compileAllTillFrameNumber(0)
 {
     _targetFrameRate = 100.0;
     _minimumTimeAvailableForGLCompileAndDeletePerFrame = 0.001; // 1ms.
@@ -401,9 +465,20 @@ IncrementalCompileOperation::IncrementalCompileOperation():
         _maximumNumOfObjectsToCompilePerFrame = atoi(ptr);
     }
 
-    _graphicsCostEstimator = new GraphicsCostEstimator;
+    bool useForceTextureDownload = false;
+    if( (ptr = getenv("OSG_FORCE_TEXTURE_DOWNLOAD")) != 0)
+    {
+        useForceTextureDownload = strcmp(ptr,"yes")==0 || strcmp(ptr,"YES")==0 ||
+                                  strcmp(ptr,"on")==0 || strcmp(ptr,"ON")==0;
 
-    // assignForceTextureDownloadGeometry();
+        OSG_NOTICE<<"OSG_FORCE_TEXTURE_DOWNLOAD set to "<<useForceTextureDownload<<std::endl;
+    }
+
+    if (useForceTextureDownload)
+    {
+        assignForceTextureDownloadGeometry();
+    }
+
 }
 
 IncrementalCompileOperation::~IncrementalCompileOperation()
@@ -553,13 +628,15 @@ void IncrementalCompileOperation::remove(CompileSet* compileSet)
 }
 
 
-void IncrementalCompileOperation::mergeCompiledSubgraphs()
+void IncrementalCompileOperation::mergeCompiledSubgraphs(const osg::FrameStamp* frameStamp)
 {
     // OSG_INFO<<"IncrementalCompileOperation::mergeCompiledSubgraphs()"<<std::endl;
 
     OpenThreads::ScopedLock<OpenThreads::Mutex>  compilded_lock(_compiledMutex);
-    
-    for(CompileSets::iterator itr = _compiled.begin(); 
+
+    if (frameStamp) _currentFrameNumber = frameStamp->getFrameNumber();
+
+    for(CompileSets::iterator itr = _compiled.begin();
         itr != _compiled.end();
         ++itr)
     {
@@ -579,6 +656,9 @@ void IncrementalCompileOperation::operator () (osg::GraphicsContext* context)
 {
     osg::NotifySeverity level = osg::INFO;
 
+    //glFinish();
+    //glFlush();
+    
     double targetFrameRate = _targetFrameRate;
     double minimumTimeAvailableForGLCompileAndDeletePerFrame = _minimumTimeAvailableForGLCompileAndDeletePerFrame;
 
@@ -600,7 +680,6 @@ void IncrementalCompileOperation::operator () (osg::GraphicsContext* context)
 
     double flushTime = availableTime * _flushTimeRatio;
     double compileTime = availableTime - flushTime;
-    unsigned int maxNumOfObjectsToCompilePerFrame = _maximumNumOfObjectsToCompilePerFrame;
 
 #if 1
     OSG_NOTIFY(level)<<"total availableTime = "<<availableTime*1000.0<<std::endl;
@@ -623,6 +702,7 @@ void IncrementalCompileOperation::operator () (osg::GraphicsContext* context)
     CompileInfo compileInfo(context, this);
     compileInfo.maxNumObjectsToCompile = _maximumNumOfObjectsToCompilePerFrame;
     compileInfo.allocatedTime = compileTime;
+    compileInfo.compileAll = (_compileAllTillFrameNumber > _currentFrameNumber);
 
     CompileSets toCompileCopy;
     {
@@ -631,7 +711,7 @@ void IncrementalCompileOperation::operator () (osg::GraphicsContext* context)
     }
 
     for(CompileSets::iterator itr = toCompileCopy.begin();
-        itr != toCompileCopy.end() && compileTime>0.0 && maxNumOfObjectsToCompilePerFrame>0;
+        itr != toCompileCopy.end() && compileInfo.okToCompile();
         ++itr)
     {
         CompileSet* cs = itr->get();
@@ -664,5 +744,11 @@ void IncrementalCompileOperation::operator () (osg::GraphicsContext* context)
     //glFush();
     //glFinish();
 }
+
+void IncrementalCompileOperation::compileAllForNextFrame(unsigned int numFramesToDoCompileAll)
+{
+    _compileAllTillFrameNumber = _currentFrameNumber+numFramesToDoCompileAll;
+}
+
 
 } // end of namespace osgUtil

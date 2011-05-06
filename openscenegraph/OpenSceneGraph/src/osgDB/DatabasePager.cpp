@@ -47,6 +47,7 @@ static osg::ApplicationUsageProxy DatabasePager_e0(osg::ApplicationUsage::ENVIRO
 static osg::ApplicationUsageProxy DatabasePager_e3(osg::ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_DATABASE_PAGER_DRAWABLE <mode>","Set the drawable policy for setting of loaded drawable to specified type.  mode can be one of DoNotModify, DisplayList, VBO or VertexArrays>.");
 static osg::ApplicationUsageProxy DatabasePager_e4(osg::ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_DATABASE_PAGER_PRIORITY <mode>", "Set the thread priority to DEFAULT, MIN, LOW, NOMINAL, HIGH or MAX.");
 static osg::ApplicationUsageProxy DatabasePager_e11(osg::ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_MAX_PAGEDLOD <num>","Set the target maximum number of PagedLOD to maintain.");
+static osg::ApplicationUsageProxy DatabasePager_e12(osg::ApplicationUsage::ENVIRONMENTAL_VARIABLE,"OSG_ASSIGN_PBO_TO_IMAGES <ON/OFF>","Set whether PixelBufferObjects should be assigned to Images to aid download to the GPU.");
 
 // Convert function objects that take pointer args into functions that a
 // reference to an osg::ref_ptr. This is quite useful for doing STL
@@ -128,29 +129,30 @@ void DatabasePager::compileCompleted(DatabaseRequest* databaseRequest)
     _dataToMergeList->add(databaseRequest);
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//  CountPagedLODList
-//
-class DatabasePager::CountPagedLODsVisitor : public osg::NodeVisitor
+// This class is a helper for the management of SetBasedPagedLODList.
+class DatabasePager::ExpirePagedLODsVisitor : public osg::NodeVisitor
 {
 public:
-    CountPagedLODsVisitor():
-        osg::NodeVisitor(osg::NodeVisitor::TRAVERSE_ALL_CHILDREN),
-        _numPagedLODs(0)
+    ExpirePagedLODsVisitor():
+        osg::NodeVisitor(osg::NodeVisitor::TRAVERSE_ALL_CHILDREN)
     {
     }
 
-    META_NodeVisitor("osgDB","CountPagedLODsVisitor")
+    META_NodeVisitor("osgDB","ExpirePagedLODsVisitor")
 
     virtual void apply(osg::PagedLOD& plod)
     {
-        ++_numPagedLODs;
-        _pagedLODs.insert(&plod);
+        _childPagedLODs.insert(&plod);
+        markRequestsExpired(&plod);
         traverse(plod);
     }
 
-    bool removeExpiredChildrenAndCountPagedLODs(osg::PagedLOD* plod, double expiryTime, unsigned int expiryFrame, osg::NodeList& removedChildren)
+    // Remove expired children from a PagedLOD. On return
+    // removedChildren contains the nodes removed by the call to
+    // PagedLOD::removeExpiredChildren, and the _childPagedLODs member
+    // contains all the PagedLOD objects found in those children's
+    // subgraphs.
+    bool removeExpiredChildrenAndFindPagedLODs(osg::PagedLOD* plod, double expiryTime, unsigned int expiryFrame, osg::NodeList& removedChildren)
     {
         size_t sizeBefore = removedChildren.size();
 
@@ -160,23 +162,24 @@ public:
         {
             removedChildren[i]->accept(*this);
         }
-
-        for(PagedLODset::iterator itr = _pagedLODs.begin();
-            itr != _pagedLODs.end();
-            ++itr)
-        {
-            removedChildren.push_back(*itr);
-        }
-
         return sizeBefore!=removedChildren.size();
     }
 
-
     typedef std::set<osg::ref_ptr<osg::PagedLOD> > PagedLODset;
-    PagedLODset         _pagedLODs;
-    int                 _numPagedLODs;
+    PagedLODset         _childPagedLODs;
+private:
+    void markRequestsExpired(osg::PagedLOD* plod)
+    {
+        unsigned numFiles = plod->getNumFileNames();
+        for (unsigned i = 0; i < numFiles; ++i)
+        {
+            DatabasePager::DatabaseRequest* request
+                = dynamic_cast<DatabasePager::DatabaseRequest*>(plod->getDatabaseRequest(i).get());
+            if (request)
+                request->_groupExpired = true;
+        }
+    }
 };
-
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -200,7 +203,7 @@ public:
     {
         int leftToRemove = numberChildrenToRemove;
         for(PagedLODs::iterator itr = _pagedLODs.begin();
-            itr!=_pagedLODs.end() && leftToRemove >= 0;
+            itr!=_pagedLODs.end() && leftToRemove > 0;
             )
         {
             osg::ref_ptr<osg::PagedLOD> plod;
@@ -209,14 +212,14 @@ public:
                 bool plodActive = expiryFrame < plod->getFrameNumberOfLastTraversal();
                 if (visitActive==plodActive) // true if (visitActive && plodActive) OR (!visitActive &&!plodActive)
                 {
-                    DatabasePager::CountPagedLODsVisitor countPagedLODsVisitor;
+                    DatabasePager::ExpirePagedLODsVisitor expirePagedLODsVisitor;
                     osg::NodeList expiredChildren; // expired PagedLODs
-                    countPagedLODsVisitor.removeExpiredChildrenAndCountPagedLODs(
+                    expirePagedLODsVisitor.removeExpiredChildrenAndFindPagedLODs(
                         plod.get(), expiryTime, expiryFrame, expiredChildren);
                     // Clear any expired PagedLODs out of the set
-                    for (DatabasePager::CountPagedLODsVisitor::PagedLODset::iterator
-                             citr = countPagedLODsVisitor._pagedLODs.begin(),
-                             end = countPagedLODsVisitor._pagedLODs.end();
+                    for (DatabasePager::ExpirePagedLODsVisitor::PagedLODset::iterator
+                             citr = expirePagedLODsVisitor._childPagedLODs.begin(),
+                             end = expirePagedLODsVisitor._childPagedLODs.end();
                          citr != end;
                         ++citr)
                     {
@@ -297,6 +300,8 @@ public:
             _changeAutoUnRef(false), _valueAutoUnRef(false),
             _changeAnisotropy(false), _valueAnisotropy(1.0)
     {
+        _assignPBOToImages = _pager->_assignPBOToImages;
+
         _changeAutoUnRef = _pager->_changeAutoUnRef;
         _valueAutoUnRef = _pager->_valueAutoUnRef;
         _changeAnisotropy = _pager->_changeAnisotropy;
@@ -310,6 +315,8 @@ public:
                 break;
             case DatabasePager::USE_DISPLAY_LISTS:
                 _mode = _mode | osgUtil::GLObjectsVisitor::SWITCH_ON_DISPLAY_LISTS;
+                _mode = _mode | osgUtil::GLObjectsVisitor::SWITCH_OFF_VERTEX_BUFFER_OBJECTS;
+                _mode = _mode & ~osgUtil::GLObjectsVisitor::SWITCH_ON_VERTEX_BUFFER_OBJECTS;
                 break;
             case DatabasePager::USE_VERTEX_BUFFER_OBJECTS:
                 _mode = _mode | osgUtil::GLObjectsVisitor::SWITCH_ON_VERTEX_BUFFER_OBJECTS;
@@ -317,6 +324,8 @@ public:
             case DatabasePager::USE_VERTEX_ARRAYS:
                 _mode = _mode & ~osgUtil::GLObjectsVisitor::SWITCH_ON_DISPLAY_LISTS;
                 _mode = _mode & ~osgUtil::GLObjectsVisitor::SWITCH_ON_VERTEX_BUFFER_OBJECTS;
+                _mode = _mode | osgUtil::GLObjectsVisitor::SWITCH_OFF_DISPLAY_LISTS;
+                _mode = _mode | osgUtil::GLObjectsVisitor::SWITCH_OFF_VERTEX_BUFFER_OBJECTS;
                 break;
         }
 
@@ -984,35 +993,43 @@ DatabasePager::DatabasePager()
         } 
     }
 
+    _assignPBOToImages = false;
+    if( (str = getenv("OSG_ASSIGN_PBO_TO_IMAGES")) != 0)
+    {
+        _assignPBOToImages = strcmp(str,"yes")==0 || strcmp(str,"YES")==0 ||
+                             strcmp(str,"on")==0 || strcmp(str,"ON")==0;
+
+        OSG_NOTICE<<"OSG_ASSIGN_PBO_TO_IMAGES set to "<<_assignPBOToImages<<std::endl;
+    }
+
     _changeAutoUnRef = true;
     _valueAutoUnRef = false;
  
     _changeAnisotropy = false;
     _valueAnisotropy = 1.0f;
 
-    const char* ptr=0;
 
     _deleteRemovedSubgraphsInDatabaseThread = true;
-    if( (ptr = getenv("OSG_DELETE_IN_DATABASE_THREAD")) != 0)
+    if( (str = getenv("OSG_DELETE_IN_DATABASE_THREAD")) != 0)
     {
-        _deleteRemovedSubgraphsInDatabaseThread = strcmp(ptr,"yes")==0 || strcmp(ptr,"YES")==0 ||
-                        strcmp(ptr,"on")==0 || strcmp(ptr,"ON")==0;
+        _deleteRemovedSubgraphsInDatabaseThread = strcmp(str,"yes")==0 || strcmp(str,"YES")==0 ||
+                                                  strcmp(str,"on")==0 || strcmp(str,"ON")==0;
 
     }
 
     _targetMaximumNumberOfPageLOD = 300;
-    if( (ptr = getenv("OSG_MAX_PAGEDLOD")) != 0)
+    if( (str = getenv("OSG_MAX_PAGEDLOD")) != 0)
     {
-        _targetMaximumNumberOfPageLOD = atoi(ptr);
+        _targetMaximumNumberOfPageLOD = atoi(str);
         OSG_NOTICE<<"_targetMaximumNumberOfPageLOD = "<<_targetMaximumNumberOfPageLOD<<std::endl;
     }
 
 
     _doPreCompile = true;
-    if( (ptr = getenv("OSG_DO_PRE_COMPILE")) != 0)
+    if( (str = getenv("OSG_DO_PRE_COMPILE")) != 0)
     {
-        _doPreCompile = strcmp(ptr,"yes")==0 || strcmp(ptr,"YES")==0 ||
-                        strcmp(ptr,"on")==0 || strcmp(ptr,"ON")==0;
+        _doPreCompile = strcmp(str,"yes")==0 || strcmp(str,"YES")==0 ||
+                        strcmp(str,"on")==0 || strcmp(str,"ON")==0;
     }
 
     // initialize the stats variables
@@ -1074,6 +1091,8 @@ DatabasePager::DatabasePager(const DatabasePager& rhs)
     _frameNumber.exchange(0);
 
     _drawablePolicy = rhs._drawablePolicy;
+
+    _assignPBOToImages = rhs._assignPBOToImages;
 
     _changeAutoUnRef = rhs._changeAutoUnRef;
     _valueAutoUnRef = rhs._valueAutoUnRef;
@@ -1571,7 +1590,7 @@ void DatabasePager::addLoadedDataToSceneGraph(const osg::FrameStamp &frameStamp)
         // the request; the cull traversal -- which might redispatch
         // the request -- can't run at the sametime as this update traversal.
         osg::ref_ptr<osg::Group> group;
-        if (databaseRequest->_group.lock(group))
+        if (!databaseRequest->_groupExpired && databaseRequest->_group.lock(group))
         {
             if (osgDB::Registry::instance()->getSharedStateManager())
                 osgDB::Registry::instance()->getSharedStateManager()->share(databaseRequest->_loadedModel.get());
