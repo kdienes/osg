@@ -1,20 +1,24 @@
 Author: 
 Description: 
---- a/OpenSceneGraph/CMakeLists.txt
-+++ b/OpenSceneGraph/CMakeLists.txt
-@@ -31,7 +31,9 @@
+Index: openscenegraph/OpenSceneGraph/CMakeLists.txt
+===================================================================
+--- openscenegraph.orig/OpenSceneGraph/CMakeLists.txt	2011-04-21 14:53:22.000000000 +0200
++++ openscenegraph/OpenSceneGraph/CMakeLists.txt	2011-05-06 20:47:11.000000000 +0200
+@@ -32,7 +32,9 @@
  SET(OPENSCENEGRAPH_MAJOR_VERSION 2)
  SET(OPENSCENEGRAPH_MINOR_VERSION 9)
- SET(OPENSCENEGRAPH_PATCH_VERSION 11)
--SET(OPENSCENEGRAPH_SOVERSION 71)
+ SET(OPENSCENEGRAPH_PATCH_VERSION 13)
+-SET(OPENSCENEGRAPH_SOVERSION 73)
 +IF(NOT OPENSCENEGRAPH_SOVERSION)
-+    SET(OPENSCENEGRAPH_SOVERSION 71)
++    SET(OPENSCENEGRAPH_SOVERSION 73)
 +ENDIF(NOT OPENSCENEGRAPH_SOVERSION)
  
  # set to 0 when not a release candidate, non zero means that any generated 
  # svn tags will be treated as release candidates of given number
---- a/OpenSceneGraph/src/OpenThreads/CMakeLists.txt
-+++ b/OpenSceneGraph/src/OpenThreads/CMakeLists.txt
+Index: openscenegraph/OpenSceneGraph/src/OpenThreads/CMakeLists.txt
+===================================================================
+--- openscenegraph.orig/OpenSceneGraph/src/OpenThreads/CMakeLists.txt	2011-04-19 13:40:22.000000000 +0200
++++ openscenegraph/OpenSceneGraph/src/OpenThreads/CMakeLists.txt	2011-05-06 20:43:55.000000000 +0200
 @@ -5,7 +5,9 @@
  SET(OPENTHREADS_MAJOR_VERSION 2)
  SET(OPENTHREADS_MINOR_VERSION 5)
