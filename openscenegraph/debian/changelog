@@ -1,6 +1,9 @@
 openscenegraph (2.9.14-1) experimental; urgency=low
 
   * Fixed FTBFS by checking __FreeBSD_kernel__ (Closes: #621880).
+  * Removed CMakeLists.txt files in `openscenegraph-examples'. An
+    explanatory README was written with simple instructions for compiling
+    the examples those sources if desired (Closes: #612954, #612957).
 
  --
 
