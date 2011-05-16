@@ -126,6 +126,19 @@ endif
 OPENTHREADS_SOVERSION=14
 OPENSCENEGRAPH_SOVERSION=75
 
+GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\([^-]*\).*~\1~p' debian/changelog
+VERSION := $(shell $(GRAB_VERSION_COMMAND))
+TMPDIR := $(shell mktemp -d)
+TARBALL_NAME := openscenegraph_$(VERSION).orig.tar.gz
+UPSTREAM_SVN_TAG_DIR := http://www.openscenegraph.org/svn/osg/OpenSceneGraph/tags/OpenSceneGraph
+
+get-orig-source:
+	dh_testdir
+	mkdir -p $(TMPDIR)/openscenegraph-$(VERSION)
+	svn export $(UPSTREAM_SVN_TAG_DIR)-$(VERSION) $(TMPDIR)/openscenegraph-$(VERSION)/$(OSG)
+	tar czvf ../$(TARBALL_NAME) -C $(TMPDIR)/ openscenegraph-$(VERSION)
+	rm -rf $(TMPDIR)
+
 clean:
 	dh_testdir
 	dh_testroot
@@ -395,4 +408,4 @@ build-stamp:
 	touch build-stamp
 
 .PHONY: build build-indep build-arch clean binary-indep binary-arch binary install-indep \
-	install-arch
+	install-arch get-orig-source
