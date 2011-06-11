@@ -314,7 +314,9 @@ MANEXAMPLES = \
 	osgviewerQtContext.1 \
 	osgviewerSDL.1 \
 	osgvirtualprogram.1 \
-	present3D.1
+	present3D.1 \
+	osguserdata.1 \
+	osgviewerQt.1
 
 install-arch: build-arch
 	dh_testdir
