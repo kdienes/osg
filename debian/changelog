@@ -5,7 +5,7 @@ openscenegraph (2.9.14-1) experimental; urgency=low
     explanatory README was written with simple instructions for compiling
     the examples those sources if desired (Closes: #612954, #612957).
 
- --
+ -- Alberto Luaces <aluaces@udc.es>  Sat, 11 Jun 2011 19:21:22 +0200
 
 openscenegraph (2.9.11-1) experimental; urgency=low
 
