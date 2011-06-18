@@ -130,7 +130,7 @@ endif
 OPENTHREADS_SOVERSION=14
 OPENSCENEGRAPH_SOVERSION=77
 
-GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\([^-]*\).*~\1~p' debian/changelog
+GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\(.*\)-.*).*~\1~p' debian/changelog
 VERSION := $(shell $(GRAB_VERSION_COMMAND))
 TMPDIR := $(shell mktemp -d)
 TARBALL_NAME := openscenegraph_$(VERSION).orig.tar.gz
