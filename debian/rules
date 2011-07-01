@@ -132,7 +132,7 @@ endif
 #
 # OpenSceneGraph 3.0.0
 OPENTHREADS_SOVERSION=14
-OPENSCENEGRAPH_SOVERSION=78
+OPENSCENEGRAPH_SOVERSION=80
 
 GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\(.*\)-.*).*~\1~p' debian/changelog
 VERSION := $(shell $(GRAB_VERSION_COMMAND))
