@@ -52,6 +52,8 @@ ARCH_C_FLAGS=-mlong-calls
 ARCH_CXX_FLAGS=${ARCH_C_FLAGS}
 endif
 
+LDFLAGS = -Wl,--as-needed
+
 #
 # Shared libraries version numbers
 #
