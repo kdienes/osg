@@ -2,7 +2,7 @@ Source: openscenegraph
 Section: devel
 Priority: optional
 Maintainer: Loic Dachary (OuoU) <loic@debian.org>
-Uploaders: Manuel A. Fernandez Montecelo <manuel.montezelo@gmail.com>, Ola Lundqvist <opal@debian.org>
+Uploaders: Manuel A. Fernandez Montecelo <manuel.montezelo@gmail.com>, Alberto Luaces <aluaces@udc.es>, Ola Lundqvist <opal@debian.org>
 DM-Upload-Allowed: yes
 Build-Depends: debhelper (>= 7.0.0), cmake, g++ (>= 3.3.0), libgif-dev, libjpeg-dev, libtiff-dev, lib3ds-dev, libfreetype6-dev, libpng12-dev, libcoin60-dev, libjasper-dev, libgdal-dev, libx11-dev, libxmu-dev, freeglut3-dev, ccache, libgl1-mesa-dev | libgl-dev, doxygen, libxine-dev, libavcodec-dev, libswscale-dev, libavdevice-dev, libqt4-dev, libqt4-opengl-dev, librsvg2-dev, libpoppler-glib-dev
 Standards-Version: 3.9.2
