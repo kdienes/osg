@@ -13,6 +13,8 @@ openscenegraph (3.0.0-1) unstable; urgency=low
     warnings (source-nmu-has-incorrect-version-number and
     changelog-should-mention-nmu).  He's been maintaining the packages for more
     than a year now.
+  * Remove Section entries for some binary packages (quell lintian warning
+    binary-control-field-duplicates-source)
 
  -- Alberto Luaces <aluaces@udc.es>  Sat, 09 Jul 2011 22:07:13 +0200
 
