@@ -15,7 +15,7 @@ openscenegraph (3.0.0-2) unstable; urgency=low
   * Remove Section entries for some binary packages (quell lintian warning
     binary-control-field-duplicates-source)
 
- -- Alberto Luaces <aluaces@udc.es>  Thu, 14 Jul 2011 15:07:13 +0200
+ -- Manuel A. Fernandez Montecelo <manuel.montezelo@gmail.com>  Fri, 15 Jul 2011 01:28:06 +0200
 
 openscenegraph (3.0.0-1) unstable; urgency=low
 
