@@ -6,17 +6,16 @@ openscenegraph (3.0.0-2) unstable; urgency=low
   * Adjust C{,XX}FLAGS to be independent of the build mode.
   * Removed the dpatch dependency at build time since it is not needed anymore.
   * Updated standards version to 3.9.2 as lintian requested (no changes needed).
-  * Added symbol files for tracking ABI changes with dpkg-gensymbols.
 
   [ Manuel A. Fernandez Montecelo ]
-  * Adding "Alberto Luaces <aluaces@udc.es>" as Uploader to quell lintian
+  * Adding "Alberto Luaces <aluaces@udc.es>" as Uploader to try to quell lintian
     warnings (source-nmu-has-incorrect-version-number and
     changelog-should-mention-nmu).  He's been maintaining the packages for more
     than a year now.
   * Remove Section entries for some binary packages (quell lintian warning
     binary-control-field-duplicates-source)
 
- -- Alberto Luaces <aluaces@udc.es>  Sat, 09 Jul 2011 22:07:13 +0200
+ -- Alberto Luaces <aluaces@udc.es>  Thu, 14 Jul 2011 15:07:13 +0200
 
 openscenegraph (3.0.0-1) unstable; urgency=low
 
