@@ -1,6 +1,7 @@
 openscenegraph (3.0.1-1) unstable; urgency=low
 
   * New upstream fixes release.
+  * Fixed ffmpeg FTBFS (Closes: #640339).
 
  --
 
