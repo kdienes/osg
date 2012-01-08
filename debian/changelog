@@ -1,8 +1,9 @@
 openscenegraph (3.0.1-2) unstable; urgency=low
 
+  [ Alberto Luaces ]
   * Fixed ffmpeg FTBFS with 0.8 version (Closes: #654233).
 
- -- Alberto Luaces <aluaces@udc.es>  Thu, 05 Jan 2012 13:13:09 +0100
+ -- Manuel A. Fernandez Montecelo <manuel.montezelo@gmail.com>  Sun, 08 Jan 2012 19:38:17 +0000
 
 openscenegraph (3.0.1-1) unstable; urgency=low
 
