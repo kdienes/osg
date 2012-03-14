@@ -4,7 +4,32 @@ Priority: optional
 Maintainer: Loic Dachary (OuoU) <loic@debian.org>
 Uploaders: Manuel A. Fernandez Montecelo <manuel.montezelo@gmail.com>, Alberto Luaces <aluaces@udc.es>, Ola Lundqvist <opal@debian.org>
 DM-Upload-Allowed: yes
-Build-Depends: debhelper (>= 7.0.0), cmake, g++ (>= 3.3.0), libgif-dev, libjpeg-dev, libtiff-dev, lib3ds-dev, libfreetype6-dev, libpng12-dev, libcoin60-dev, libjasper-dev, libgdal-dev, libx11-dev, libxmu-dev, freeglut3-dev, ccache, libgl1-mesa-dev | libgl-dev, doxygen, libxine-dev, libavcodec-dev, libswscale-dev, libavdevice-dev, libqt4-dev, libqt4-opengl-dev, librsvg2-dev, libpoppler-glib-dev
+Build-Depends: debhelper (>= 7.0.0),
+               cmake,
+               g++ (>= 3.3.0),
+               ccache,
+               doxygen,
+               libgif-dev,
+               libjpeg-dev,
+               libtiff-dev,
+               lib3ds-dev,
+               libfreetype6-dev,
+               libpng12-dev,
+               libcoin60-dev,
+               libjasper-dev,
+               libgdal-dev,
+               libx11-dev,
+               libxmu-dev,
+               freeglut3-dev,
+               libgl1-mesa-dev | libgl-dev,
+               libxine-dev,
+               libavcodec-dev,
+               libswscale-dev,
+               libavdevice-dev,
+               libqt4-dev,
+               libqt4-opengl-dev,
+               librsvg2-dev,
+               libpoppler-glib-dev
 Standards-Version: 3.9.2
 Homepage: http://www.openscenegraph.org/
 Vcs-Git: https://alioth.debian.org/anonscm/git/pkg-osg/pkg-osg.git
@@ -13,7 +38,8 @@ Vcs-Browser: https://alioth.debian.org/scm/browser.php?group_id=100578
 Package: libopenthreads-dev
 Section: libdevel
 Architecture: any
-Depends: ${misc:Depends}, libopenthreads14 (= ${binary:Version})
+Depends: ${misc:Depends},
+         libopenthreads14 (= ${binary:Version})
 Description: Object-Oriented (OO) thread interface for C++, development files
  This library is intended to provide a minimal & complete Object-Oriented (OO)
  thread interface for C++ programmers, used primarily in OpenSceneGraph.  It is
@@ -24,8 +50,13 @@ Description: Object-Oriented (OO) thread interface for C++, development files
 Package: libopenthreads14
 Section: libs
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}
-Conflicts: libopenthreads, libopenthreads2, libopenthreads3, libopenthreads1c2, libopenthreads11
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Conflicts: libopenthreads,
+           libopenthreads2,
+           libopenthreads3,
+           libopenthreads1c2,
+           libopenthreads11
 Description: Object-Oriented (OO) thread interface for C++, shared libs
  This library is intended to provide a minimal & complete Object-Oriented (OO)
  thread interface for C++ programmers, used primarily in OpenSceneGraph.  It is
@@ -36,8 +67,13 @@ Description: Object-Oriented (OO) thread interface for C++, shared libs
 Package: libopenscenegraph-dev
 Section: libdevel
 Architecture: any
-Depends: ${misc:Depends}, libopenthreads-dev, libgl1-mesa-dev | libgl-dev, libglu-dev, libopenscenegraph80 (= ${binary:Version})
-Suggests: openscenegraph-doc, openscenegraph-examples
+Depends: ${misc:Depends},
+         libopenthreads-dev,
+         libgl1-mesa-dev | libgl-dev,
+         libglu-dev,
+         libopenscenegraph80 (= ${binary:Version})
+Suggests: openscenegraph-doc,
+          openscenegraph-examples
 Description: 3D scene graph, development files
  A portable, high level graphics toolkit for the development of high performance
  graphics applications such as flight simulators, games, virtual reality or
@@ -51,8 +87,14 @@ Description: 3D scene graph, development files
 Package: libopenscenegraph80
 Section: libs
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}
-Conflicts: libopenscenegraph, libopenscenegraph2, libopenscenegraph3, libopenscenegraph1c2, libopenscenegraph7, libopenscenegraph55
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Conflicts: libopenscenegraph,
+           libopenscenegraph2,
+           libopenscenegraph3,
+           libopenscenegraph1c2,
+           libopenscenegraph7,
+           libopenscenegraph55
 Description: 3D scene graph, shared libs
  A portable, high level graphics toolkit for the development of high performance
  graphics applications such as flight simulators, games, virtual reality or
@@ -79,7 +121,8 @@ Description: 3D scene graph, documentation
 
 Package: openscenegraph
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
 Description: 3D scene graph, utilities and examples (binaries)
  A portable, high level graphics toolkit for the development of high performance
  graphics applications such as flight simulators, games, virtual reality or
