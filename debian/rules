@@ -18,6 +18,15 @@
 #export DH_VERBOSE=1
 #export DH_OPTIONS=-v
 
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/buildflags.mk
+
+# At the moment, CMake discards CPPFLAGS, so we have to add its value
+# to C{,XX}FLAGS variables
+
+CFLAGS += $(CPPFLAGS)
+CXXFLAGS += $(CPPFLAGS)
+
 %:
 	dh  $@
 
