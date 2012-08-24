@@ -55,7 +55,7 @@ endif
 CFLAGS := ${CFLAGS} ${ARCH_C_FLAGS}
 CXXFLAGS := ${CXXFLAGS} ${ARCH_CXX_FLAGS}
 
-LDFLAGS = -Wl,--as-needed
+LDFLAGS += -Wl,--as-needed
 
 #
 # Shared libraries version numbers
