@@ -334,7 +334,8 @@ MANEXAMPLES = \
 	osgvirtualprogram.1 \
 	present3D.1 \
 	osguserdata.1 \
-	osgviewerQt.1
+	osgviewerQt.1 \
+	osgviewerWX.1
 
 install-arch: build-arch
 	dh_testdir
