@@ -343,8 +343,8 @@ install-arch: build-arch
 
 	# Add here commands to install the package into debian/tmp
 	mkdir -p $(CURDIR)/debian/tmp/usr
-	$(MAKE) -C build/osgstatic DESTDIR=$(CURDIR)/debian/tmp/usr install
-	$(MAKE) -C build/osg DESTDIR=$(CURDIR)/debian/tmp/usr install
+	$(MAKE) -C build/osgstatic DESTDIR=$(CURDIR)/debian/tmp install
+	$(MAKE) -C build/osg DESTDIR=$(CURDIR)/debian/tmp install
 	-mv $(CURDIR)/debian/tmp/usr/share/OpenSceneGraph/bin/* $(CURDIR)/debian/tmp/usr/bin
 	for man in ${MANEXAMPLES} ; do rm -f $$man ; ln -s debian/osgexamples.1 $$man ; done
 	for man in ${MANAPPLICATIONS} ; do rm -f $$man ; ln -s debian/osgapplications.1 $$man ; done
@@ -403,7 +403,7 @@ build-stamp:
 
 	mkdir -p build/osgstatic ; cd build/osgstatic ; ${SETAFFINITY} cmake --debug-output \
 		-D CMAKE_BUILD_TYPE:STRING=Release \
-		-D CMAKE_INSTALL_PREFIX:PATH=/ \
+		-D CMAKE_INSTALL_PREFIX:PATH=/usr \
 		-D DYNAMIC_OPENTHREADS:BOOL=OFF \
 		-D DYNAMIC_OPENSCENEGRAPH:BOOL=OFF \
 		-D BUILD_OSG_EXAMPLES:BOOL=OFF \
@@ -419,7 +419,7 @@ build-stamp:
 		-D OPENTHREADS_SOVERSION:STRING=${OPENTHREADS_SOVERSION} \
 		-D OPENSCENEGRAPH_SOVERSION:STRING=${OPENSCENEGRAPH_SOVERSION} \
 		-D CMAKE_BUILD_TYPE:STRING=Release \
-		-D CMAKE_INSTALL_PREFIX:PATH=/ \
+		-D CMAKE_INSTALL_PREFIX:PATH=/usr \
 		-D BUILD_OSG_EXAMPLES:BOOL=ON \
 		-D LIB_POSTFIX="" \
 		${LINKER_FLAGS} \
