@@ -1,5 +1,6 @@
 openscenegraph (3.0.1-4) unstable; urgency=low
 
+  [ Alberto Luaces ]
   * Upgraded standards version to 3.9.3.
   * Append options to LDFLAGS instead of replacing its value.
   * Use of hardening flags for building.
@@ -8,7 +9,7 @@ openscenegraph (3.0.1-4) unstable; urgency=low
     (Closes: #690878).
   * Removal of unused LINKER_FLAGS variable in debian/rules.
 
- --
+ -- Manuel A. Fernandez Montecelo <manuel.montezelo@gmail.com>  Thu, 22 Nov 2012 22:07:57 +0000
 
 openscenegraph (3.0.1-3) unstable; urgency=low
 
