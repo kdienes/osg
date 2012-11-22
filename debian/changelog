@@ -6,6 +6,7 @@ openscenegraph (3.0.1-4) unstable; urgency=low
   * Added a manpage for the osgviewerWX executable.
   * Changes in the build prefix in order to fix the pkg-config files
     (Closes: #690878).
+  * Removal of unused LINKER_FLAGS variable in debian/rules.
 
  --
 

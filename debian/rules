@@ -409,7 +409,6 @@ build-stamp:
 		-D BUILD_OSG_EXAMPLES:BOOL=OFF \
 		-D BUILD_OSG_APPLICATIONS:BOOL=OFF \
 		-D LIB_POSTFIX="" \
-		${LINKER_FLAGS} \
 		../../${OSG}
 	${MAKE} ${PARALLEL_OPTIONS} VERBOSE=1 -C build/osgstatic
 
@@ -422,7 +421,6 @@ build-stamp:
 		-D CMAKE_INSTALL_PREFIX:PATH=/usr \
 		-D BUILD_OSG_EXAMPLES:BOOL=ON \
 		-D LIB_POSTFIX="" \
-		${LINKER_FLAGS} \
 		../../${OSG}
 	${MAKE} ${PARALLEL_OPTIONS} VERBOSE=1 -C build/osg
 
