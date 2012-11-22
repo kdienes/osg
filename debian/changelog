@@ -1,6 +1,5 @@
 openscenegraph (3.0.1-4) unstable; urgency=low
 
-  * Upgraded debhelper compatibility level from 7 to 9.
   * Upgraded standards version to 3.9.3.
   * Append options to LDFLAGS instead of replacing its value.
   * Use of hardening flags for building.
