@@ -151,13 +151,16 @@ OPENSCENEGRAPH_SOVERSION=80
 GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\(.*\)-.*).*~\1~p' debian/changelog
 VERSION := $(shell $(GRAB_VERSION_COMMAND))
 TMPDIR := $(shell mktemp -d)
-TARBALL_NAME := openscenegraph_$(VERSION).orig.tar.gz
+TARBALL_NAME := openscenegraph_$(VERSION)-dfsg.orig.tar.gz
 UPSTREAM_SVN_TAG_DIR := http://svn.openscenegraph.org/osg/OpenSceneGraph/tags/OpenSceneGraph
 
 get-orig-source:
 	dh_testdir
 	mkdir -p $(TMPDIR)/openscenegraph-$(VERSION)
 	svn export $(UPSTREAM_SVN_TAG_DIR)-$(VERSION) $(TMPDIR)/openscenegraph-$(VERSION)/$(OSG)
+# Remove geo plugin directory
+	rm -r $(TMPDIR)/openscenegraph-$(VERSION)/$(OSG)/src/osgPlugins/geo
+	sed -i /ADD_SUBDIRECTORY\(geo\)/d $(TMPDIR)/openscenegraph-$(VERSION)/$(OSG)/src/osgPlugins/CMakeLists.txt
 	tar czvf ../$(TARBALL_NAME) -C $(TMPDIR)/ openscenegraph-$(VERSION)
 	rm -rf $(TMPDIR)
 
