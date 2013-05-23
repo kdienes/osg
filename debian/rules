@@ -152,7 +152,7 @@ GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\(.*\)-.*).*~\1~p' debian/changelog
 VERSION := $(shell $(GRAB_VERSION_COMMAND))
 TMPDIR := $(shell mktemp -d)
 TARBALL_NAME := openscenegraph_$(VERSION).orig.tar.gz
-UPSTREAM_SVN_TAG_DIR := http://www.openscenegraph.org/svn/osg/OpenSceneGraph/tags/OpenSceneGraph
+UPSTREAM_SVN_TAG_DIR := http://svn.openscenegraph.org/osg/OpenSceneGraph/tags/OpenSceneGraph
 
 get-orig-source:
 	dh_testdir
