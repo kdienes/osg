@@ -148,7 +148,7 @@ LDFLAGS += -Wl,--as-needed
 OPENTHREADS_SOVERSION=14
 OPENSCENEGRAPH_SOVERSION=80
 
-GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\(.*\)-.*).*~\1~p' debian/changelog
+GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\(.*\)-.*).*~\1~p' debian/changelog | sed  's~-dfsg~~'
 VERSION := $(shell $(GRAB_VERSION_COMMAND))
 TMPDIR := $(shell mktemp -d)
 TARBALL_NAME := openscenegraph_$(VERSION)-dfsg.orig.tar.gz
