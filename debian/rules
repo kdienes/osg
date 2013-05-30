@@ -346,7 +346,6 @@ install-arch: build-arch
 
 	# Add here commands to install the package into debian/tmp
 	mkdir -p $(CURDIR)/debian/tmp/usr
-	$(MAKE) -C build/osgstatic DESTDIR=$(CURDIR)/debian/tmp install
 	$(MAKE) -C build/osg DESTDIR=$(CURDIR)/debian/tmp install
 	-mv $(CURDIR)/debian/tmp/usr/share/OpenSceneGraph/bin/* $(CURDIR)/debian/tmp/usr/bin
 	for man in ${MANEXAMPLES} ; do rm -f $$man ; ln -s debian/osgexamples.1 $$man ; done
@@ -401,19 +400,6 @@ doc-stamp:
 build-arch: build-stamp
 build-stamp:
 	dh_testdir
-
-# Static
-
-	mkdir -p build/osgstatic ; cd build/osgstatic ; ${SETAFFINITY} cmake --debug-output \
-		-D CMAKE_BUILD_TYPE:STRING=Release \
-		-D CMAKE_INSTALL_PREFIX:PATH=/usr \
-		-D DYNAMIC_OPENTHREADS:BOOL=OFF \
-		-D DYNAMIC_OPENSCENEGRAPH:BOOL=OFF \
-		-D BUILD_OSG_EXAMPLES:BOOL=OFF \
-		-D BUILD_OSG_APPLICATIONS:BOOL=OFF \
-		-D LIB_POSTFIX="" \
-		../../${OSG}
-	${MAKE} ${PARALLEL_OPTIONS} VERBOSE=1 -C build/osgstatic
 
 # Dynamic
 
