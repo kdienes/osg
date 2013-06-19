@@ -155,18 +155,13 @@ OPENSCENEGRAPH_SOVERSION=97
 GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\(.*\)-.*).*~\1~p' debian/changelog | sed  's~-dfsg~~'
 VERSION := $(shell $(GRAB_VERSION_COMMAND))
 TMPDIR := $(shell mktemp -d)
-TARBALL_NAME := openscenegraph_$(VERSION)-dfsg.orig.tar.gz
+TARBALL_NAME := openscenegraph_$(VERSION).orig.tar.gz
 UPSTREAM_SVN_TAG_DIR := http://svn.openscenegraph.org/osg/OpenSceneGraph/tags/OpenSceneGraph
 
 get-orig-source:
 	dh_testdir
 	mkdir -p $(TMPDIR)/openscenegraph-$(VERSION)
 	svn export $(UPSTREAM_SVN_TAG_DIR)-$(VERSION) $(TMPDIR)/openscenegraph-$(VERSION)/$(OSG)
-# Remove geo plugin directory and examples
-	rm -r $(TMPDIR)/openscenegraph-$(VERSION)/$(OSG)/src/osgPlugins/geo
-	rm -r $(TMPDIR)/openscenegraph-$(VERSION)/$(OSG)/examples/osggeodemo
-	sed -i /ADD_SUBDIRECTORY\(geo\)/d $(TMPDIR)/openscenegraph-$(VERSION)/$(OSG)/src/osgPlugins/CMakeLists.txt
-	sed -i /osggeodemo/d $(TMPDIR)/openscenegraph-$(VERSION)/$(OSG)/examples/CMakeLists.txt
 	tar czvf ../$(TARBALL_NAME) -C $(TMPDIR)/ openscenegraph-$(VERSION)
 	rm -rf $(TMPDIR)
 
@@ -226,7 +221,6 @@ MANEXAMPLES = \
 	osgforest.1 \
 	osgfxbrowser.1 \
 	osggameoflife.1 \
-	osggeodemo.1 \
 	osggeometry.1 \
 	osggeometryshaders.1 \
 	osghangglide.1 \

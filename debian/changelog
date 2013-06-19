@@ -1,9 +1,8 @@
-openscenegraph (3.1.7-dfsg-1) unstable; urgency=low
+openscenegraph (3.1.8-1) unstable; urgency=low
 
   [Alberto Luaces]
   * Updated standards version (3.9.4).
   * Updated SVN URL.
-  * Removed geo plugin with proprietary license to follow the DFSG.
   * Removed the static version of the libraries since they impose a huge
     load on the build servers, add additional complexity on the build
     scripts, and make a great impact on the size of the packages, given
