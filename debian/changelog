@@ -7,8 +7,16 @@ openscenegraph (3.1.8-1) unstable; urgency=low
     load on the build servers, add additional complexity on the build
     scripts, and make a great impact on the size of the packages, given
     the very small cases where they are useful.
+  * Acknowledge NMU.
 
  --
+
+openscenegraph (3.0.1-4.1) unstable; urgency=low
+
+  * Non-maintainer upload.
+  * Replace libocin60-dev by libcoin80-dev for transition.
+
+ -- Anton Gladky <gladk@debian.org>  Sun, 09 Jun 2013 11:49:44 +0200
 
 openscenegraph (3.0.1-4) unstable; urgency=low
 
