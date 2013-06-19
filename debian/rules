@@ -338,7 +338,17 @@ MANEXAMPLES = \
 	present3D.1 \
 	osguserdata.1 \
 	osgviewerQt.1 \
-	osgviewerWX.1
+	osgviewerWX.1 \
+	osgatomiccounter.1 \
+	osgcomputeshaders.1 \
+	osgframerenderer.1 \
+	osgkeystone.1 \
+	osgmultiplemovies.1 \
+	osgmultitouch.1 \
+	osgoscdevice.1 \
+	osgsimplegl3.1 \
+	osgsimpleshaders.1 \
+	osgtessellationshaders.1
 
 install-arch: build-arch
 	dh_testdir
