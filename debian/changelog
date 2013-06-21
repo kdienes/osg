@@ -1,6 +1,7 @@
 openscenegraph (3.1.8-1) unstable; urgency=low
 
   [Alberto Luaces]
+  * New upstream release.
   * Updated standards version (3.9.4).
   * Updated SVN URL.
   * Removed the static version of the libraries since they impose a huge
