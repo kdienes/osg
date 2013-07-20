@@ -148,9 +148,9 @@ LDFLAGS += -Wl,--as-needed
 # OPENTHREADS_SOVERSION=14
 # OPENSCENEGRAPH_SOVERSION=80
 #
-# OpenSceneGraph 3.1.8
+# OpenSceneGraph 3.2.0
 OPENTHREADS_SOVERSION=14
-OPENSCENEGRAPH_SOVERSION=98
+OPENSCENEGRAPH_SOVERSION=99
 
 GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\(.*\)-.*).*~\1~p' debian/changelog | sed  's~-dfsg~~'
 VERSION := $(shell $(GRAB_VERSION_COMMAND))

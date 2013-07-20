@@ -73,7 +73,7 @@ Depends: ${misc:Depends},
          libopenthreads-dev,
          libgl1-mesa-dev | libgl-dev,
          libglu-dev,
-         libopenscenegraph98 (= ${binary:Version})
+         libopenscenegraph99 (= ${binary:Version})
 Suggests: openscenegraph-doc,
           openscenegraph-examples
 Description: 3D scene graph, development files
@@ -86,7 +86,7 @@ Description: 3D scene graph, development files
  .
  This package contains the development headers.
 
-Package: libopenscenegraph98
+Package: libopenscenegraph99
 Section: libs
 Architecture: any
 Depends: ${misc:Depends},
