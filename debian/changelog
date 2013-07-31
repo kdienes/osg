@@ -1,4 +1,4 @@
-openscenegraph (3.2.0-rc1-1) unstable; urgency=low
+openscenegraph (3.2.0~rc1-1) unstable; urgency=low
 
   [Alberto Luaces]
   * New upstream release.
@@ -10,7 +10,10 @@ openscenegraph (3.2.0-rc1-1) unstable; urgency=low
     the very small cases where they are useful.
   * Acknowledge NMU.
 
- --
+  [ Manuel A. Fernandez Montecelo ]
+  * Switch to @debian.org address
+
+ -- Manuel A. Fernandez Montecelo <mafm@debian.org>  Tue, 30 Jul 2013 13:07:57 +0000
 
 openscenegraph (3.0.1-4.1) unstable; urgency=low
 
