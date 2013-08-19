@@ -41,7 +41,7 @@ Package: libopenthreads-dev
 Section: libdevel
 Architecture: any
 Depends: ${misc:Depends},
-         libopenthreads14 (= ${binary:Version})
+         libopenthreads15 (= ${binary:Version})
 Description: Object-Oriented (OO) thread interface for C++, development files
  This library is intended to provide a minimal & complete Object-Oriented (OO)
  thread interface for C++ programmers, used primarily in OpenSceneGraph.  It is
@@ -49,7 +49,7 @@ Description: Object-Oriented (OO) thread interface for C++, development files
  .
  This package contains the development headers.
 
-Package: libopenthreads14
+Package: libopenthreads15
 Section: libs
 Architecture: any
 Depends: ${misc:Depends},
@@ -73,7 +73,7 @@ Depends: ${misc:Depends},
          libopenthreads-dev,
          libgl1-mesa-dev | libgl-dev,
          libglu-dev,
-         libopenscenegraph99 (= ${binary:Version})
+         libopenscenegraph100 (= ${binary:Version})
 Suggests: openscenegraph-doc,
           openscenegraph-examples
 Description: 3D scene graph, development files
@@ -86,7 +86,7 @@ Description: 3D scene graph, development files
  .
  This package contains the development headers.
 
-Package: libopenscenegraph99
+Package: libopenscenegraph100
 Section: libs
 Architecture: any
 Depends: ${misc:Depends},
