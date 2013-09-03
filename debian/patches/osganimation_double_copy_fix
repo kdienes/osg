@@ -1,0 +1,14 @@
+Index: osggit/OpenSceneGraph/src/osgAnimation/StackedTransform.cpp
+===================================================================
+--- osggit.orig/OpenSceneGraph/src/osgAnimation/StackedTransform.cpp	2013-06-28 14:00:43.000000000 +0200
++++ osggit/OpenSceneGraph/src/osgAnimation/StackedTransform.cpp	2013-09-03 09:56:32.000000000 +0200
+@@ -18,8 +18,7 @@
+ 
+ StackedTransform::StackedTransform() {}
+ 
+-StackedTransform::StackedTransform(const StackedTransform& rhs, const osg::CopyOp& co):
+-    osg::MixinVector<osg::ref_ptr<StackedTransformElement> >(rhs)
++StackedTransform::StackedTransform(const StackedTransform& rhs, const osg::CopyOp& co)
+ {
+     reserve(rhs.size());
+     for (StackedTransform::const_iterator it = rhs.begin(); it != rhs.end(); ++it)
