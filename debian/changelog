@@ -2,6 +2,7 @@ openscenegraph (3.2.0~rc1-3) unstable; urgency=low
 
   * Fix for texture corruption. Thanks Rebecca Palmer for the patch and
     testing and Markus Wanner for additional testing (Closes: #736350).
+  * Now depends on xinelib 1.2 (Closes: #724753).
 
  --
 
