@@ -1,3 +1,11 @@
+openscenegraph (3.2.0~rc1-2) unstable; urgency=medium
+
+  * Add osg_libav9.patch to fix a FTBFS with newer ffmpeg/libav.  Thanks
+    Rebecca N. Palmer for the report and the patch. (Closes: #720816)
+  * Refresh all patches
+
+ -- Manuel A. Fernandez Montecelo <mafm@debian.org>  Wed, 15 Jan 2014 20:16:35 +0000
+
 openscenegraph (3.2.0~rc1-1) unstable; urgency=low
 
   [Alberto Luaces]

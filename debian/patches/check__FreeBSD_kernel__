@@ -1,7 +1,5 @@
-Index: osggit/OpenSceneGraph/applications/present3D/Cluster.cpp
-===================================================================
---- osggit.orig/OpenSceneGraph/applications/present3D/Cluster.cpp	2013-06-21 17:26:41.000000000 +0200
-+++ osggit/OpenSceneGraph/applications/present3D/Cluster.cpp	2013-06-21 17:26:41.000000000 +0200
+--- a/OpenSceneGraph/applications/present3D/Cluster.cpp
++++ b/OpenSceneGraph/applications/present3D/Cluster.cpp
 @@ -33,7 +33,7 @@
  #if defined(__linux)
      #include <unistd.h>

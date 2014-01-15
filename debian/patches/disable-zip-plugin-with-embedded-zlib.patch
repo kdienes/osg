@@ -1,9 +1,7 @@
 Author: <alberto@pantallon>
 Description: No description.
-Index: osggit/OpenSceneGraph/src/osgPlugins/CMakeLists.txt
-===================================================================
---- osggit.orig/OpenSceneGraph/src/osgPlugins/CMakeLists.txt	2013-06-21 17:21:17.000000000 +0200
-+++ osggit/OpenSceneGraph/src/osgPlugins/CMakeLists.txt	2013-06-21 17:21:17.000000000 +0200
+--- a/OpenSceneGraph/src/osgPlugins/CMakeLists.txt
++++ b/OpenSceneGraph/src/osgPlugins/CMakeLists.txt
 @@ -237,9 +237,9 @@
      ADD_SUBDIRECTORY(qfont)
  ENDIF()
