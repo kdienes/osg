@@ -1,0 +1,13 @@
+Index: git/OpenSceneGraph/src/osgPlugins/ffmpeg/FFmpegDecoder.cpp
+===================================================================
+--- git.orig/OpenSceneGraph/src/osgPlugins/ffmpeg/FFmpegDecoder.cpp	2013-08-30 11:49:20.000000000 +0200
++++ git/OpenSceneGraph/src/osgPlugins/ffmpeg/FFmpegDecoder.cpp	2013-08-30 11:52:46.000000000 +0200
+@@ -279,7 +279,7 @@
+         int error = av_read_frame(m_format_context.get(), &packet);
+         if (error < 0)
+         {
+-            if (error == AVERROR_EOF || url_feof(m_format_context.get()->pb))
++            if (error == AVERROR_EOF || m_format_context.get()->pb->eof_reached)
+                 end_of_stream = true;
+             else {
+                 OSG_FATAL << "av_read_frame() returned " << AvStrError(error) << std::endl;
