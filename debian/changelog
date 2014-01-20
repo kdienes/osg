@@ -3,7 +3,6 @@ openscenegraph (3.2.0-1) unstable; urgency=low
   * Upstream stable release.
   * Replace obsolete url_feof macro (Closes: #720816).
   * Backported fix for osganimation from upstream.
-  * Now depends on xinelib 1.2 (Closes: #724753).
 
  --
 
