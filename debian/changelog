@@ -1,4 +1,4 @@
-openscenegraph (3.2.1-rc1-1) unstable; urgency=low
+openscenegraph (3.2.0-1) unstable; urgency=low
 
   * Upstream stable release.
   * Replace obsolete url_feof macro (Closes: #720816).
