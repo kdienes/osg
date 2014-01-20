@@ -2,4 +2,3 @@ override-soversions.patch
 disable-zip-plugin-with-embedded-zlib.patch
 check__FreeBSD_kernel__
 libav9_transition
-osganimation_double_copy_fix
