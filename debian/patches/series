@@ -1,3 +1,0 @@
-override-soversions.patch
-disable-zip-plugin-with-embedded-zlib.patch
-check__FreeBSD_kernel__
