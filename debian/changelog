@@ -4,7 +4,7 @@ openscenegraph (3.2.0~rc1-3) unstable; urgency=low
     testing and Markus Wanner for additional testing (Closes: #736350).
   * Now depends on xinelib 1.2 (Closes: #724753).
 
- --
+ -- Alberto Luaces <aluaces@udc.es>  Fri, 24 Jan 2014 21:09:56 +0100
 
 openscenegraph (3.2.0~rc1-2) unstable; urgency=medium
 
