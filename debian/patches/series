@@ -2,3 +2,4 @@ override-soversions.patch
 disable-zip-plugin-with-embedded-zlib.patch
 check__FreeBSD_kernel__
 osg_libav9.patch
+Upstream-fix-(b801ae)-for-bug-#736350 -p1

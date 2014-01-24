@@ -1,5 +1,7 @@
---- a/OpenSceneGraph/src/osgPlugins/ffmpeg/FFmpegDecoder.cpp
-+++ b/OpenSceneGraph/src/osgPlugins/ffmpeg/FFmpegDecoder.cpp
+Index: git/OpenSceneGraph/src/osgPlugins/ffmpeg/FFmpegDecoder.cpp
+===================================================================
+--- git.orig/OpenSceneGraph/src/osgPlugins/ffmpeg/FFmpegDecoder.cpp	2014-01-24 20:57:27.419573010 +0100
++++ git/OpenSceneGraph/src/osgPlugins/ffmpeg/FFmpegDecoder.cpp	2014-01-24 20:57:27.411573010 +0100
 @@ -279,7 +279,7 @@
          int error = av_read_frame(m_format_context.get(), &packet);
          if (error < 0)
