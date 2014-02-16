@@ -1,0 +1,23 @@
+From: "Loic Dachary (OuoU)" <loic@debian.org>
+Date: Wed, 15 May 2013 22:58:26 -0400
+Subject: Check for __FreeBSD_kernel__ as well as __FreeBSD__.
+
+See the thread at:
+http://lists.freebsd.org/pipermail/freebsd-hackers/2011-July/035721.html
+---
+ applications/present3D/deprecated/Cluster.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/applications/present3D/deprecated/Cluster.cpp b/applications/present3D/deprecated/Cluster.cpp
+index 361dfe8..cea9f6b 100644
+--- a/applications/present3D/deprecated/Cluster.cpp
++++ b/applications/present3D/deprecated/Cluster.cpp
+@@ -33,7 +33,7 @@
+ #if defined(__linux)
+     #include <unistd.h>
+     #include <linux/sockios.h>
+-#elif defined(__FreeBSD__) || defined(__DragonFly__)
++#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__)
+     #include <unistd.h>
+     #include <sys/sockio.h>
+ #elif defined(__sgi)

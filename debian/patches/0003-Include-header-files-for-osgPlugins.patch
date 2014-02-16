@@ -1,0 +1,28 @@
+From: Klee Dienes <klee.dienes@hadronindustries.com>
+Date: Wed, 15 May 2013 20:06:10 -0400
+Subject: Include header files for osgPlugins.
+
+---
+ CMakeModules/OsgMacroUtils.cmake | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/CMakeModules/OsgMacroUtils.cmake b/CMakeModules/OsgMacroUtils.cmake
+index aa607fa..62f2e27 100644
+--- a/CMakeModules/OsgMacroUtils.cmake
++++ b/CMakeModules/OsgMacroUtils.cmake
+@@ -333,6 +333,15 @@ MACRO(SETUP_PLUGIN PLUGIN_NAME)
+             LIBRARY DESTINATION lib${LIB_POSTFIX}/${OSG_PLUGINS} COMPONENT ${PACKAGE_COMPONENT})
+     ENDIF(WIN32)
+     ENDIF()
++
++    SET(INSTALL_INCDIR include)
++    IF(NOT OSG_COMPILE_FRAMEWORKS)
++        INSTALL (
++            FILES        ${TARGET_H}
++            DESTINATION ${INSTALL_INCDIR}/${OSG_PLUGINS}/${PLUGIN_NAME}
++            COMPONENT libopenscenegraph-dev
++	    )
++    ENDIF()
+ ENDMACRO(SETUP_PLUGIN)
+ 
+ 

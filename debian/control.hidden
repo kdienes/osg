@@ -1,0 +1,36 @@
+Package: libopenthreads-static
+Build-Profiles: static
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: ${misc:Depends},
+         libopenthreads20 (= ${binary:Version})
+Description: Object-Oriented (OO) thread interface for C++, development files
+ This library is intended to provide a minimal & complete Object-Oriented (OO)
+ thread interface for C++ programmers, used primarily in OpenSceneGraph.  It is
+ loosely modeled on the Java thread API, and the POSIX Threads standards.
+ .
+ This package contains the static libraries.
+
+Package: libopenscenegraph-static
+Build-Profiles: static
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: ${misc:Depends},
+         libopenthreads-dev,
+         libgl1-mesa-dev | libgl-dev,
+         libglu-dev,
+         libopenscenegraph111 (= ${binary:Version})
+Suggests: openscenegraph-doc,
+          openscenegraph-examples
+Description: 3D scene graph, development files
+ A portable, high level graphics toolkit for the development of high performance
+ graphics applications such as flight simulators, games, virtual reality or
+ scientific visualization.  Providing an object orientated framework on top of
+ OpenGL, it frees the developer from implementing and optimizing low level
+ graphics calls, and provide many additional utilities for rapid development of
+ graphics applications.
+ .
+ This package contains the static libraries.
+

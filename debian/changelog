@@ -1,18 +1,33 @@
-openscenegraph (3.2.0~rc1-3) unstable; urgency=low
+openscenegraph (3.3.1-1) unstable; urgency=low
 
-  * Fix for texture corruption. Thanks Rebecca Palmer for the patch and
-    testing and Markus Wanner for additional testing (Closes: #736350).
+  * Backport.
+
+ -- Klee Dienes <klee@mit.edu>  Sun, 29 Dec 2013 15:47:26 -0500
+
+openscenegraph (3.3.0-2) UNRELEASED; urgency=low
+
+  * New release.
+  * [more]
+
+ -- Klee Dienes <klee@mit.edu>  Sat, 28 Sep 2013 13:52:49 -0400
+
+openscenegraph (3.3.0~pre20130928-1) UNRELEASED; urgency=low
+
+  * New release.
+  * Ignore patches folder.
+  * Add mutiarch support.
+  * Make emacs Make-mode happy.
+
+ -- Klee Dienes <klee@mit.edu>  Sat, 28 Sep 2013 13:52:49 -0400
+
+openscenegraph (3.2.0-1) unstable; urgency=low
+
+  * Upstream stable release.
+  * Replace obsolete url_feof macro (Closes: #720816).
+  * Backported fix for osganimation from upstream.
   * Now depends on xinelib 1.2 (Closes: #724753).
 
- -- Alberto Luaces <aluaces@udc.es>  Fri, 24 Jan 2014 21:09:56 +0100
-
-openscenegraph (3.2.0~rc1-2) unstable; urgency=medium
-
-  * Add osg_libav9.patch to fix a FTBFS with newer ffmpeg/libav.  Thanks
-    Rebecca N. Palmer for the report and the patch. (Closes: #720816)
-  * Refresh all patches
-
- -- Manuel A. Fernandez Montecelo <mafm@debian.org>  Wed, 15 Jan 2014 20:16:35 +0000
+ -- Klee Dienes <klee@mit.edu>  Sat, 28 Sep 2013 13:52:49 -0400
 
 openscenegraph (3.2.0~rc1-1) unstable; urgency=low
 

@@ -1,0 +1,50 @@
+From: Klee Dienes <klee.dienes@hadronindustries.com>
+Date: Mon, 20 May 2013 15:27:48 -0400
+Subject: Add new component libopenscenegraph-static; add static libraries to
+ it.
+
+---
+ CMakeModules/ModuleInstall.cmake | 2 +-
+ CMakeModules/OsgCPack.cmake      | 2 +-
+ CMakeModules/OsgMacroUtils.cmake | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/CMakeModules/ModuleInstall.cmake b/CMakeModules/ModuleInstall.cmake
+index f2ea067..1604508 100644
+--- a/CMakeModules/ModuleInstall.cmake
++++ b/CMakeModules/ModuleInstall.cmake
+@@ -37,7 +37,7 @@ INSTALL(
+     TARGETS ${LIB_NAME}
+     RUNTIME DESTINATION ${INSTALL_BINDIR} COMPONENT libopenscenegraph
+     LIBRARY DESTINATION ${INSTALL_LIBDIR} COMPONENT libopenscenegraph
+-    ARCHIVE DESTINATION ${INSTALL_ARCHIVEDIR} COMPONENT libopenscenegraph-dev    
++    ARCHIVE DESTINATION ${INSTALL_ARCHIVEDIR} COMPONENT libopenscenegraph-static
+ )
+ 
+ IF(NOT OSG_COMPILE_FRAMEWORKS)
+diff --git a/CMakeModules/OsgCPack.cmake b/CMakeModules/OsgCPack.cmake
+index 7064872..c978e3b 100644
+--- a/CMakeModules/OsgCPack.cmake
++++ b/CMakeModules/OsgCPack.cmake
+@@ -77,7 +77,7 @@ IF(NOT CPACK_COMPONENTS_ALL)
+   # cmake 2.6.0 don't supply the COMPONENTS property.
+   # I set it manually to be the packages that can always be packaged
+   MESSAGE("When building packages please consider using cmake version 2.6.1 or above")
+-  SET(CPACK_COMPONENTS_ALL libopenscenegraph libopenthreads openscenegraph libopenscenegraph-dev libopenthreads-dev)
++  SET(CPACK_COMPONENTS_ALL libopenscenegraph libopenthreads openscenegraph libopenscenegraph-dev libopenthreads-dev libopenscenegraph-static)
+ ENDIF()
+ 
+ # Create a target that will be used to generate all packages defined below
+diff --git a/CMakeModules/OsgMacroUtils.cmake b/CMakeModules/OsgMacroUtils.cmake
+index 62f2e27..85e23c5 100644
+--- a/CMakeModules/OsgMacroUtils.cmake
++++ b/CMakeModules/OsgMacroUtils.cmake
+@@ -329,7 +329,7 @@ MACRO(SETUP_PLUGIN PLUGIN_NAME)
+     ELSE(WIN32)
+         INSTALL(TARGETS ${TARGET_TARGETNAME}
+             RUNTIME DESTINATION bin COMPONENT ${PACKAGE_COMPONENT}
+-            ARCHIVE DESTINATION lib${LIB_POSTFIX}/${OSG_PLUGINS} COMPONENT libopenscenegraph-dev
++            ARCHIVE DESTINATION lib${LIB_POSTFIX}/${OSG_PLUGINS} COMPONENT libopenscenegraph-static
+             LIBRARY DESTINATION lib${LIB_POSTFIX}/${OSG_PLUGINS} COMPONENT ${PACKAGE_COMPONENT})
+     ENDIF(WIN32)
+     ENDIF()

@@ -1,0 +1,17 @@
+libosgGA 111 libopenscenegraph111
+libosgViewer 111 libopenscenegraph111
+libosgParticle 111 libopenscenegraph111
+libosgPresentation 111 libopenscenegraph111
+libosgVolume 111 libopenscenegraph111
+libosgQt 111 libopenscenegraph111
+libosgShadow 111 libopenscenegraph111
+libosgDB 111 libopenscenegraph111
+libosgWidget 111 libopenscenegraph111
+libosgFX 111 libopenscenegraph111
+libosg 111 libopenscenegraph111
+libosgManipulator 111 libopenscenegraph111
+libosgSim 111 libopenscenegraph111
+libosgUtil 111 libopenscenegraph111
+libosgText 111 libopenscenegraph111
+libosgAnimation 111 libopenscenegraph111
+libosgTerrain 111 libopenscenegraph111

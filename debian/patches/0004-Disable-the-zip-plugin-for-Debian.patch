@@ -1,0 +1,25 @@
+From: "Loic Dachary (OuoU)" <loic@debian.org>
+Date: Wed, 15 May 2013 22:58:26 -0400
+Subject: Disable the zip plugin for Debian.
+
+---
+ src/osgPlugins/CMakeLists.txt | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/osgPlugins/CMakeLists.txt b/src/osgPlugins/CMakeLists.txt
+index 5aab010..e621f3f 100644
+--- a/src/osgPlugins/CMakeLists.txt
++++ b/src/osgPlugins/CMakeLists.txt
+@@ -237,9 +237,9 @@ IF (QT4_FOUND)
+     ADD_SUBDIRECTORY(qfont)
+ ENDIF()
+ 
+-IF(ZLIB_FOUND)
+-    ADD_SUBDIRECTORY(zip)
+-ENDIF()
++# IF(ZLIB_FOUND)
++#     ADD_SUBDIRECTORY(zip)
++# ENDIF()
+ 
+ IF(RSVG_FOUND)
+     ADD_SUBDIRECTORY(svg)

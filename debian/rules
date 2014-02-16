@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+
 # # Sample debian/rules that uses debhelper.
 # # GNU copyright 1997 to 1999 by Joey Hess.
 # #
@@ -14,12 +15,21 @@
 # #    cd openscenegraph-xxx
 # #    cp -a ../openscenegraph-yyy/debian .
 # 
-# Uncomment this to turn on verbose mode.
+
 #export DH_VERBOSE=1
 #export DH_OPTIONS=-v
 
 DPKG_EXPORT_BUILDFLAGS = 1
 include /usr/share/dpkg/buildflags.mk
+
+include debian/manpages.gmake
+
+ifneq (,$(filter static,$(DEB_BUILD_PROFILES)))
+# dh_strip doesnt allow split symbols anyway
+DH_EXCLUDES=-Nlibopenthreads-static-dbg -Nlibopenscenegraph-static-dbg
+else
+DH_EXCLUDES=-Nlibopenthreads-static -Nlibopenscenegraph-static -Nlibopenthreads-static-dbg -Nlibopenscenegraph-static-dbg
+endif
 
 # At the moment, CMake discards CPPFLAGS, so we have to add its value
 # to C{,XX}FLAGS variables
@@ -33,13 +43,15 @@ CXXFLAGS += $(CPPFLAGS)
 # Use override_dh_* targets to customize this.
 
 ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
-	CFLAGS += -O0
+	CMAKE_BUILD_TYPE=Debug
 else
-	CFLAGS += -O2
+	CMAKE_BUILD_TYPE=RelWithDebugInfo
 endif
+
 ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
 	INSTALL_PROGRAM += -s
 endif
+
 # Default to g++
 CXX ?= g++
 
@@ -54,7 +66,9 @@ define SETAFFINITY
 	grep 'sched_setaffinity.*cpusetsize' /usr/include/sched.h > /dev/null || export COMPILE_USING_TWO_PARAM_sched_setaffinity=-DCOMPILE_USING_TWO_PARAM_sched_setaffinity ; 
 endef
 
-OSG = OpenSceneGraph
+MULTIARCH=$(shell dpkg-architecture -qDEB_BUILD_MULTIARCH)
+
+OSG = .
 
 ifeq (hppa,$(DEB_BUILD_ARCH))
 ARCH_C_FLAGS=-mlong-calls
@@ -66,91 +80,9 @@ CXXFLAGS := ${CXXFLAGS} ${ARCH_CXX_FLAGS}
 
 LDFLAGS += -Wl,--as-needed
 
-#
-# Shared libraries version numbers
-#
-# OpenSceneGraph/OpenThreads/Producer 0.9.8
-#
-#OPENSCENEGRAPH_SOVERSION=0
-#
-# OpenSceneGraph/OpenThreads/Producer 0.9.9
-#
-#OPENSCENEGRAPH_SOVERSION=1
-#
-# OpenSceneGraph/OpenThreads/Producer 1.0
-#
-#OPENSCENEGRAPH_SOVERSION=2
-#
-# OpenSceneGraph/OpenThreads/Producer 1.1
-#
-#OPENSCENEGRAPH_SOVERSION=3
-#
-# OpenSceneGraph/OpenThreads/Producer 1.2
-#
-#OPENSCENEGRAPH_SOVERSION=4
-#
-# OpenSceneGraph-1.9.1/OpenThreads-1.9.3 overriden with
-# OpenSceneGraph-1.9.3, OpenSceneGraph-1.9.4, OpenSceneGraph-1.9.5, OpenSceneGraph-1.9.7 and
-# OpenSceneGraph-2.0.0
-#
-#OPENSCENEGRAPH_SOVERSION=5
-#
-# OpenSceneGraph 2.2.0
-#
-#
-#OPENSCENEGRAPH_SOVERSION=6
-#
-# OpenSceneGraph 2.4.0
-#
-#OPENSCENEGRAPH_SOVERSION=7
-#OSG_VERSION=2.4.0
-#
-# OpenSceneGraph 2.6.1
-#
-#OPENSCENEGRAPH_SOVERSION=48
-#OSG_VERSION=2.6.1
-#
-# OpenSceneGraph 2.8.0
-#
-#OPENSCENEGRAPH_SOVERSION=55
-#OSG_VERSION=2.8.0
-#
-# OpenSceneGraph 2.8.1 and .2
-#
-#OPENTHREADS_SOVERSION=12
-#OPENSCENEGRAPH_SOVERSION=56
-#
-# OpenSceneGraph 2.8.3
-# OPENTHREADS_SOVERSION=13
-# OPENSCENEGRAPH_SOVERSION=65
-#
-# OpenSceneGraph 2.9.10
-# OPENTHREADS_SOVERSION=14
-# OPENSCENEGRAPH_SOVERSION=68
-#
-# OpenSceneGraph 2.9.11
-# OPENTHREADS_SOVERSION=14
-# OPENSCENEGRAPH_SOVERSION=71
-#
-# OpenSceneGraph 2.9.13
-# OPENTHREADS_SOVERSION=14
-# OPENSCENEGRAPH_SOVERSION=73
-#
-# OpenSceneGraph 2.9.14
-# OPENTHREADS_SOVERSION=14
-# OPENSCENEGRAPH_SOVERSION=75
-#
-# OpenSceneGraph 2.9.16
-# OPENTHREADS_SOVERSION=14
-# OPENSCENEGRAPH_SOVERSION=77
-#
-# OpenSceneGraph 3.0.0
-# OPENTHREADS_SOVERSION=14
-# OPENSCENEGRAPH_SOVERSION=80
-#
-# OpenSceneGraph 3.2.0
-OPENTHREADS_SOVERSION=14
-OPENSCENEGRAPH_SOVERSION=99
+# OpenSceneGraph 3.3.1
+OPENTHREADS_SOVERSION=20
+OPENSCENEGRAPH_SOVERSION=111
 
 GRAB_VERSION_COMMAND := sed -n '1s~[^(]*(\(.*\)-.*).*~\1~p' debian/changelog | sed  's~-dfsg~~'
 VERSION := $(shell $(GRAB_VERSION_COMMAND))
@@ -167,188 +99,23 @@ get-orig-source:
 
 clean:
 	dh_testdir
-	dh_testroot
 
 	# Add here commands to clean up after the build process.
 	rm -fr build
 	rm -f ${MANPAGES} 
 	rm -fr html
+	rm -fr debian/man
+	rm -fr debian/stamp-*
+
+	perl -pi -e 's/#define OPENTHREADS_SOVERSION 15/#define OPENTHREADS_SOVERSION 14/' include/OpenThreads/Version
 
 	dh_clean 
 
-MANPAGES = \
-	${MANAPPLICATIONS} \
-	${MANEXAMPLES}
-
-MANAPPLICATIONS = \
-	osgviewer.1 \
-	osgconv.1 \
-	osgversion.1 \
-	osgfilecache.1 \
-	osgarchive.1
-
-MANEXAMPLES = \
-	osg2cpp.1 \
-	osganimate.1 \
-	osganimationhardware.1 \
-	osganimationmakepath.1 \
-	osganimationnode.1 \
-	osganimationskinning.1 \
-	osganimationsolid.1 \
-	osganimationtimeline.1 \
-	osganimationviewer.1 \
-	osgautocapture.1 \
-	osgautotransform.1 \
-	osgbillboard.1 \
-	osgblendequation.1 \
-	osgbrowser.1 \
-	osgcallback.1 \
-	osgcamera.1 \
-	osgcatch.1 \
-	osgclip.1 \
-	osgcluster.1 \
-	osgcompositeviewer.1 \
-	osgcopy.1 \
-	osgcubemap.1 \
-	osgdelaunay.1 \
-	osgdepthpartition.1 \
-	osgdepthpeeling.1 \
-	osgdistortion.1 \
-	osgdrawinstanced.1 \
-	osgfadetext.1 \
-	osgfilecache.1 \
-	osgfont.1 \
-	osgforest.1 \
-	osgfxbrowser.1 \
-	osggameoflife.1 \
-	osggeometry.1 \
-	osggeometryshaders.1 \
-	osghangglide.1 \
-	osghud.1 \
-	osgimagesequence.1 \
-	osgimpostor.1 \
-	osgintersection.1 \
-	osgkdtree.1 \
-	osgkeyboard.1 \
-	osgkeyboardmouse.1 \
-	osglauncher.1 \
-	osglight.1 \
-	osglightpoint.1 \
-	osglogicop.1 \
-	osglogo.1 \
-	osgmanipulator.1 \
-	osgmemorytest.1 \
-	osgmotionblur.1 \
-	osgmovie.1 \
-	osgmultiplerendertargets.1 \
-	osgmultitexture.1 \
-	osgmultitexturecontrol.1 \
-	osgoccluder.1 \
-	osgocclusionquery.1 \
-	osgpackeddepthstencil.1 \
-	osgpagedlod.1 \
-	osgparametric.1 \
-	osgparticle.1 \
-	osgparticleeffects.1 \
-	osgpdf.1 \
-	osgphotoalbum.1 \
-	osgpick.1 \
-	osgplanets.1 \
-	osgpoints.1 \
-	osgpointsprite.1 \
-	osgprecipitation.1 \
-	osgprerender.1 \
-	osgprerendercubemap.1 \
-	osgreflect.1 \
-	osgrobot.1 \
-	osgscalarbar.1 \
-	osgscreencapture.1 \
-	osgscribe.1 \
-	osgsequence.1 \
-	osgshaders.1 \
-	osgshaderterrain.1 \
-	osgshadow.1 \
-	osgshape.1 \
-	osgsharedarray.1 \
-	osgsidebyside.1 \
-	osgsimplifier.1 \
-	osgsimulation.1 \
-	osgslice.1 \
-	osgspacewarp.1 \
-	osgspheresegment.1 \
-	osgspotlight.1 \
-	osgstereoimage.1 \
-	osgstereomatch.1 \
-	osgteapot.1 \
-	osgterrain.1 \
-	osgtessellate.1 \
-	osgtext.1 \
-	osgtext3D.1 \
-	osgtexture1D.1 \
-	osgtexture2D.1 \
-	osgtexture3D.1 \
-	osgtexturerectangle.1 \
-	osgthirdpersonview.1 \
-	osgunittests.1 \
-	osgvertexprogram.1 \
-	osgviewerGLUT.1 \
-	osgvolume.1 \
-	osgwidgetaddremove.1 \
-	osgwidgetbox.1 \
-	osgwidgetcanvas.1 \
-	osgwidgetframe.1 \
-	osgwidgetinput.1 \
-	osgwidgetlabel.1 \
-	osgwidgetmenu.1 \
-	osgwidgetmessagebox.1 \
-	osgwidgetnotebook.1 \
-	osgwidgetperformance.1 \
-	osgwidgetscrolled.1 \
-	osgwidgetshader.1 \
-	osgwidgetstyled.1 \
-	osgwidgettable.1 \
-	osgwidgetwindow.1 \
-	osgwindows.1 \
-	osgQtBrowser.1 \
-	osgQtWidgets.1 \
-	osganalysis.1 \
-	osganimationeasemotion.1 \
-	osganimationmorph.1 \
-	osgdatabaserevisions.1 \
-	osgfpdepth.1 \
-	osggpx.1 \
-	osggraphicscost.1 \
-	osgmultiviewpaging.1 \
-	osgoit.1 \
-	osgoutline.1 \
-	osgparticleshader.1 \
-	osgposter.1 \
-	osgqfont.1 \
-	osgshadercomposition.1 \
-	osgshadergen.1 \
-	osgtexturecompression.1 \
-	osgthreadedterrain.1 \
-	osguniformbuffer.1 \
-	osguserstats.1 \
-	osgvertexattributes.1 \
-	osgviewerGTK.1 \
-	osgviewerQtContext.1 \
-	osgviewerSDL.1 \
-	osgvirtualprogram.1 \
-	present3D.1 \
-	osguserdata.1 \
-	osgviewerQt.1 \
-	osgviewerWX.1 \
-	osgatomiccounter.1 \
-	osgcomputeshaders.1 \
-	osgframerenderer.1 \
-	osgkeystone.1 \
-	osgmultiplemovies.1 \
-	osgmultitouch.1 \
-	osgoscdevice.1 \
-	osgsimplegl3.1 \
-	osgsimpleshaders.1 \
-	osgtessellationshaders.1
+install-indep: build-indep
+	dh_testdir
+	dh_testroot
+	mkdir -p debian/tmp/usr/share/openscenegraph/
+	cp -r ${OSG}/examples debian/tmp/usr/share/openscenegraph
 
 install-arch: build-arch
 	dh_testdir
@@ -356,15 +123,23 @@ install-arch: build-arch
 
 	# Add here commands to install the package into debian/tmp
 	mkdir -p $(CURDIR)/debian/tmp/usr
+ifneq (,$(filter static,$(DEB_BUILD_PROFILES)))
+	$(MAKE) -C build/osgstatic DESTDIR=$(CURDIR)/debian/tmp install
+endif
 	$(MAKE) -C build/osg DESTDIR=$(CURDIR)/debian/tmp install
 	-mv $(CURDIR)/debian/tmp/usr/share/OpenSceneGraph/bin/* $(CURDIR)/debian/tmp/usr/bin
-	for man in ${MANEXAMPLES} ; do rm -f $$man ; ln -s debian/osgexamples.1 $$man ; done
-	for man in ${MANAPPLICATIONS} ; do rm -f $$man ; ln -s debian/osgapplications.1 $$man ; done
+	-rmdir $(CURDIR)/debian/tmp/usr/share/OpenSceneGraph/bin
+	-rmdir $(CURDIR)/debian/tmp/usr/share/OpenSceneGraph
+	-rm -rf debian/man
+	-mkdir debian/man
+	for man in ${MANEXAMPLES} ; do ln -sf ../osgexamples.1 debian/man/$$man ; done
+	for man in ${MANAPPLICATIONS} ; do ln -sf ../osgapplications.1 debian/man/$$man ; done
 
 # Build architecture-independent files here.
 binary-indep: install-indep
 	dh_installdocs -i
-	dh_installchangelogs -i
+	dh_installchangelogs -i -Nopenscenegraph-doc -XChangeLog
+	dh_installchangelogs -p openscenegraph-doc
 	dh_install -i -XCMakeLists.txt
 	dh_lintian -i
 	dh_compress -i
@@ -374,55 +149,80 @@ binary-indep: install-indep
 	dh_md5sums -i
 	dh_builddeb -i
 
-install-indep: build-indep
-	mkdir -p debian/tmp/usr/share/openscenegraph/
-	cp -r OpenSceneGraph/examples debian/tmp/usr/share/openscenegraph
-
 # Build architecture-dependent files here.
 binary-arch: install-arch
-	dh_install -a
+	dh_install -a ${DH_EXCLUDES}
 	dh_installdocs -a
-	dh_installchangelogs -a
+	dh_installchangelogs -a -XChangeLog
 	dh_installexamples -a
-	dh_installman -p openscenegraph ${MANPAGES}
+	dh_installman -p openscenegraph $(addprefix debian/man/, ${MANPAGES})
 	dh_lintian -a
 	dh_link -a
 	dh_compress -a
 	dh_fixperms -a
-	dh_strip -a
+	dh_strip -p libopenscenegraph${OPENSCENEGRAPH_SOVERSION} --dbg-package=libopenscenegraph${OPENSCENEGRAPH_SOVERSION}-dbg
+	dh_strip -p libopenthreads${OPENTHREADS_SOVERSION} --dbg-package=libopenthreads${OPENTHREADS_SOVERSION}-dbg
+ifneq (,$(filter static,$(DEB_BUILD_STATIC)))
+	# dh_strip -p libopenscenegraph-static --dbg-package=libopenscenegraph-static-dbg
+endif
+	dh_strip -p openscenegraph
 	dh_makeshlibs -a
-	dh_shlibdeps -a
+	dh_shlibdeps -a -- -xfglrx -xnvidia-current
 	dh_installdeb -a
 	dh_gencontrol -a
 	dh_md5sums -a
-	dh_builddeb -a
+	dh_builddeb -a ${DH_EXCLUDES}
 
 binary: binary-indep binary-arch
 
 build: build-indep build-arch
 
-build-indep: doc-stamp
-doc-stamp:
+build-indep: debian/stamp-doxygen
+
+build-arch: debian/stamp-build
+
+debian/stamp-doxygen:
+	dh_testdir
 	mkdir -p html
 	doxygen debian/Doxyfile-openscenegraph
-	touch doc-stamp
+	touch debian/stamp-doxygen
 
-build-arch: build-stamp
-build-stamp:
+debian/stamp-build: debian/stamp-configure
 	dh_testdir
-
-# Dynamic
-
-	mkdir -p build/osg; cd build/osg ; ${SETAFFINITY} cmake --debug-output \
-		-D OPENTHREADS_SOVERSION:STRING=${OPENTHREADS_SOVERSION} \
-		-D OPENSCENEGRAPH_SOVERSION:STRING=${OPENSCENEGRAPH_SOVERSION} \
-		-D CMAKE_INSTALL_PREFIX:PATH=/usr \
-		-D BUILD_OSG_EXAMPLES:BOOL=ON \
-		-D LIB_POSTFIX="" \
-		../../${OSG}
+ifneq (,$(filter static,$(DEB_BUILD_PROFILES)))
+	${MAKE} ${PARALLEL_OPTIONS} VERBOSE=1 -C build/osgstatic
+endif
 	${MAKE} ${PARALLEL_OPTIONS} VERBOSE=1 -C build/osg
 
-	touch build-stamp
+
+debian/stamp-configure:
+	dh_testdir
+
+ifneq (,$(filter static,$(DEB_BUILD_PROFILES)))
+	# Static
+	mkdir -p build/osgstatic ; cd build/osgstatic ; ${SETAFFINITY} cmake --debug-output \
+		-D CMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE} \
+		-D CMAKE_INSTALL_PREFIX:PATH=/usr \
+		-D DYNAMIC_OPENTHREADS:BOOL=OFF \
+		-D DYNAMIC_OPENSCENEGRAPH:BOOL=OFF \
+		-D BUILD_OSG_EXAMPLES:BOOL=OFF \
+		-D BUILD_OSG_APPLICATIONS:BOOL=OFF \
+		-D LIB_POSTFIX="/${MULTIARCH}" \
+		../../${OSG}
+endif
+
+	# Dynamic
+	mkdir -p build/osg; cd build/osg ; ${SETAFFINITY} cmake --debug-output \
+		-D CMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE} \
+		-D CMAKE_INSTALL_PREFIX:PATH=/usr \
+		-D OPENTHREADS_SOVERSION:STRING=${OPENTHREADS_SOVERSION} \
+		-D OPENSCENEGRAPH_SOVERSION:STRING=${OPENSCENEGRAPH_SOVERSION} \
+		-D BUILD_OSG_EXAMPLES:BOOL=ON \
+		-D BUILD_OSG_APPLICATIONS:BOOL=ON \
+		-D LIB_POSTFIX="/${MULTIARCH}" \
+		../../${OSG}
+
+	touch debian/stamp-configure
 
 .PHONY: build build-indep build-arch clean binary-indep binary-arch binary install-indep \
 	install-arch get-orig-source

@@ -1,5 +1,8 @@
-override-soversions.patch
-disable-zip-plugin-with-embedded-zlib.patch
-check__FreeBSD_kernel__
-osg_libav9.patch
-Upstream-fix-(b801ae)-for-bug-#736350 -p1
+0001-Allow-OPENTHREADS_SOVERSION-to-be-specified-from-the.patch
+0002-Check-for-__FreeBSD_kernel__-as-well-as-__FreeBSD__.patch
+0003-Include-header-files-for-osgPlugins.patch
+0004-Disable-the-zip-plugin-for-Debian.patch
+0005-Add-new-component-libopenscenegraph-static-add-stati.patch
+0006-Install-CMakeModules-files.patch
+0007-Allow-specifying-library-type-with-TARGET_LIBRARYTYP.patch
+0008-OpenThreads-SOVERSION.patch

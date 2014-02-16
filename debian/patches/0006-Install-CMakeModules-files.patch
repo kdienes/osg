@@ -1,0 +1,25 @@
+From: Klee Dienes <klee.dienes@hadronindustries.com>
+Date: Wed, 4 Dec 2013 01:44:16 -0500
+Subject: Install CMakeModules files.
+
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b7dbc7b..df06ee9 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1082,6 +1082,7 @@ FOREACH(PKGCONFIG_FILE ${PKGCONFIG_FILES})
+   INSTALL(FILES ${PROJECT_BINARY_DIR}/packaging/pkgconfig/${PKGCONFIG_FILE}.pc DESTINATION lib${LIB_POSTFIX}/pkgconfig COMPONENT libopenscenegraph-dev)
+ ENDFOREACH(PKGCONFIG_FILE)
+ 
++INSTALL(DIRECTORY CMakeModules DESTINATION /usr/share/openscenegraph COMPONENT openscenegraph-dev)
+ 
+ # Run this as late as possible so users can easier spot the message
+ IF (NOT DEFINED REQUIRES_LIBPATH_MESSAGE AND ${CMAKE_INSTALL_PREFIX} STREQUAL "/usr/local")
+@@ -1151,4 +1152,3 @@ IF(ANDROID)
+     configure_file("${OSG_ANDROID_TEMPLATES}/Application.mk.master.in" "${CMAKE_BINARY_DIR}/Application.mk")
+     configure_file("${OSG_ANDROID_TEMPLATES}/AndroidManifest.xml.master.in" "${CMAKE_BINARY_DIR}/AndroidManifest.xml")
+ ENDIF(ANDROID)
+-
