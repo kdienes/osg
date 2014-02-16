@@ -1,7 +1,7 @@
 // -*-c++-*-
 
 /*
- * $Id$
+ * $Id: mesh.cpp 13041 2012-03-21 17:36:20Z robert $
  *
  * Loader for DirectX .x files.
  * Copyright (c)2002-2006 Ulrich Hertlein <u.hertlein@sandbox.de>

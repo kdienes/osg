@@ -1,7 +1,7 @@
 // -*-c++-*-
 
 /*
- * $Id$
+ * $Id: ReaderWriterBMP.cpp 13041 2012-03-21 17:36:20Z robert $
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public

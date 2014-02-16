@@ -1,7 +1,7 @@
 // -*-c++-*-
 
 /*
- * $Id$
+ * $Id: ReaderWriterSTL.cpp 13822 2013-10-02 11:09:29Z robert $
  *
  * STL importer for OpenSceneGraph.
  *

@@ -1,7 +1,7 @@
 // -*-c++-*-
 
 /*
- * $Id$
+ * $Id: ReaderWriterDirectX.cpp 13567 2013-06-26 17:44:30Z robert $
  *
  * DirectX file converter for OpenSceneGraph.
  * Copyright (c)2002 Ulrich Hertlein <u.hertlein@sandbox.de>
